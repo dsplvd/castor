@@ -18,7 +18,7 @@ Environment variables such as `CASTOR_TMDB__API_KEY` override both files. Revoke
 - **Authenticate RPCs:** set independent `api.token`, `server.token`, and `scraping.token`; use `Authorization: Bearer <token>`. Health checks are exempt. Default ports `:8411`, `:8410`, and `:8412` bind all interfaces and warn if exposed without tokens.
 - **Restrict network access:** unauthenticated callers can start casts or make scraping visit URLs, including its local network. Media accepts streams, not webpage inputs.
 - **Device playback is open:** `/media` cannot require authentication. Anyone who can reach media and knows a cast URL can fetch it; `server.advertise` defines the device-reachable address.
-- **Protect credentials in transit:** RPCs use plain HTTP by default and carry tokens, stream URLs, and replay headers. Use HTTPS beyond trusted networks. IP-bound streams may require scraping and media to share an outbound IP.
+- **Protect credentials in transit:** RPCs use plain HTTP by default and carry tokens, stream URLs, and replay headers. Castor serves plain HTTP only: beyond trusted networks, terminate TLS in a reverse proxy and point clients at its `https://` URL. IP-bound streams may require scraping and media to share an outbound IP.
 - **Keep replay headers private:** they reach media but are stripped from public cast listings.
 
 ## Headless Chrome
