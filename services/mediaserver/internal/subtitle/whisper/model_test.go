@@ -2,6 +2,8 @@ package whisper
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,7 +26,7 @@ func TestConcurrentDownloadsPublishOneCompleteModel(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "model.bin")
 	results := make(chan error, readers)
 	for range readers {
-		go func() { results <- downloadFile(t.Context(), origin.URL, dest) }()
+		go func() { results <- downloadFile(t.Context(), origin.URL, dest, digest(payload)) }()
 	}
 	for range readers {
 		if err := <-results; err != nil {
@@ -34,5 +36,19 @@ func TestConcurrentDownloadsPublishOneCompleteModel(t *testing.T) {
 	got, err := os.ReadFile(dest)
 	if err != nil || !bytes.Equal(got, payload) {
 		t.Errorf("published model has %d bytes (%v), want one complete download", len(got), err)
+	}
+}
+
+func digest(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }
+
+func TestDownloadRefusesWhatDoesNotMatchItsChecksum(t *testing.T) {
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("tampered")) }))
+	t.Cleanup(origin.Close)
+	dest := filepath.Join(t.TempDir(), "model.bin")
+	if err := downloadFile(t.Context(), origin.URL, dest, digest([]byte("genuine"))); err == nil {
+		t.Error("download of the wrong bytes succeeded")
+	}
+	if _, err := os.Stat(dest); err == nil {
+		t.Error("a model that failed its checksum was published")
 	}
 }
