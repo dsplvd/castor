@@ -32,7 +32,7 @@ type linkProber struct {
 
 func (p linkProber) Probe(ctx context.Context) (media.ProbeInfo, media.Reach, error) {
 	l := p.link
-	args := ffmpeg.HeaderArgs(l.Headers)
+	args := append(ffmpeg.ProtocolArgs(), ffmpeg.HeaderArgs(l.Headers)...)
 	if l.InputArgs != nil {
 		args = append(args, l.InputArgs...)
 	} else {

@@ -10,6 +10,11 @@ import (
 
 // The command-line fragments ffmpeg and ffprobe both open a source with, so the probe opens it as the reader will.
 
+// ProtocolArgs keeps a hostile playlist from opening udp: or concat: (httpproxy so an HTTP proxy still works).
+func ProtocolArgs() []string {
+	return []string{"-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy"}
+}
+
 // HLSTolerances are the HLS demuxer's options castor reads every playlist with.
 func HLSTolerances(segmentRetries int) []string {
 	args := []string{

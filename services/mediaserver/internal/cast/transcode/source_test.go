@@ -42,6 +42,7 @@ func TestEachInputIsOpenedOnItsOwnTerms(t *testing.T) {
 	for _, want := range [][]string{
 		slices.Concat(demuxFlags, []string{
 			"-readrate", "2.0", "-readrate_initial_burst", "90",
+		}, ffmpeg.ProtocolArgs(), []string{
 			"-rw_timeout", "1000000",
 			"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-reconnect_on_http_error", "429,500,502,503,504",
 			"-headers", "X-Video-Token: v\r\n",
@@ -49,7 +50,7 @@ func TestEachInputIsOpenedOnItsOwnTerms(t *testing.T) {
 			"-extension_picky", "0", "-seg_format_options", "extension_picky=0",
 			"-seg_max_retry", "4", "-i", "https://video.test/master.m3u8",
 		}),
-		slices.Concat(demuxFlags, []string{"-rw_timeout", "2000000",
+		slices.Concat(demuxFlags, ffmpeg.ProtocolArgs(), []string{"-rw_timeout", "2000000",
 			"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-reconnect_on_http_error", "429,500,502,503,504",
 			"-headers", "X-Audio-Token: a\r\n", "-i", "https://audio.test/track.m4a"}),
 		{"-map", "0:V:0", "-map", "1:a:2"},

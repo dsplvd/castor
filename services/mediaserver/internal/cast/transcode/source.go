@@ -116,7 +116,7 @@ func formatSeconds(d time.Duration) string {
 
 // openArgs is how both the read and its probe open one input: fetch terms, headers, and the manifest's demuxer.
 func (s ProgramSource) openArgs(input sourceInput) []string {
-	args := readArgs(input.fetch)
+	args := append(ffmpeg.ProtocolArgs(), readArgs(input.fetch)...)
 	args = append(args, ffmpeg.HeaderArgs(input.headers)...)
 	return append(args, s.open(input.contentType, input.fetch.SegmentRetries)...)
 }
