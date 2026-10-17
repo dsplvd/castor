@@ -2,18 +2,19 @@
 
 import { createClient } from "@connectrpc/connect";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { Bubble } from "@/components/bubble";
 import { Button, buttonClass } from "@/components/button";
 import { Scene } from "@/components/scene";
 import type { Mood } from "@/components/castor-logo";
-import { CastService, type CastStatus, type Ended } from "@/gen/castor/v1/cast_pb";
+import { CastService } from "@/gen/castor/v1/cast_pb";
 import { RecoveryAction } from "@/gen/castor/v1/revision_pb";
 import { browserTransport } from "@/lib/browser";
 import { describe } from "@/lib/errors";
 import { StopButton } from "./stop-button";
 import { journey } from "./phases";
 import { watchUpdates } from "./watch-updates";
+import { watchState } from "./watch-state";
 
 const client = createClient(CastService, browserTransport);
 const recoveryActions: Record<RecoveryAction, string> = {
@@ -25,40 +26,39 @@ const recoveryActions: Record<RecoveryAction, string> = {
 };
 
 export function WatchView({ castId }: { castId: string }) {
-  const [status, setStatus] = useState<CastStatus>();
-  const [ended, setEnded] = useState<Ended>();
-  const [error, setError] = useState<string>();
+  const [watch, dispatch] = useReducer(watchState, { phase: "watching" });
   const [run, setRun] = useState(0);
 
   useEffect(() => {
     const abort = new AbortController();
     (async () => {
-      setError(undefined);
-      setStatus(undefined);
-      setEnded(undefined);
+      dispatch({ type: "restart" });
       try {
         const updates = client.watch({ castId }, { signal: abort.signal });
         for await (const { update } of watchUpdates(updates, abort.signal)) {
-          if (update.case === "status") setStatus(update.value);
+          if (update.case === "status") dispatch({ type: "status", status: update.value });
           else if (update.case === "ended") {
-            setEnded(update.value);
+            dispatch({ type: "ended", ended: update.value });
             break;
           }
         }
       } catch (e) {
-        if (!abort.signal.aborted) setError(describe(e));
+        if (!abort.signal.aborted) dispatch({ type: "lost", error: describe(e) });
       }
     })();
     return () => abort.abort();
   }, [castId, run]);
 
+  const { status } = watch;
+  const ended = watch.phase === "ended" ? watch.ended : undefined;
+  const error = watch.phase === "lost" ? watch.error : undefined;
   const state = status?.state;
   const progress = state?.case === "measuring" || state?.case === "casting" ? state.value : undefined;
   const casting = state?.case === "casting" ? state.value : undefined;
   const result = ended?.result;
   const at = Math.max(0, journey.findIndex((j) => j.state === state?.case));
   const failed = result?.case === "failed";
-  const lost = !!error && !ended;
+  const lost = watch.phase === "lost";
   const [mood, say]: [Mood, string] =
     ended ? result?.case === "failed" ? ["oops", result.value.message || "Something went wrong."]
       : result?.case === "stopped" ? ["sleep", "Stopped. Home for a nap."]
@@ -90,7 +90,7 @@ export function WatchView({ castId }: { castId: string }) {
       </p>}
       <div className="mt-1 flex flex-wrap items-center gap-3">
         {!over && <StopButton key={castId} castId={castId} variant="glass" />}
-        {lost && <Button variant="ember" type="button" onClick={() => { setError(undefined); setRun((n) => n + 1); }}>Reconnect</Button>}
+        {lost && <Button variant="ember" type="button" onClick={() => { dispatch({ type: "restart" }); setRun((n) => n + 1); }}>Reconnect</Button>}
         {(over || lost) && <Link href="/" className={buttonClass("ember")}>Cast something else</Link>}
         <Link href="/" className={buttonClass("ghost")}>Home</Link>
       </div>
