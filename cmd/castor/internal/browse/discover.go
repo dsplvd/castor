@@ -58,23 +58,21 @@ func discoverCmd(ctx context.Context, c Catalog, tok int, p tmdb.DiscoverParams)
 
 // discParams snapshots the genre filter and the current sort as a query.
 func (m model) discParams(page int) tmdb.DiscoverParams {
+	genres := m.genres.applied
 	return tmdb.DiscoverParams{
-		MediaType: m.genres.media,
-		GenreIDs:  m.genres.genreIDs(),
+		MediaType: genres.media,
+		GenreIDs:  genres.genreIDs(),
 		Sort:      m.disc.sort,
 		Page:      page,
 	}
 }
 
 func (m *model) enterDiscover() tea.Cmd {
+	m.drill.tok++
 	m.mode = modeDiscover
 	m.query.SetValue("")
 	m.queryTok++
-	m.disc.results = nil
-	m.disc.page = 1
-	m.disc.hasMore = false
-	m.disc.loadingMore = false
-	m.disc.tok++
+	m.disc = discoverState{sort: m.disc.sort, page: 1, tok: m.disc.tok + 1}
 	m.loading = true
 	m.err = nil
 	m.resize()
@@ -83,6 +81,8 @@ func (m *model) enterDiscover() tea.Cmd {
 
 func (m *model) exitDiscover() tea.Cmd {
 	m.mode = modeCurated
+	m.disc.tok++
+	m.disc.loadingMore = false
 	m.resize()
 	return m.ensureTabLoaded()
 }
@@ -95,7 +95,7 @@ func (m *model) cycleSort() tea.Cmd {
 }
 
 func (m *model) onDiscoverDone(msg discoverDoneMsg) tea.Cmd {
-	if msg.tok != m.disc.tok {
+	if m.mode != modeDiscover || msg.tok != m.disc.tok {
 		return nil // stale: filters changed while this was in flight
 	}
 	searching := m.query.Value() != "" // the rows and status then belong to the search

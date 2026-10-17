@@ -124,7 +124,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
 		m.resize()
-		if m.genres.shown {
+		if m.genres.draft != nil {
 			m.genres.resize(m.w, m.h)
 		}
 		return m, nil
@@ -141,7 +141,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.quit) {
 			return m, tea.Quit
 		}
-		if m.genres.shown {
+		if m.genres.draft != nil {
 			cmd, action := m.genres.update(msg, m.keys, m.w, m.h)
 			if action == genreApplied {
 				cmd = m.enterDiscover()
@@ -155,6 +155,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case genresLoadedMsg:
+		m.genres.err = msg.err
 		if msg.err == nil {
 			m.genres.setCatalog(msg.cat, m.w, m.h)
 		}
@@ -187,6 +188,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tvDoneMsg:
+		if msg.tok != m.drill.tok {
+			return m, nil
+		}
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
@@ -197,6 +201,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case seasonDoneMsg:
+		if msg.tok != m.drill.tok {
+			return m, nil
+		}
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
@@ -223,6 +230,10 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(km, m.keys.genres):
 		m.genres.open(m.w, m.h)
+		if m.genres.err != nil {
+			m.genres.err = nil
+			return m, tea.Batch(loadGenresCmd(m.ctx, m.client), m.spin.Tick)
+		}
 		if !m.genres.loaded {
 			return m, m.spin.Tick
 		}
@@ -265,6 +276,8 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) onBrowseBack() (tea.Model, tea.Cmd) {
+	m.drill.tok++
+	m.loading = false
 	if m.query.Value() != "" {
 		m.query.SetValue("")
 		m.queryTok++
@@ -279,12 +292,17 @@ func (m model) onBrowseBack() (tea.Model, tea.Cmd) {
 }
 
 func (m model) updateDrilldown(msg tea.Msg) (tea.Model, tea.Cmd) {
+	before := m.drill.tok
 	out := m.drill.update(msg, m.keys)
+	if before != m.drill.tok && !out.loading {
+		m.loading = false
+	}
 	switch {
 	case out.selected != nil:
 		m.sel = out.selected
 		return m, tea.Quit
 	case out.exit:
+		m.loading = false
 		m.goTo(screenBrowse)
 		return m, nil
 	case out.loading:
@@ -296,7 +314,9 @@ func (m model) updateDrilldown(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // spinning is whether anything on screen shows the spinner.
-func (m model) spinning() bool { return m.loading || (m.genres.shown && !m.genres.loaded) }
+func (m model) spinning() bool {
+	return m.loading || (m.genres.draft != nil && !m.genres.loaded && m.genres.err == nil)
+}
 
 func (m model) drilldownFiltering() bool {
 	return m.scr == screenDrilldown && m.drill.list.SettingFilter()

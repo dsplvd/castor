@@ -28,7 +28,7 @@ func (m model) View() tea.View {
 
 func (m model) content() string {
 	switch {
-	case m.genres.shown:
+	case m.genres.draft != nil:
 		return m.genres.view(m.spin, m.help, m.keys, m.w, m.h)
 	case m.scr == screenDrilldown:
 		return lipgloss.JoinVertical(lipgloss.Left, m.drill.view(m.styles), "", m.footer())
@@ -54,7 +54,7 @@ func (m model) browseHeader() string {
 		label = "Search"
 	case m.mode == modeDiscover:
 		label = "Discover"
-		rhs = m.styles.muted.Render(m.genres.mediaLabel())
+		rhs = m.styles.muted.Render(m.genres.applied.mediaLabel())
 	default:
 		label = m.tab.label()
 		rhs = m.renderTabDots()

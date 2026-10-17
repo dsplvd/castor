@@ -49,7 +49,7 @@ func TestGenreOverlayDoesNotQuitOnQ(t *testing.T) {
 	m, _ = drive(t, m, tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
 
 	m, cmd := drive(t, m, runes("q"))
-	if !m.genres.shown {
+	if m.genres.draft == nil {
 		t.Fatal("q closed the overlay (list quit binding leaked through)")
 	}
 	if cmd != nil {
@@ -85,7 +85,7 @@ func TestGenreCursorClampedOnShorterCatalogue(t *testing.T) {
 
 	m, _ = drive(t, m, runes("m"))
 	m, _ = drive(t, m, tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
-	if _, on := m.genres.selected[100]; !on {
+	if _, on := m.genres.draft.selected[100]; !on {
 		t.Fatal("space toggled nothing after the media switch")
 	}
 }
@@ -283,5 +283,87 @@ func TestTheSpinnerStopsTickingOnceNothingLoads(t *testing.T) {
 	m.loading = true
 	if _, cmd := drive(t, m, spinner.TickMsg{}); cmd == nil {
 		t.Fatal("a loading spinner stopped ticking")
+	}
+}
+
+func TestStaleDrilldownResponsesAreIgnored(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.drill.tok = 2
+	m.loading = true
+	m, _ = drive(t, m, seasonDoneMsg{tok: 1, sd: &tmdb.SeasonDetails{}})
+	if !m.loading || m.drill.mode != modeSeasons {
+		t.Fatal("stale season changed current request")
+	}
+	m, _ = drive(t, m, tvDoneMsg{tok: 1, tv: &tmdb.TVDetails{Name: "old"}})
+	if m.scr != screenBrowse || m.drill.tvName == "old" {
+		t.Fatal("stale show reopened drilldown")
+	}
+}
+
+func TestDiscoverResponseAfterExitIsIgnored(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.enterDiscover()
+	tok := m.disc.tok
+	m.exitDiscover()
+	m, _ = drive(t, m, discoverDoneMsg{tok: tok, page: 1, res: fakeResults(2)})
+	if len(m.results.Items()) != 0 {
+		t.Fatal("late discover replaced curated rows")
+	}
+}
+
+func TestCancelGenreEditingRestoresAppliedSelection(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.genres.applied.selected[28] = struct{}{}
+	m.genres.open(100, 30)
+	m.genres.toggleMedia(100, 30)
+	m.genres.update(tea.KeyPressMsg{Code: tea.KeyEsc}, m.keys, 100, 30)
+	if m.genres.applied.media != tmdb.MediaMovie {
+		t.Fatal("cancel applied draft media")
+	}
+	if _, ok := m.genres.applied.selected[28]; !ok {
+		t.Fatal("cancel erased applied genre")
+	}
+}
+
+func TestGenreFailureIsVisibleAndReopeningRetries(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.loading = false
+	m.genres.open(100, 30)
+	m, _ = drive(t, m, genresLoadedMsg{err: errors.New("offline")})
+	if m.spinning() {
+		t.Fatal("failed catalog spins forever")
+	}
+	if !strings.Contains(m.genres.view(m.spin, m.help, m.keys, 100, 30), "offline") {
+		t.Fatal("error hidden")
+	}
+	m, _ = drive(t, m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	m, cmd := drive(t, m, tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
+	if cmd == nil || m.genres.err != nil {
+		t.Fatal("reopening did not retry")
+	}
+}
+
+func TestDiscoverDoesNotReadUnappliedGenreDraft(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.genres.applied.selected[28] = struct{}{}
+	m.genres.open(100, 30)
+	m.genres.toggleMedia(100, 30)
+	params := m.discParams(2)
+	if params.MediaType != tmdb.MediaMovie || len(params.GenreIDs) != 1 || params.GenreIDs[0] != 28 {
+		t.Fatalf("query used draft: %+v", params)
+	}
+}
+
+func TestGenreDraftChangesDoNotMutateEarlierSnapshots(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.genres.applied.selected[28] = struct{}{}
+	m.genres.open(100, 30)
+	before := m.genres.draft
+	m.genres.toggleMedia(100, 30)
+	if before.media != tmdb.MediaMovie || len(before.selected) != 1 {
+		t.Fatal("editing changed the previous draft snapshot")
+	}
+	if m.genres.applied.media != tmdb.MediaMovie || len(m.genres.applied.selected) != 1 {
+		t.Fatal("editing changed the applied filter")
 	}
 }

@@ -32,6 +32,7 @@ type drilldown struct {
 	tvID         int
 	tvName       string
 	seasonNum    int
+	tok          int
 	seasonsCache []list.Item
 }
 
@@ -56,7 +57,8 @@ type drillOutcome struct {
 func (d *drilldown) begin(id int, name string) tea.Cmd {
 	d.tvID = id
 	d.tvName = name
-	return tvCmd(d.ctx, d.client, id)
+	d.tok++
+	return tvCmd(d.ctx, d.client, id, d.tok)
 }
 
 func (d *drilldown) restyle(p palette.Palette) {
@@ -98,6 +100,7 @@ func (d *drilldown) update(msg tea.Msg, keys keyMap) drillOutcome {
 	if km, ok := msg.(tea.KeyPressMsg); ok && !d.list.SettingFilter() {
 		switch {
 		case key.Matches(km, keys.back):
+			d.tok++ // invalidate requests abandoned by back navigation
 			switch d.mode {
 			case modeEpisodes:
 				d.list.SetItems(d.seasonsCache)
@@ -121,7 +124,8 @@ func (d *drilldown) enter() drillOutcome {
 	case modeSeasons:
 		if it, ok := d.list.SelectedItem().(seasonItem); ok {
 			d.seasonNum = it.s.SeasonNumber
-			return drillOutcome{cmd: seasonCmd(d.ctx, d.client, d.tvID, it.s.SeasonNumber), loading: true}
+			d.tok++
+			return drillOutcome{cmd: seasonCmd(d.ctx, d.client, d.tvID, it.s.SeasonNumber, d.tok), loading: true}
 		}
 	case modeEpisodes:
 		if it, ok := d.list.SelectedItem().(episodeItem); ok {
@@ -186,25 +190,27 @@ func (i episodeItem) Description() string {
 func (i episodeItem) FilterValue() string { return i.e.Name }
 
 type tvDoneMsg struct {
+	tok int
 	tv  *tmdb.TVDetails
 	err error
 }
 
 type seasonDoneMsg struct {
+	tok int
 	sd  *tmdb.SeasonDetails
 	err error
 }
 
-func tvCmd(ctx context.Context, c Catalog, id int) tea.Cmd {
+func tvCmd(ctx context.Context, c Catalog, id, tok int) tea.Cmd {
 	return func() tea.Msg {
 		tv, err := c.TV(ctx, id)
-		return tvDoneMsg{tv: tv, err: err}
+		return tvDoneMsg{tok: tok, tv: tv, err: err}
 	}
 }
 
-func seasonCmd(ctx context.Context, c Catalog, tvID, n int) tea.Cmd {
+func seasonCmd(ctx context.Context, c Catalog, tvID, n, tok int) tea.Cmd {
 	return func() tea.Msg {
 		sd, err := c.Season(ctx, tvID, n)
-		return seasonDoneMsg{sd: sd, err: err}
+		return seasonDoneMsg{tok: tok, sd: sd, err: err}
 	}
 }

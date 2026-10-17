@@ -61,5 +61,6 @@ func (m model) forwardToQuery(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize()
 	}
 	m.queryTok++
+	m.drill.tok++
 	return m, tea.Batch(cmd, searchTickCmd(m.queryTok, m.query.Value()))
 }

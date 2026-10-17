@@ -43,11 +43,14 @@ func (t tabID) fetch(ctx context.Context, c Catalog) ([]tmdb.SearchResult, error
 }
 
 func (m *model) cycleTab(delta int) tea.Cmd {
+	m.drill.tok++
 	m.topsCursor[m.tab] = m.results.Index()
 	n := int(tabCount)
 	m.tab = tabID(((int(m.tab)+delta)%n + n) % n)
 	if m.mode != modeCurated {
 		m.mode = modeCurated
+		m.disc.tok++
+		m.disc.loadingMore = false
 		m.resize()
 	}
 	return m.ensureTabLoaded()
@@ -74,6 +77,8 @@ func (m *model) applyMode() {
 
 func (m *model) ensureTabLoaded() tea.Cmd {
 	if m.topsCache[m.tab] != nil {
+		m.loading = false
+		m.err = nil
 		m.applyTab()
 		return m.inspector.hover()
 	}
@@ -96,7 +101,7 @@ func loadTopCmd(ctx context.Context, c Catalog, t tabID) tea.Cmd {
 }
 
 func (m model) onTopsLoaded(msg topsLoadedMsg) (tea.Model, tea.Cmd) {
-	current := msg.tab == m.tab
+	current := msg.tab == m.tab && m.scr == screenBrowse && m.mode == modeCurated && m.query.Value() == ""
 	if current {
 		m.loading = false
 	}

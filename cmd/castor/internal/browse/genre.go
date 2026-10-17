@@ -19,15 +19,22 @@ import (
 
 // genrePicker is the modal genre filter; owns draft selection, isolated from feed.
 type genrePicker struct {
-	list     list.Model
-	keys     genreKeys
-	styles   styles
-	catalog  tmdb.GenreCatalog
-	loaded   bool
-	media    tmdb.Media
-	selected map[int]struct{} // genre ids chosen for the current media
-	shown    bool
+	list    list.Model
+	keys    genreKeys
+	styles  styles
+	catalog tmdb.GenreCatalog
+	loaded  bool
+	err     error
+	applied genreSelection
+	draft   *genreSelection // nil when the editor is closed
 }
+
+type genreSelection struct {
+	media    tmdb.Media
+	selected map[int]struct{}
+}
+
+func (s genreSelection) genreIDs() []int { return slices.Sorted(maps.Keys(s.selected)) }
 
 // genreKeys are the bindings only the genre overlay answers to.
 type genreKeys struct{ space, clear, media key.Binding }
@@ -60,10 +67,9 @@ func newGenrePicker() genrePicker {
 	l.DisableQuitKeybindings()
 
 	return genrePicker{
-		list:     l,
-		keys:     defaultGenreKeys(),
-		media:    tmdb.MediaMovie,
-		selected: map[int]struct{}{},
+		list:    l,
+		keys:    defaultGenreKeys(),
+		applied: genreSelection{media: tmdb.MediaMovie, selected: map[int]struct{}{}},
 	}
 }
 
@@ -77,14 +83,14 @@ func (g *genrePicker) restyle(p palette.Palette, st styles) {
 func (g *genrePicker) setCatalog(cat tmdb.GenreCatalog, w, h int) {
 	g.catalog = cat
 	g.loaded = true
-	if g.shown {
+	if g.draft != nil {
 		g.resize(w, h) // open() skipped it: there was no catalogue to size the list against
 		g.reload()
 	}
 }
 
 func (g *genrePicker) open(w, h int) {
-	g.shown = true
+	g.draft = &genreSelection{media: g.applied.media, selected: maps.Clone(g.applied.selected)}
 	if g.loaded {
 		g.resize(w, h)
 		g.reload()
@@ -92,7 +98,7 @@ func (g *genrePicker) open(w, h int) {
 }
 
 func (g *genrePicker) resize(w, h int) {
-	rows := min(len(g.catalog.For(g.media)), max(h-10, 6))
+	rows := min(len(g.catalog.For(g.draft.media)), max(h-10, 6))
 	width := min(max(w-8, 24), 48)
 	g.list.SetSize(width, max(rows, 1))
 }
@@ -100,23 +106,28 @@ func (g *genrePicker) resize(w, h int) {
 func (g *genrePicker) update(msg tea.KeyPressMsg, keys keyMap, w, h int) (tea.Cmd, genreAction) {
 	switch {
 	case key.Matches(msg, keys.back):
-		g.shown = false
+		g.draft = nil
 		return nil, genreCancelled
 	case key.Matches(msg, keys.enter):
-		g.shown = false
+		if !g.loaded {
+			return nil, genreIdle
+		}
+		g.applied, g.draft = *g.draft, nil
 		return nil, genreApplied
 	case key.Matches(msg, g.keys.space):
 		if it, ok := g.list.SelectedItem().(genreItem); ok {
-			if _, on := g.selected[it.g.ID]; on {
-				delete(g.selected, it.g.ID)
+			selected := maps.Clone(g.draft.selected)
+			if _, on := selected[it.g.ID]; on {
+				delete(selected, it.g.ID)
 			} else {
-				g.selected[it.g.ID] = struct{}{}
+				selected[it.g.ID] = struct{}{}
 			}
+			g.draft = &genreSelection{media: g.draft.media, selected: selected}
 			g.reload()
 		}
 		return nil, genreIdle
 	case key.Matches(msg, g.keys.clear):
-		clear(g.selected)
+		g.draft = &genreSelection{media: g.draft.media, selected: map[int]struct{}{}}
 		g.reload()
 		return nil, genreIdle
 	case key.Matches(msg, g.keys.media):
@@ -130,12 +141,11 @@ func (g *genrePicker) update(msg tea.KeyPressMsg, keys keyMap, w, h int) (tea.Cm
 
 // toggleMedia clears the draft selection, because genre ids are namespaced per media type.
 func (g *genrePicker) toggleMedia(w, h int) {
-	if g.media == tmdb.MediaTV {
-		g.media = tmdb.MediaMovie
-	} else {
-		g.media = tmdb.MediaTV
+	media := tmdb.MediaTV
+	if g.draft.media == tmdb.MediaTV {
+		media = tmdb.MediaMovie
 	}
-	clear(g.selected)
+	g.draft = &genreSelection{media: media, selected: map[int]struct{}{}}
 	if g.loaded {
 		g.resize(w, h)
 		g.reload()
@@ -144,10 +154,10 @@ func (g *genrePicker) toggleMedia(w, h int) {
 
 func (g *genrePicker) reload() {
 	idx := g.list.Index()
-	genres := g.catalog.For(g.media)
+	genres := g.catalog.For(g.draft.media)
 	items := make([]list.Item, len(genres))
 	for i, gr := range genres {
-		_, on := g.selected[gr.ID]
+		_, on := g.draft.selected[gr.ID]
 		items[i] = genreItem{g: gr, selected: on}
 	}
 	g.list.SetItems(items)
@@ -155,21 +165,19 @@ func (g *genrePicker) reload() {
 	g.list.Select(min(idx, max(len(items)-1, 0)))
 }
 
-func (g genrePicker) genreIDs() []int { return slices.Sorted(maps.Keys(g.selected)) }
-
 // selectedNames is in catalogue order.
 func (g genrePicker) selectedNames() []string {
 	var names []string
-	for _, gr := range g.catalog.For(g.media) {
-		if _, on := g.selected[gr.ID]; on {
+	for _, gr := range g.catalog.For(g.applied.media) {
+		if _, on := g.applied.selected[gr.ID]; on {
 			names = append(names, gr.Name)
 		}
 	}
 	return names
 }
 
-func (g genrePicker) mediaLabel() string {
-	if g.media == tmdb.MediaTV {
+func (s genreSelection) mediaLabel() string {
+	if s.media == tmdb.MediaTV {
 		return "TV Shows"
 	}
 	return "Movies"
@@ -178,16 +186,19 @@ func (g genrePicker) mediaLabel() string {
 func (g genrePicker) view(spin spinner.Model, hints help.Model, keys keyMap, w, h int) string {
 	title := lipgloss.JoinHorizontal(lipgloss.Left,
 		g.styles.titleText.Render("Filter by genre"),
-		g.styles.muted.Render("  ·  "+g.mediaLabel()),
+		g.styles.muted.Render("  ·  "+g.draft.mediaLabel()),
 	)
 
 	body := g.styles.muted.Render(spin.View() + " loading genres…")
-	if g.loaded {
+	switch {
+	case g.loaded:
 		body = g.list.View()
+	case g.err != nil:
+		body = "Could not load genres: " + g.err.Error() + "\nClose and reopen to retry."
 	}
 
 	count := "no genres selected"
-	if n := len(g.selected); n > 0 {
+	if n := len(g.draft.selected); n > 0 {
 		count = fmt.Sprintf("%d selected", n)
 	}
 
