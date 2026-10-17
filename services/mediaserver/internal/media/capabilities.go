@@ -1,6 +1,9 @@
 package media
 
-import "slices"
+import (
+	"net/url"
+	"slices"
+)
 
 type Capabilities struct {
 	Containers []string
@@ -18,6 +21,26 @@ type Capabilities struct {
 
 	// ServedHeaders are set on every response the device fetches what it is served from.
 	ServedHeaders map[string]string
+
+	// Captions are the caption formats the device shows beside a stream; none shows no captions.
+	Captions []CaptionFormat
+}
+
+// CaptionFormat is how a caption track is written.
+type CaptionFormat string
+
+const (
+	CaptionVTT CaptionFormat = "vtt"
+	CaptionSRT CaptionFormat = "srt"
+)
+
+// Caption is a text track a device shows over the stream, fetched at URL like the stream is.
+type Caption struct {
+	URL      *url.URL
+	Format   CaptionFormat
+	Language string
+	Name     string
+	Default  bool
 }
 
 // VideoSupport is one video envelope a device decodes natively (codec, profile, bit depth, level).

@@ -16,6 +16,9 @@ type Rendition struct {
 	// AudioURL is the companion audio rendition for this rung.
 	AudioURL *url.URL
 
+	// Captions are the text renditions the source published beside this rung.
+	Captions []Caption
+
 	// Bitrate is the rate the source declared, 0 when it declared none.
 	Bitrate media.Bitrate
 
@@ -24,6 +27,15 @@ type Rendition struct {
 
 	// Declared is the codec envelope the source declared for this rung.
 	Declared *media.ProbeInfo
+}
+
+// Caption is one text rendition a source published: a WebVTT playlist, in a language.
+type Caption struct {
+	URL      *url.URL
+	Language string
+	Name     string
+	Default  bool
+	Forced   bool
 }
 
 // CompareBool orders false before true.

@@ -12,8 +12,10 @@ import (
 
 type waitingDevice struct{ started chan struct{} }
 
-func (*waitingDevice) Play(context.Context, *url.URL, mediav1.Container) error { return nil }
-func (*waitingDevice) Capabilities() *mediav1.Capabilities                     { return &mediav1.Capabilities{} }
+func (*waitingDevice) Play(context.Context, *url.URL, mediav1.Container, []*mediav1.DeviceCommand_Caption) error {
+	return nil
+}
+func (*waitingDevice) Capabilities() *mediav1.Capabilities { return &mediav1.Capabilities{} }
 func (d *waitingDevice) AwaitEnd(ctx context.Context) error {
 	d.started <- struct{}{}
 	<-ctx.Done()

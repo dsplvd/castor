@@ -14,7 +14,7 @@ import (
 
 // newTestResolver wires resolution to this format alone, under a 1080 cap.
 func newTestResolver(client source.Client) *source.Resolver {
-	return source.NewResolver(client, 1080, source.Formats{Format{}})
+	return source.NewResolver(client, 1080, "", source.Formats{Format{}})
 }
 
 const mediaPlaylist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nseg0.ts\n#EXT-X-ENDLIST\n"

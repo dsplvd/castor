@@ -37,7 +37,7 @@ func TestTheChannelIsLaunchedWithTheFormatOfWhatItPlays(t *testing.T) {
 		mediav1.Container_CONTAINER_MKV: "mkv",
 		mediav1.Container_CONTAINER_HLS: "hls",
 	} {
-		if err := dev.Play(t.Context(), stream, container); err != nil {
+		if err := dev.Play(t.Context(), stream, container, nil); err != nil {
 			t.Fatal(err)
 		}
 		if got := <-launched; got.Get("format") != want || got.Get("url") != stream.String() {
@@ -49,7 +49,7 @@ func TestTheChannelIsLaunchedWithTheFormatOfWhatItPlays(t *testing.T) {
 func TestUnsupportedContainersDoNotLaunchTheRokuChannel(t *testing.T) {
 	// No client is needed: an unsupported container must fail before ECP.
 	dev := &session{}
-	if err := dev.Play(t.Context(), &url.URL{Scheme: "http", Host: "media.test"}, mediav1.Container_CONTAINER_MPEGTS); err == nil {
+	if err := dev.Play(t.Context(), &url.URL{Scheme: "http", Host: "media.test"}, mediav1.Container_CONTAINER_MPEGTS, nil); err == nil {
 		t.Error("Play accepted unsupported MPEG-TS container")
 	}
 }

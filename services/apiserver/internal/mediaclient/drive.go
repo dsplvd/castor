@@ -98,7 +98,7 @@ func (d *driver) exec(ctx context.Context, cmd *mediav1.DeviceCommand) *mediav1.
 		if err != nil {
 			return failure(err)
 		}
-		return outcome(d.device.Play(ctx, target, c.Play.GetContainer()))
+		return outcome(d.device.Play(ctx, target, c.Play.GetContainer(), c.Play.GetCaptions()))
 	case *mediav1.DeviceCommand_AwaitEnd_:
 		return outcome(d.device.AwaitEnd(ctx))
 	case *mediav1.DeviceCommand_Pause_:

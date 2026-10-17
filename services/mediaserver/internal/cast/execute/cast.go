@@ -41,6 +41,9 @@ type Cast struct {
 
 	Listeners deliver.Listeners
 
+	// Captions is nil for a cast that wants none of the source's own.
+	Captions *Captions
+
 	// Subtitles is nil for a cast that burns none in.
 	Subtitles Subtitles
 
@@ -51,7 +54,7 @@ type Cast struct {
 // Device is what a cast plays on, connected for the whole cast by whoever lent it, who also closes it.
 type Device interface {
 	// Play points the device at streamURL, advertised as contentType.
-	Play(ctx context.Context, streamURL *url.URL, contentType string) error
+	Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption) error
 
 	AwaitEnd(ctx context.Context) error
 

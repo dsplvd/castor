@@ -87,10 +87,12 @@ func (x *StartRequest) GetSettings() *PlaybackSettings {
 
 // PlaybackSettings is the complete policy resolved by API before media is called.
 type PlaybackSettings struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Delivery      v1.Delivery            `protobuf:"varint,1,opt,name=delivery,proto3,enum=castor.v1.Delivery" json:"delivery,omitempty"`
-	MaxHeight     uint32                 `protobuf:"varint,2,opt,name=max_height,json=maxHeight,proto3" json:"max_height,omitempty"`
-	Subtitles     *v1.SubtitleSelection  `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Delivery  v1.Delivery            `protobuf:"varint,1,opt,name=delivery,proto3,enum=castor.v1.Delivery" json:"delivery,omitempty"`
+	MaxHeight uint32                 `protobuf:"varint,2,opt,name=max_height,json=maxHeight,proto3" json:"max_height,omitempty"`
+	Subtitles *v1.SubtitleSelection  `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
+	// audio_language is the language to play where a source offers several, empty for the source's default.
+	AudioLanguage string `protobuf:"bytes,4,opt,name=audio_language,json=audioLanguage,proto3" json:"audio_language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -144,6 +146,13 @@ func (x *PlaybackSettings) GetSubtitles() *v1.SubtitleSelection {
 		return x.Subtitles
 	}
 	return nil
+}
+
+func (x *PlaybackSettings) GetAudioLanguage() string {
+	if x != nil {
+		return x.AudioLanguage
+	}
+	return ""
 }
 
 type StartResponse struct {
@@ -397,13 +406,14 @@ const file_castor_media_v1_cast_proto_rawDesc = "" +
 	"\fStartRequest\x12.\n" +
 	"\acast_id\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[A-Z2-7]{26}$R\x06castId\x127\n" +
 	"\x06source\x18\x02 \x01(\v2\x17.castor.media.v1.SourceB\x06\xbaH\x03\xc8\x01\x01R\x06source\x12E\n" +
-	"\bsettings\x18\x03 \x01(\v2!.castor.media.v1.PlaybackSettingsB\x06\xbaH\x03\xc8\x01\x01R\bsettings\"\xbb\x01\n" +
+	"\bsettings\x18\x03 \x01(\v2!.castor.media.v1.PlaybackSettingsB\x06\xbaH\x03\xc8\x01\x01R\bsettings\"\xfa\x01\n" +
 	"\x10PlaybackSettings\x12;\n" +
 	"\bdelivery\x18\x01 \x01(\x0e2\x13.castor.v1.DeliveryB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\bdelivery\x12&\n" +
 	"\n" +
 	"max_height\x18\x02 \x01(\rB\a\xbaH\x04*\x02(\x02R\tmaxHeight\x12B\n" +
-	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionB\x06\xbaH\x03\xc8\x01\x01R\tsubtitles\"\x0f\n" +
+	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionB\x06\xbaH\x03\xc8\x01\x01R\tsubtitles\x12=\n" +
+	"\x0eaudio_language\x18\x04 \x01(\tB\x16\xbaH\x13r\x112\x0f^([a-z]{2,3})?$R\raudioLanguage\"\x0f\n" +
 	"\rStartResponse\"/\n" +
 	"\vStopRequest\x12 \n" +
 	"\acast_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06castId\"\x0e\n" +

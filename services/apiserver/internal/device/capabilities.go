@@ -17,6 +17,17 @@ func MIME(container mediav1.Container) string {
 	return proto.GetExtension(v.Options(), mediav1.E_Mime).(string)
 }
 
+// CaptionMIME is the content type a caption track is fetched as; empty for a format the contract does not name.
+func CaptionMIME(f mediav1.CaptionFormat) string {
+	switch f {
+	case mediav1.CaptionFormat_CAPTION_FORMAT_VTT:
+		return "text/vtt"
+	case mediav1.CaptionFormat_CAPTION_FORMAT_SRT:
+		return "application/x-subrip"
+	}
+	return ""
+}
+
 type codecEnvelope struct {
 	profiles  []mediav1.Profile
 	bitDepths []uint32 // nil == 8-bit only

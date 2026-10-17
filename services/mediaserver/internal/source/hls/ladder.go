@@ -14,9 +14,9 @@ func byBitrate(a, b source.Rendition) int {
 }
 
 // castable narrows a variant list to those that carry video (audio-only variants must not be picked).
-func castable(doc document) []variant {
+func castable(doc document, language string) []variant {
 	withVideo := slices.DeleteFunc(slices.Clone(doc.variants), func(v variant) bool {
-		audio := doc.audioFor(v)
+		audio := doc.audioFor(v, language)
 		return !v.hasVideo || (audio != nil && v.url.String() == audio.String())
 	})
 	if len(withVideo) == 0 {
@@ -26,12 +26,12 @@ func castable(doc document) []variant {
 }
 
 // ladder is the choice the source offered: publication order preserved, audio-only rungs excluded.
-func ladder(doc document, probe *media.ProbeInfo) []source.Rendition {
+func ladder(doc document, probe *media.ProbeInfo, language string) []source.Rendition {
 	measured := measuredHeights(doc, probe)
-	rungs := castable(doc)
+	rungs := castable(doc, language)
 	out := make([]source.Rendition, len(rungs))
 	for i, v := range rungs {
-		out[i] = rendition(doc, v, measured[v.program])
+		out[i] = rendition(doc, v, measured[v.program], language)
 	}
 	return out
 }
@@ -53,7 +53,7 @@ func measuredHeights(doc document, probe *media.ProbeInfo) map[int]int {
 }
 
 // rendition translates one variant without dropping its companion audio; a probe of this very master wins over RESOLUTION, since it numbers variants as the master does.
-func rendition(doc document, v variant, measured int) source.Rendition {
+func rendition(doc document, v variant, measured int, language string) source.Rendition {
 	height := cmp.Or(measured, v.height)
 	declared := v.declared
 	if declared != nil && declared.VideoHeight != height {
@@ -63,7 +63,8 @@ func rendition(doc document, v variant, measured int) source.Rendition {
 	}
 	return source.Rendition{
 		URL:      v.url,
-		AudioURL: doc.audioFor(v),
+		AudioURL: doc.audioFor(v, language),
+		Captions: doc.captionsFor(v),
 		Bitrate:  media.Bitrate(v.bandwidth),
 		Height:   height,
 		Declared: declared,
@@ -74,6 +75,9 @@ func rendition(doc document, v variant, measured int) source.Rendition {
 func backedBy(r, prior source.Rendition) source.Rendition {
 	if r.AudioURL == nil {
 		r.AudioURL = prior.AudioURL
+	}
+	if r.Captions == nil {
+		r.Captions = prior.Captions
 	}
 	if r.Declared == nil {
 		r.Declared = prior.Declared

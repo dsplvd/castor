@@ -29,8 +29,8 @@ type session struct {
 var _ device.Device = (*session)(nil)
 
 // Play returns the receiver's own verdict on the LOAD, so a refused URL fails the hand-off; a dropped connection is gone.
-func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container) error {
-	if err := s.play(ctx, streamURL, device.MIME(container)); err != nil {
+func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
+	if err := s.play(ctx, streamURL, device.MIME(container), captions); err != nil {
 		select {
 		case <-s.ch.gone:
 			return &device.Gone{Device: s.name, Observed: "the Cast connection closed before the media loaded", Err: err}
@@ -41,7 +41,7 @@ func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav
 	return nil
 }
 
-func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string) error {
+func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string, captions []*mediav1.DeviceCommand_Caption) error {
 	transport, err := s.mediaReceiver(ctx)
 	if err != nil {
 		return fmt.Errorf("starting the chromecast's media receiver: %w", err)
@@ -56,11 +56,12 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 	s.ending = mine
 	s.transport = transport
 	s.watchMu.Unlock()
-	reply, err := s.ch.request(ctx, transport, nsMedia, &castmedia.LoadMediaCommand{
-		Type:     msgLoad,
-		Media:    castmedia.MediaItem{ContentId: streamURL.String(), ContentType: contentType, StreamType: "BUFFERED"},
-		Autoplay: true,
-	})
+	load := &loadCommand{
+		Type: msgLoad, Autoplay: true,
+		Media: mediaItem{MediaItem: castmedia.MediaItem{ContentId: streamURL.String(), ContentType: contentType, StreamType: "BUFFERED"}},
+	}
+	load.Media.Tracks, load.ActiveTrackIds = textTracks(captions)
+	reply, err := s.ch.request(ctx, transport, nsMedia, load)
 	if err == nil {
 		err = loadVerdict(reply)
 	}
@@ -74,6 +75,42 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 		return fmt.Errorf("starting chromecast playback: %w", err)
 	}
 	return nil
+}
+
+// loadCommand is go-chromecast's LOAD with the text tracks it has no field for; Media shadows the embedded one.
+type loadCommand struct {
+	castmedia.LoadMediaCommand
+	Media          mediaItem `json:"media"`
+	ActiveTrackIds []int     `json:"activeTrackIds,omitempty"`
+}
+
+type mediaItem struct {
+	castmedia.MediaItem
+	Tracks []track `json:"tracks,omitempty"`
+}
+
+type track struct {
+	TrackID          int    `json:"trackId"`
+	Type             string `json:"type"`
+	Subtype          string `json:"subtype"`
+	TrackContentID   string `json:"trackContentId"`
+	TrackContentType string `json:"trackContentType"`
+	Language         string `json:"language,omitempty"`
+	Name             string `json:"name,omitempty"`
+}
+
+// textTracks is captions as Cast text tracks, with the ids of those shown from the start.
+func textTracks(captions []*mediav1.DeviceCommand_Caption) (tracks []track, active []int) {
+	for i, c := range captions {
+		tracks = append(tracks, track{
+			TrackID: i + 1, Type: "TEXT", Subtype: "SUBTITLES", TrackContentID: c.GetUrl(),
+			TrackContentType: device.CaptionMIME(c.GetFormat()), Language: c.GetLanguage(), Name: c.GetName(),
+		})
+		if c.GetDefault() {
+			active = append(active, i+1)
+		}
+	}
+	return tracks, active
 }
 
 func (s *session) Pause(ctx context.Context) error { return s.transportCommand(ctx, msgPause) }
@@ -174,6 +211,7 @@ func (s *session) Capabilities() *mediav1.Capabilities {
 		SelfFetch:       true,
 		Containers:      []mediav1.Container{mediav1.Container_CONTAINER_HLS, mediav1.Container_CONTAINER_MPEGTS, mediav1.Container_CONTAINER_MP4, mediav1.Container_CONTAINER_WEBM},
 		ServedContainer: mediav1.Container_CONTAINER_MP4,
+		Captions:        []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
 		Video: []*mediav1.VideoSupport{
 			device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264),
 			device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_VP8),

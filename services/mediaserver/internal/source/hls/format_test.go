@@ -23,7 +23,7 @@ func TestAMasterNamesItsRenditionsAndCompanion(t *testing.T) {
 		t.Fatal("the master is not marked multivariant")
 	}
 	var got []string
-	for _, rung := range ladder(doc, nil) {
+	for _, rung := range ladder(doc, nil, "") {
 		got = append(got, rung.URL.String(), rung.AudioURL.String())
 	}
 	slices.Sort(got)

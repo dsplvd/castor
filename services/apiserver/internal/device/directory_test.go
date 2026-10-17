@@ -47,10 +47,12 @@ func (m *moving) Connect(_ context.Context, info Info) (Device, error) {
 
 type idle struct{}
 
-func (idle) Play(context.Context, *url.URL, mediav1.Container) error { return nil }
-func (idle) AwaitEnd(ctx context.Context) error                      { return context.Cause(ctx) }
-func (idle) Capabilities() *mediav1.Capabilities                     { return &mediav1.Capabilities{} }
-func (idle) Close() error                                            { return nil }
+func (idle) Play(context.Context, *url.URL, mediav1.Container, []*mediav1.DeviceCommand_Caption) error {
+	return nil
+}
+func (idle) AwaitEnd(ctx context.Context) error  { return context.Cause(ctx) }
+func (idle) Capabilities() *mediav1.Capabilities { return &mediav1.Capabilities{} }
+func (idle) Close() error                        { return nil }
 
 func TestADeviceThatMovedSinceItWasListedIsFoundAgainToConnect(t *testing.T) {
 	family := &moving{at: "10.0.0.9"}

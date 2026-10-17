@@ -27,8 +27,11 @@ func NewDevice(line *Line, caps media.Capabilities, reach func(*url.URL) *url.UR
 	return Device{line: line, caps: caps, reach: reach, left: left}
 }
 
-func (d Device) Play(ctx context.Context, streamURL *url.URL, contentType string) error {
+func (d Device) Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption) error {
 	play := &mediav1.DeviceCommand_Play{Url: d.reach(streamURL).String(), Container: wire.Container(contentType)}
+	for _, c := range captions {
+		play.Captions = append(play.Captions, wire.Caption(c, d.reach(c.URL)))
+	}
 	err := d.done(ctx, &mediav1.DeviceCommand{Command: &mediav1.DeviceCommand_Play_{Play: play}})
 	if errors.Is(err, ErrLenderLeft) {
 		// No attempt reaches a device whose lender has left, so recovery tries none.

@@ -7,6 +7,7 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
+	"github.com/stupside/castor/services/mediaserver/internal/captions"
 	"github.com/stupside/castor/services/mediaserver/internal/cast"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/execute"
@@ -89,6 +90,14 @@ func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtit
 	}
 }
 
+// captions shows the source's own captions in the selected language, none when the selection disables them.
+func (e *engine) captions(selection *castorv1.SubtitleSelection) *execute.Captions {
+	if selection.GetDisabled() != nil {
+		return nil
+	}
+	return &execute.Captions{Want: captions.Want{Language: selection.GetLanguage(), Auto: selection.GetAutoDetect() != nil}, Client: e.client}
+}
+
 // caster ranks and plays one cast as it was asked.
 type caster struct {
 	*rank.Ranker
@@ -110,6 +119,7 @@ func (k caster) Play(ctx context.Context, device execute.Device, listeners deliv
 		Machinery: k.engine.machinery,
 		Device:    device,
 		Listeners: listeners,
+		Captions:  k.engine.captions(k.asked.GetSubtitles()),
 		Subtitles: k.subs,
 		MaxHeight: media.HeightCap(k.asked.GetMaxHeight()),
 	}
@@ -119,5 +129,5 @@ func (k caster) Play(ctx context.Context, device execute.Device, listeners deliv
 		Deadline:   readDeadline,
 		Delivery:   wire.FromDelivery(k.asked.GetDelivery()),
 		Turns:      turns,
-	}, run, source.NewResolver(k.engine.client, run.MaxHeight, formats))
+	}, run, source.NewResolver(k.engine.client, run.MaxHeight, k.asked.GetAudioLanguage(), formats))
 }

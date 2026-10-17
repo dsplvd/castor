@@ -77,7 +77,10 @@ func inspect(ctx context.Context, env source.Env, stream source.Stream, origin s
 		slog.WarnContext(ctx, "playlist offers no castable rendition, using original", "url", stream.URL.String())
 		return origin, source.Rendition{}, true
 	}
-	origin.Renditions = ladder(doc, stream.Probe)
+	if env.AudioLanguage != "" && !doc.offersAudioIn(env.AudioLanguage) {
+		slog.WarnContext(ctx, "the source offers no audio in the language asked; playing its default", "language", env.AudioLanguage)
+	}
+	origin.Renditions = ladder(doc, stream.Probe, env.AudioLanguage)
 	chosen := env.Choose(ctx, origin, settled, byBitrate)
 
 	// Segment facts are stated by the document that LISTS the segments (chosen variant's own playlist).

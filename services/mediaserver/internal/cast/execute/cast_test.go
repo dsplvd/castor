@@ -55,7 +55,7 @@ func (loopback) Listen(context.Context) (net.Listener, error) {
 
 var _ Device = (*fakeDevice)(nil)
 
-func (d *fakeDevice) Play(ctx context.Context, streamURL *url.URL, _ string) error {
+func (d *fakeDevice) Play(ctx context.Context, streamURL *url.URL, _ string, _ []media.Caption) error {
 	if d.refuse != nil {
 		return d.refuse
 	}

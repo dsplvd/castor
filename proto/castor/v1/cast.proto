@@ -85,6 +85,8 @@ message Preferences {
   optional uint32 max_height = 2 [(buf.validate.field).uint32.gte = 2];
   // Absent subtitles inherit the server's default; an explicit mode replaces it.
   SubtitleSelection subtitles = 3;
+  // audio_language is the language to play where a source offers several; absent takes the server's default, empty the source's own.
+  optional string audio_language = 4 [(buf.validate.field).string.pattern = "^([a-z]{2,3})?$"];
 }
 
 message SubtitleSelection {

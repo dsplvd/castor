@@ -25,7 +25,7 @@ The webpage and media origin are distinct: `watch.example` may load video from `
 | Clients | Catalog, sources, UI; public API calls | Service internals |
 | API | Device discovery/control, cast defaults, orchestration, status, cancellation | Browser extraction or media ranking |
 | Scraping | Chrome, frames, capture-document parsing; `browser`, `capture` | Devices, probing, ranking, playback |
-| Media | Probing, ranking, recovery, ffmpeg, subtitles, `/media`; `resolver`, `transcode`, `whisper` | Webpages or device control |
+| Media | Probing, ranking, recovery, ffmpeg, subtitles, `/media`; `resolver`, `whisper` | Webpages or device control |
 
 Scraping emits generated `StreamCandidate` contracts directly, with URLs, replay headers, MIME types, source pages, and manifest evidence. Its private HLS/DASH document inspection identifies referenced resources and pre-rolls from responses Chrome already fetched. API translates public sources into media's page-free `Source`. A direct stream is explicitly chosen and only measured; a candidate list is ranked, with alternatives retained for recovery. Candidates are alternative URLs, not video chunks; one HLS/DASH URL can contain quality variants.
 
@@ -86,7 +86,7 @@ flowchart LR
 
 - **Rank:** prefer the tallest stream within `cast.max_height`; unmeasured candidates are last resorts. Media's HLS/DASH readers handle playback, not capture-document parsing.
 - **Compose:** hand off compatible streams to self-fetching devices unless `delivery: serve`; otherwise remux or use a read-once encoding pipeline (e.g. DLNA). `--debug` explains the choice.
-- **Plan/deliver:** copy or encode each track, scale to the ceiling, and burn Whisper subtitles into read-once casts. Use a working GPU encoder, falling back to software. Internal delivery listens on loopback behind `/media`.
+- **Plan/deliver:** copy or encode each track, scale to the ceiling, and show the source's own captions as a native track when it publishes the language asked, else burn Whisper subtitles into read-once casts. Use a working GPU encoder, falling back to software. Internal delivery listens on loopback behind `/media`.
 - **Recover:** detect stalls, slow reads, or stopped fetching; revise the attempt, cheapest first, or try the next candidate.
 
 ## Trust boundary

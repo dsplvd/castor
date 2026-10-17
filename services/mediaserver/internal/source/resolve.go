@@ -28,10 +28,10 @@ type Resolver struct {
 	formats Formats
 }
 
-// NewResolver binds resolution to the client that reads origins, the tallest picture a cast shows and the formats it reads.
-func NewResolver(client Client, maxHeight media.HeightCap, formats Formats) *Resolver {
+// NewResolver binds resolution to the client that reads origins, the tallest picture and the audio language a cast asks, and the formats it reads.
+func NewResolver(client Client, maxHeight media.HeightCap, audioLanguage string, formats Formats) *Resolver {
 	return &Resolver{
-		env:     Env{Client: client, MaxHeight: maxHeight},
+		env:     Env{Client: client, MaxHeight: maxHeight, AudioLanguage: audioLanguage},
 		formats: formats,
 	}
 }

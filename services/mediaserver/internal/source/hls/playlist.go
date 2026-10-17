@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type variant struct {
 	// program is the variant's position among the master's STREAM-INF lines, the id a probe numbers it by.
 	program int
 
+	// subtitleGroup is the GROUP-ID this variant's text renditions come from (empty when it has none).
+	subtitleGroup string
+
 	// audioGroup is the GROUP-ID this variant plays its audio from (empty when muxed into segments).
 	audioGroup string
 
@@ -38,8 +42,11 @@ type variant struct {
 type document struct {
 	variants []variant
 
-	// audio maps an audio GROUP-ID to the rendition to play from it; nil when the default is muxed into the variant.
-	audio map[string]*url.URL
+	// audio maps an audio GROUP-ID to the renditions a variant may play its sound from.
+	audio map[string][]audioRendition
+
+	// subtitles maps a subtitle GROUP-ID to its text renditions.
+	subtitles map[string][]source.Caption
 
 	// live reports a media playlist with no #EXT-X-ENDLIST (always false for a master).
 	live bool
@@ -63,7 +70,50 @@ type document struct {
 	spliced bool
 }
 
-func (d document) audioFor(v variant) *url.URL { return d.audio[v.audioGroup] }
+// audioRendition is one EXT-X-MEDIA audio entry; url is nil for a default muxed into the variant's own segments.
+type audioRendition struct {
+	url       *url.URL
+	language  string
+	isDefault bool
+}
+
+// offersAudioIn reports whether any audio group lists a rendition of its own in language.
+func (d document) offersAudioIn(language string) bool {
+	for _, group := range d.audio {
+		if slices.ContainsFunc(group, func(a audioRendition) bool { return a.url != nil && source.SameLanguage(a.language, language) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// audioFor is the rendition v plays its sound from: the one in language when its group offers it, else the group's default
+// (the last one marked; nil when that is muxed into the variant), else the group's first.
+func (d document) audioFor(v variant, language string) *url.URL {
+	group := d.audio[v.audioGroup]
+	if language != "" {
+		for _, a := range group {
+			if a.url != nil && source.SameLanguage(a.language, language) {
+				return a.url
+			}
+		}
+	}
+	chosen := -1
+	for i, a := range group {
+		if a.isDefault {
+			chosen = i
+		}
+	}
+	switch {
+	case chosen >= 0:
+		return group[chosen].url
+	case len(group) > 0:
+		return group[0].url
+	}
+	return nil
+}
+
+func (d document) captionsFor(v variant) []source.Caption { return d.subtitles[v.subtitleGroup] }
 
 // parsePlaylist reads a document fetched from requested that arrived from from, after any redirect.
 func parsePlaylist(body string, requested, from *url.URL) (document, error) {
@@ -153,24 +203,26 @@ func masterFrom(playlist *m3u8.MasterPlaylist, baseURL *url.URL) document {
 
 		height := resolutionHeight(listed.Resolution)
 		out.variants = append(out.variants, variant{
-			url:        variantURL,
-			bandwidth:  int64(listed.Bandwidth),
-			height:     height,
-			program:    program - 1,
-			audioGroup: listed.Audio,
-			hasVideo:   carriesVideo(listed),
-			declared:   source.DeclaredEnvelope(listed.Codecs, height),
+			url:           variantURL,
+			bandwidth:     int64(listed.Bandwidth),
+			height:        height,
+			program:       program - 1,
+			audioGroup:    listed.Audio,
+			subtitleGroup: listed.Subtitles,
+			hasVideo:      carriesVideo(listed),
+			declared:      source.DeclaredEnvelope(listed.Codecs, height),
 		})
 	}
 	return out
 }
 
-// addRendition records the audio rendition a group plays, the default winning; one without URI is muxed into variants.
+// addRendition records an audio rendition of its group; one without a URI is only meaningful as the default muxed into variants.
 func (d *document) addRendition(alternative *m3u8.Alternative, baseURL *url.URL) {
-	if alternative.Type != "AUDIO" {
+	if alternative.Type == "SUBTITLES" {
+		d.addCaption(alternative, baseURL)
 		return
 	}
-	if _, seen := d.audio[alternative.GroupId]; seen && !alternative.Default {
+	if alternative.Type != "AUDIO" {
 		return
 	}
 	var renditionURL *url.URL
@@ -181,9 +233,26 @@ func (d *document) addRendition(alternative *m3u8.Alternative, baseURL *url.URL)
 		renditionURL = parsed
 	}
 	if d.audio == nil {
-		d.audio = make(map[string]*url.URL)
+		d.audio = make(map[string][]audioRendition)
 	}
-	d.audio[alternative.GroupId] = renditionURL
+	d.audio[alternative.GroupId] = append(d.audio[alternative.GroupId], audioRendition{url: renditionURL, language: alternative.Language, isDefault: alternative.Default})
+}
+
+// addCaption records a text rendition once per group and URI; one without a URI is carried inside the segments.
+func (d *document) addCaption(alternative *m3u8.Alternative, baseURL *url.URL) {
+	captionURL, err := baseURL.Parse(alternative.URI)
+	if alternative.URI == "" || err != nil {
+		return
+	}
+	if slices.ContainsFunc(d.subtitles[alternative.GroupId], func(c source.Caption) bool { return c.URL.String() == captionURL.String() }) {
+		return
+	}
+	if d.subtitles == nil {
+		d.subtitles = make(map[string][]source.Caption)
+	}
+	d.subtitles[alternative.GroupId] = append(d.subtitles[alternative.GroupId], source.Caption{
+		URL: captionURL, Language: alternative.Language, Name: alternative.Name, Default: alternative.Default, Forced: alternative.Forced,
+	})
 }
 
 // carriesVideo reports whether a variant has video to cast (RESOLUTION or video codec).

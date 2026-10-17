@@ -39,7 +39,7 @@ func get(ctx context.Context, hc *http.Client, u *url.URL, limit int64) ([]byte,
 	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }
 
-func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container) error {
+func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
 	var format string
 	switch container {
 	case mediav1.Container_CONTAINER_MP4:

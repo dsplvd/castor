@@ -124,6 +124,9 @@ func (s *Service) asked(p *castorv1.Preferences) *mediav1.PlaybackSettings {
 		if p.Subtitles != nil {
 			asked.Subtitles = proto.CloneOf(p.Subtitles)
 		}
+		if p.AudioLanguage != nil {
+			asked.AudioLanguage = p.GetAudioLanguage()
+		}
 	}
 	return asked
 }

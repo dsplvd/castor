@@ -17,7 +17,7 @@ type Type string
 // Device is a connected device, ready to play; whoever connected it closes it.
 type Device interface {
 	// Play points the device at streamURL, packaged as container.
-	Play(ctx context.Context, streamURL *url.URL, container mediav1.Container) error
+	Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error
 
 	AwaitEnd(ctx context.Context) error
 

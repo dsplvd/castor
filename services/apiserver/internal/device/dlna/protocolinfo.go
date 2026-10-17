@@ -99,7 +99,7 @@ func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Cont
 	}
 
 	// A DLNA device deinterlaces: broadcast reaches it as fields.
-	r := &mediav1.Capabilities{Deinterlaces: true}
+	r := &mediav1.Capabilities{Deinterlaces: true, Captions: []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_SRT}}
 	for _, c := range discoverableCodecs {
 		if present[c] {
 			r.Video = append(r.Video, device.VideoSupport(c))

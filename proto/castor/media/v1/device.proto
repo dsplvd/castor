@@ -61,6 +61,11 @@ message Capabilities {
   }];
   // self_fetch is whether the device fetches a stream URL itself, rather than only playing what it is served.
   bool self_fetch = 7;
+  // captions are the caption formats the device takes alongside a stream; none means it shows no captions.
+  repeated CaptionFormat captions = 8 [(buf.validate.field).repeated.items.enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 }
 
 message VideoSupport {
@@ -74,6 +79,13 @@ message VideoSupport {
 message AudioSupport {
   AudioCodec codec = 1;
   uint32 max_channels = 2;
+}
+
+// CaptionFormat is how a caption track is written.
+enum CaptionFormat {
+  CAPTION_FORMAT_UNSPECIFIED = 0;
+  CAPTION_FORMAT_VTT = 1;
+  CAPTION_FORMAT_SRT = 2;
 }
 
 // Container is how a stream is packaged, as a device takes it.
@@ -151,6 +163,28 @@ message DeviceCommand {
       defined_only: true
       not_in: [0]
     }];
+    repeated Caption captions = 3;
+  }
+
+  // Caption is a text track the device shows over the stream; its url is fetched like the stream's.
+  message Caption {
+    string url = 1 [
+      (buf.validate.field).string.max_len = 8192,
+      (buf.validate.field).cel = {
+        id: "caption.url.http"
+        message: "must be an http or https URL"
+        expression: "this.isUri() && (this.startsWith('http://') || this.startsWith('https://'))"
+      }
+    ];
+    CaptionFormat format = 2 [(buf.validate.field).enum = {
+      defined_only: true
+      not_in: [0]
+    }];
+    // language is the ISO 639 code the track is tagged with, empty when untagged.
+    string language = 3;
+    string name = 4;
+    // default is shown without the viewer choosing it.
+    bool default = 5;
   }
 
   message AwaitEnd {}

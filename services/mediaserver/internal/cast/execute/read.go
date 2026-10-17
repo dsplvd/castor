@@ -87,6 +87,10 @@ func (s *pipeline) transcription(ctx context.Context, work string, facts facts, 
 	if s.cast.Subtitles == nil {
 		return nil
 	}
+	if len(s.shown) > 0 {
+		slog.InfoContext(ctx, "no transcribed subtitles for this cast: the source's own captions are shown")
+		return nil
+	}
 	if !facts.sounds(program) {
 		slog.InfoContext(ctx, "no subtitles for this cast: nothing shows the source carries sound")
 		return nil

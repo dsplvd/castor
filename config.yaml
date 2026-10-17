@@ -5,6 +5,8 @@ device:
   # Run `castor scan` and paste the device's name and type (dlna, chromecast or roku).
   name: "Samsung Q80CA 55 TV"
   type: "dlna"
+  # Two devices sharing a name are refused as ambiguous; pick one by the id `castor scan` prints.
+  # id: "uuid:..."
   # Reach the device by unicast where discovery can't (VLANs, Android/Termux); name becomes a label.
   # Its IP, or for a DLNA device that does not answer there, its description URL.
   # host: 192.168.0.3
@@ -16,9 +18,13 @@ cast:
   # The tallest picture sent to the device (default 1080). A taller source castor measured is
   # relayed and scaled down, re-encoding the whole title.
   # max_height: 1080
-  # Burned-in subtitles: a whisper language code (en, fr) or auto; unset for none. Only devices
-  # castor always streams to (DLNA) get them, never one that fetches for itself.
+  # Subtitles: a language code (en, fr) or auto; unset for none. The source's own captions are shown
+  # when it has the language (auto takes its default one), else a whisper transcription is burned
+  # in, which only reaches devices castor always streams to (DLNA), never one that fetches itself.
   # subtitles: en
+  # The audio language to play where a source offers several (fr, en); unset takes the source's default.
+  # A source that offers no such track plays its default, logged as a warning.
+  audio: fr
 
 sources:
   # Castor ships no sources: add sites you are authorized to use. `proxies` are base URLs tried

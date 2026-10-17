@@ -30,6 +30,8 @@ type CastConfig struct {
 	MaxHeight uint32   `yaml:"max_height"`
 	// Subtitles is the language to burn in, a whisper code or auto to detect it, empty for none.
 	Subtitles string `yaml:"subtitles"`
+	// Audio is the language to play where a source offers several, empty for the source's default.
+	Audio string `yaml:"audio"`
 }
 
 // Delivery is how a cast reaches the device, spelled in configuration as the contract names it, such as auto.
@@ -86,8 +88,9 @@ func (c CastConfig) settings() *mediav1.PlaybackSettings {
 		subtitles.Mode = &castorv1.SubtitleSelection_Language{Language: c.Subtitles}
 	}
 	return &mediav1.PlaybackSettings{
-		Delivery:  castorv1.Delivery(c.Delivery),
-		MaxHeight: c.MaxHeight,
-		Subtitles: subtitles,
+		Delivery:      castorv1.Delivery(c.Delivery),
+		MaxHeight:     c.MaxHeight,
+		Subtitles:     subtitles,
+		AudioLanguage: c.Audio,
 	}
 }

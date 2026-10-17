@@ -315,7 +315,7 @@ func castOn(t *testing.T, c server, source *mediav1.Source, device *lentDevice) 
 // handoff is a cast the device fetches the head stream of for itself.
 func handoff(ctx context.Context, device execute.Device, _ deliver.Listeners, streams []*source.Stream, turns recovery.Turns) error {
 	turns.Attempting(1)
-	return device.Play(ctx, streams[0].URL, streams[0].ContentType)
+	return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil)
 }
 
 func TestPagesStreamsAreRankedThenHandedToTheLentDeviceAsTheyAre(t *testing.T) {
@@ -465,7 +465,7 @@ func TestAStreamCastNeverShowsExtractingAndItsStateNeverGoesBack(t *testing.T) {
 		turns.Attempting(1)
 		turns.Revising(recovery.ServeInstead, "refused")
 		turns.Attempting(2)
-		return device.Play(ctx, streams[0].URL, streams[0].ContentType)
+		return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil)
 	}).backend())
 
 	w := castOn(t, c, streamOf("https://cdn.example/direct"), newLentDevice())
@@ -521,7 +521,7 @@ func TestWhatTheServerServesTheDeviceFetchesFromTheServerItself(t *testing.T) {
 		if h := lent.Capabilities().ServedHeaders; h["transferMode.dlna.org"] != "Streaming" {
 			return errors.New("the device's served headers did not reach the media server")
 		}
-		return lent.Play(ctx, &url.URL{Scheme: "http", Host: l.Addr().String(), Path: "/stream.ts", RawQuery: "n=1"}, media.MPEGTS)
+		return lent.Play(ctx, &url.URL{Scheme: "http", Host: l.Addr().String(), Path: "/stream.ts", RawQuery: "n=1"}, media.MPEGTS, nil)
 	}).backend())
 
 	if err := castOn(t, c, streamOf("https://cdn.example/direct"), device).outcome(); err != nil {
@@ -606,7 +606,7 @@ func TestADeviceGoneOnItsNetworkIsGoneToTheCastsRecovery(t *testing.T) {
 func TestACastHasOneDeviceAndPlaysOnWhenItsLenderLeaves(t *testing.T) {
 	playing, ended := make(chan struct{}), make(chan struct{})
 	c := serve(t, machinery(func(ctx context.Context, device execute.Device, _ deliver.Listeners, streams []*source.Stream, _ recovery.Turns) error {
-		if err := device.Play(ctx, streams[0].URL, streams[0].ContentType); err != nil {
+		if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil); err != nil {
 			return err
 		}
 		close(playing)
@@ -645,7 +645,7 @@ func TestACastThatNeedsItsDeviceAgainOnceItsLenderLeftEndsThere(t *testing.T) {
 		<-again
 		// Recovery revising the attempt, each revision playing again, until the cast is ended.
 		for range 50 {
-			if err := device.Play(ctx, streams[0].URL, streams[0].ContentType); ctx.Err() != nil {
+			if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil); ctx.Err() != nil {
 				return err
 			}
 		}

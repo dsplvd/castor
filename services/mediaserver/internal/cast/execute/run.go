@@ -37,6 +37,8 @@ type pipeline struct {
 	ctx context.Context
 	// releases undoes everything the attempt acquired, once it ends.
 	releases *releases
+	// shown are the captions the device is handed with the stream; the source's own, when it publishes the language asked.
+	shown []media.Caption
 }
 
 // ran is how far an attempt's pipeline got, and the read it started on the way (nil where it read nothing).
@@ -54,6 +56,7 @@ func open(parent context.Context, c Cast, a recovery.Attempt) *pipeline {
 }
 
 func (s *pipeline) play() (ran, error) {
+	s.shown = s.shownCaptions()
 	switch s.compose() {
 	case compose.Handoff:
 		return s.handoff()
@@ -67,7 +70,7 @@ func (s *pipeline) play() (ran, error) {
 func (s *pipeline) handoff() (ran, error) {
 	// Present because run validated this program before the composition ran.
 	primary, _ := s.attempt.Program.PrimaryInput()
-	if err := hand(s.ctx, s.cast.Device, primary.URL, primary.ContentType, true); err != nil {
+	if err := hand(s.ctx, s.cast.Device, primary.URL, primary.ContentType, s.shown, true); err != nil {
 		return ran{}, err
 	}
 	return ran{reached: health.Playing}, nil
@@ -151,9 +154,9 @@ func (e *timelineUnreadable) Error() string {
 func (e *timelineUnreadable) Unwrap() error { return e.err }
 
 // hand points the device at target; source says whether that is the source itself rather than what castor serves.
-func hand(ctx context.Context, dev Device, target *url.URL, contentType string, source bool) error {
+func hand(ctx context.Context, dev Device, target *url.URL, contentType string, shown []media.Caption, source bool) error {
 	slog.InfoContext(ctx, "starting playback", "host", target.Host, "content_type", contentType, "handoff", source)
-	if err := dev.Play(ctx, target, contentType); err != nil {
+	if err := dev.Play(ctx, target, contentType, shown); err != nil {
 		return &playRefused{err: err, source: source}
 	}
 	return nil

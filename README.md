@@ -105,7 +105,7 @@ Every log line of a cast carries `cast_id`, the same in all three services, so o
 
 ### Subtitles
 
-Subtitles are burned into served, read-once video (e.g. DLNA), not self-fetching Chromecast/Roku playback. The appropriate default model downloads once to your cache.
+Castor shows the captions a source publishes (an HLS stream's WebVTT renditions) in the language you pick, as a native caption track on Chromecast and DLNA. Roku shows none yet. When the source has none in that language, castor transcribes the sound with Whisper and burns the text into served, read-once video (e.g. DLNA), not self-fetching Chromecast/Roku playback. The source's captions win; the two never show together. The appropriate default model downloads once to your cache.
 
 ```yaml
 cast:
@@ -115,6 +115,15 @@ whisper:
 ```
 
 Set `whisper.model_path` to use a larger model (e.g. multilingual `ggml-base.bin`). English-only models reject other languages and `auto`.
+
+### Audio language
+
+```yaml
+cast:
+  audio: fr                # a language code; unset plays the source's default track
+```
+
+Castor plays the matching track when an HLS source publishes its audio as separate renditions. A source that offers no such track plays its default, with a warning in the log. Audio muxed inside one container is not chosen yet.
 
 ### Video quality
 
@@ -216,7 +225,24 @@ Castor sideloads a playback channel:
 
 For a published channel, set `devices.roku.app_id` instead; no developer mode/password needed. Relayed Roku playback runs about 30 s behind.
 
+## Network and firewall
+
+- **Devices reach castor on one TCP port**: `server.listen` of `castor media-server` (8410). Per-cast listeners are loopback only, relayed through that port. Plain `castor` embeds a media server on a random LAN port each run, so allow the `castor` binary, or run `castor media-server` for a fixed port. `server.advertise` and `network.interface` pick the address devices are given.
+- **The API (8411) and scraping (8412) servers are not for devices.** They bind every interface, so set their tokens (see [SECURITY.md](SECURITY.md)).
+- **Discovery** sends SSDP (DLNA, Roku) to UDP 239.255.255.250:1900 and mDNS (Chromecast) to UDP 5353, and expects replies back, so it stays on one subnet unless you pin `host`.
+- **Outbound control**: Chromecast TCP 8009, Roku TCP 8060 (80 for the first sideload), DLNA the port the device advertises. Castor opens no callback port.
+
 ## Troubleshooting
+
+### Two devices share a name
+
+Castor refuses to guess. `castor scan` prints each device's id as its last column; set it to pick one:
+
+```yaml
+device:
+  type: dlna
+  id: "uuid:..."           # a DLNA or Chromecast id can fall back to the address, which DHCP may change
+```
 
 ### `castor scan` finds nothing: pin the device by IP
 

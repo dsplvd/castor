@@ -104,7 +104,7 @@ func newLentDevice() *lentDevice {
 	return &lentDevice{played: make(chan *url.URL, 1), as: make(chan mediav1.Container, 1)}
 }
 
-func (s *lentDevice) Play(_ context.Context, u *url.URL, container mediav1.Container) error {
+func (s *lentDevice) Play(_ context.Context, u *url.URL, container mediav1.Container, _ []*mediav1.DeviceCommand_Caption) error {
 	if s.refusal != nil {
 		return s.refusal
 	}

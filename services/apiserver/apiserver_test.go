@@ -81,7 +81,7 @@ type connection struct {
 	gone bool
 }
 
-func (c *connection) Play(_ context.Context, u *url.URL, _ mediav1.Container) error {
+func (c *connection) Play(_ context.Context, u *url.URL, _ mediav1.Container, _ []*mediav1.DeviceCommand_Caption) error {
 	if c.gone {
 		return &device.Gone{Device: "Bedroom", Observed: "the connection closed"}
 	}

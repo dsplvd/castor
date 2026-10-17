@@ -49,13 +49,13 @@ const (
 	transportLockedDelay   = 300 * time.Millisecond
 )
 
-// Play hands over one video resource with no caption track: subtitles are burned in upstream.
-func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container) error {
+// Play hands over one video resource, announcing the caption to show beside it when there is one.
+func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
 	entry, ok := s.sinks[container]
 	if !ok {
 		return fmt.Errorf("the device does not advertise container %v", container)
 	}
-	metadata, err := buildDIDLMetadata(streamURL, entry)
+	metadata, err := buildDIDLMetadata(streamURL, entry, shownCaption(captions))
 	if err != nil {
 		return fmt.Errorf("building DIDL-Lite metadata: %w", err)
 	}
@@ -80,6 +80,19 @@ func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav
 		return s.action(ctx, "Play", play)
 	}); err != nil {
 		return fmt.Errorf("starting playback: %w", err)
+	}
+	return nil
+}
+
+// shownCaption is the one caption a renderer is told of: the default, else the first.
+func shownCaption(captions []*mediav1.DeviceCommand_Caption) *mediav1.DeviceCommand_Caption {
+	for _, c := range captions {
+		if c.GetDefault() {
+			return c
+		}
+	}
+	if len(captions) > 0 {
+		return captions[0]
 	}
 	return nil
 }

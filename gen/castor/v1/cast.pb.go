@@ -389,7 +389,9 @@ type Preferences struct {
 	// max_height is the tallest picture the cast may show.
 	MaxHeight *uint32 `protobuf:"varint,2,opt,name=max_height,json=maxHeight,proto3,oneof" json:"max_height,omitempty"`
 	// Absent subtitles inherit the server's default; an explicit mode replaces it.
-	Subtitles     *SubtitleSelection `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
+	Subtitles *SubtitleSelection `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
+	// audio_language is the language to play where a source offers several; absent takes the server's default, empty the source's own.
+	AudioLanguage *string `protobuf:"bytes,4,opt,name=audio_language,json=audioLanguage,proto3,oneof" json:"audio_language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -443,6 +445,13 @@ func (x *Preferences) GetSubtitles() *SubtitleSelection {
 		return x.Subtitles
 	}
 	return nil
+}
+
+func (x *Preferences) GetAudioLanguage() string {
+	if x != nil && x.AudioLanguage != nil {
+		return *x.AudioLanguage
+	}
+	return ""
 }
 
 type SubtitleSelection struct {
@@ -1399,15 +1408,17 @@ const file_castor_v1_cast_proto_rawDesc = "" +
 	"\burl.http\x12\x1cmust be an http or https URL\x1aKthis.isUri() && (this.startsWith('http://') || this.startsWith('https://'))r\x03\x18\x80@R\x04urls\x1aT\n" +
 	"\x0fResolvedStreams\x12A\n" +
 	"\astreams\x18\x01 \x03(\v2\x1a.castor.v1.StreamCandidateB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc0\fR\astreamsB\x0f\n" +
-	"\x06source\x12\x05\xbaH\x02\b\x01\"\xd4\x01\n" +
+	"\x06source\x12\x05\xbaH\x02\b\x01\"\xab\x02\n" +
 	"\vPreferences\x12@\n" +
 	"\bdelivery\x18\x01 \x01(\x0e2\x13.castor.v1.DeliveryB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\bdelivery\x88\x01\x01\x12+\n" +
 	"\n" +
 	"max_height\x18\x02 \x01(\rB\a\xbaH\x04*\x02(\x02H\x01R\tmaxHeight\x88\x01\x01\x12:\n" +
-	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionR\tsubtitlesB\v\n" +
+	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionR\tsubtitles\x12B\n" +
+	"\x0eaudio_language\x18\x04 \x01(\tB\x16\xbaH\x13r\x112\x0f^([a-z]{2,3})?$H\x02R\raudioLanguage\x88\x01\x01B\v\n" +
 	"\t_deliveryB\r\n" +
-	"\v_max_height\"\xc6\x01\n" +
+	"\v_max_heightB\x11\n" +
+	"\x0f_audio_language\"\xc6\x01\n" +
 	"\x11SubtitleSelection\x124\n" +
 	"\bdisabled\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\bdisabled\x129\n" +
 	"\vauto_detect\x18\x02 \x01(\v2\x16.google.protobuf.EmptyH\x00R\n" +

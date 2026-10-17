@@ -18,7 +18,7 @@ func TestADeviceIsAnnouncedTheStreamAsItsOwnSinkEntryDescribesIt(t *testing.T) {
 		mediav1.Container_CONTAINER_MPEGTS: "http-get:*:video/vnd.dlna.mpeg-tts:DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO;DLNA.ORG_OP=01;DLNA.ORG_CI=0",
 		mediav1.Container_CONTAINER_MP4:    "http-get:*:video/mp4:*",
 	} {
-		metadata, err := buildDIDLMetadata(stream, sinks[container])
+		metadata, err := buildDIDLMetadata(stream, sinks[container], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,5 +35,24 @@ func TestTheServedHeadersCarryTheSinkEntryNotAGuess(t *testing.T) {
 	}
 	if _, ok := servedHeaders(sinks[mediav1.Container_CONTAINER_MP4])["contentFeatures.dlna.org"]; ok {
 		t.Error("an entry with no features was announced with a contentFeatures header")
+	}
+}
+
+func TestACaptionIsAnnouncedBesideTheStreamTheWayRenderersReadIt(t *testing.T) {
+	_, sinks := parseSinkProtocolInfo("http-get:*:video/mp4:*")
+	stream := &url.URL{Scheme: "http", Host: "192.0.2.1:8080", Path: "/stream"}
+	caption := &mediav1.DeviceCommand_Caption{Url: "http://192.0.2.1:8080/en.srt", Format: mediav1.CaptionFormat_CAPTION_FORMAT_SRT}
+	metadata, err := buildDIDLMetadata(stream, sinks[mediav1.Container_CONTAINER_MP4], caption)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`protocolInfo="http-get:*:text/srt:*">http://192.0.2.1:8080/en.srt</res>`,
+		`<sec:CaptionInfoEx sec:type="srt">http://192.0.2.1:8080/en.srt</sec:CaptionInfoEx>`,
+		`xmlns:sec="http://www.sec.co.kr/"`,
+	} {
+		if !strings.Contains(metadata, want) {
+			t.Errorf("metadata = %s, want it to contain %s", metadata, want)
+		}
 	}
 }

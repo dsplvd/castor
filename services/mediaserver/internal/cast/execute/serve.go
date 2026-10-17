@@ -48,7 +48,7 @@ func (s *pipeline) serve(work string, f feed, burn Burn) (health.Phase, error) {
 	if err := awaitArtifact(s.ctx, d); err != nil {
 		return health.Opening, err
 	}
-	if err := hand(s.ctx, s.cast.Device, d.sink.URL(), opts.Format.ContentType, false); err != nil {
+	if err := hand(s.ctx, s.cast.Device, d.sink.URL(), opts.Format.ContentType, s.shown, false); err != nil {
 		return health.Opening, err
 	}
 	delivered, err := supervising(s.ctx, s.cast.Device, d, f)
