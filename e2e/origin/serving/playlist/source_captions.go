@@ -60,9 +60,13 @@ func (c sourceCaptions) Wrap(next http.Handler, _ origin.Published) http.Handler
 
 func (c sourceCaptions) rewrite(master string) string {
 	var out strings.Builder
-	fmt.Fprintf(&out, `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="%s",NAME="%s",DEFAULT=YES,AUTOSELECT=YES,URI="captions.m3u8"`+"\n", c.Language, c.Language)
+	declared := false
 	for line := range strings.Lines(master) {
 		if strings.HasPrefix(line, streamInf) {
+			if !declared {
+				fmt.Fprintf(&out, `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="%s",NAME="%s",DEFAULT=YES,AUTOSELECT=YES,URI="captions.m3u8"`+"\n", c.Language, c.Language)
+				declared = true
+			}
 			line = strings.TrimRight(line, "\r\n") + `,SUBTITLES="subs"` + "\n"
 		}
 		out.WriteString(line)

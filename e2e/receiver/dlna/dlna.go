@@ -71,8 +71,13 @@ type device struct{ Settings }
 func (device) Type() string { return "dlna" }
 
 func (d device) Start(t *testing.T, s *receiver.Session) (receiver.Endpoint, error) {
-	s.Check(streamHeaders)
 	u := &upnp{session: s, sink: d.Sink, locked: d.LockedFor, fetch: fetchers[d.Fetches]}
+	s.Check(func(declared string, h http.Header) []string {
+		u.mu.Lock()
+		meta := u.meta
+		u.mu.Unlock()
+		return streamHeaders(declared, didlFeatures(meta), h)
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /description.xml", u.description)

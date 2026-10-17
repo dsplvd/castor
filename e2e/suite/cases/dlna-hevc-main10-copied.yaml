@@ -6,7 +6,7 @@ stream:
 receiver:
   device:
     dlna:
-      sink: "http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_NA_ISO,http-get:*:video/mp2t:DLNA.ORG_PN=HEVC_TS_MAIN_HD,http-get:*:audio/mp4:DLNA.ORG_PN=AAC_ISO"
+      sink: "http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_AAC_ISO,http-get:*:video/mp2t:DLNA.ORG_PN=HEVC_TS_MAIN_HD_AAC,http-get:*:audio/mp4:DLNA.ORG_PN=AAC_ISO"
       decodes:
         video: {h264: 8, hevc: 10}
         audio: {aac: 2}

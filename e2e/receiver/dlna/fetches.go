@@ -21,17 +21,17 @@ const (
 const probeBytes = 64 << 10
 
 // fetchers start the playback of uri, declared as the DIDL's content type.
-var fetchers = map[Fetches]func(s *receiver.Session, uri, declared string){
-	Once:            func(s *receiver.Session, uri, declared string) { s.Hand(uri, declared) },
+var fetchers = map[Fetches]func(s *receiver.Session, uri, declared, features string){
+	Once:            func(s *receiver.Session, uri, declared, features string) { s.Hand(uri, declared) },
 	HeadProbeReplay: headProbeReplay,
 }
 
 // headProbeReplay probes after Play is answered, as a device does rather than hold its SOAP reply past the sender's timeout.
-func headProbeReplay(s *receiver.Session, uri, declared string) {
+func headProbeReplay(s *receiver.Session, uri, declared, features string) {
 	s.Go(func() {
 		if resp, ok := probe(s, http.MethodHead, uri); ok {
 			resp.Body.Close()
-			for _, v := range streamHeaders(declared, resp.Header) {
+			for _, v := range streamHeaders(declared, features, resp.Header) {
 				s.Problem("HEAD %s: %s", uri, v)
 			}
 		}

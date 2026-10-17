@@ -24,6 +24,8 @@ type Request struct {
 	UserAgent string
 	Referer   string
 	Status    int
+	Arrived   time.Time
+	Completed time.Time
 }
 
 type Origin struct {
@@ -78,7 +80,7 @@ func Start(t *testing.T, ffmpeg string, s Stream, behaviours []Behaviour) *Origi
 		files.ServeHTTP(w, r)
 	})
 	closing := make(chan struct{})
-	published := Published{SegmentExt: out.SegmentExt, Since: time.Now(), Closing: closing}
+	published := Published{SegmentExt: out.SegmentExt, InitPrefix: out.InitPrefix, Since: time.Now(), Closing: closing}
 	for _, b := range slices.Backward(behaviours) {
 		handler = b.Wrap(handler, published)
 	}
@@ -87,16 +89,28 @@ func Start(t *testing.T, ffmpeg string, s Stream, behaviours []Behaviour) *Origi
 		_, edge := b.(Edge)
 		return edge
 	})}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		handler.ServeHTTP(rec, r)
-		o.mu.Lock()
-		o.requests = append(o.requests, Request{Path: r.URL.Path, UserAgent: r.UserAgent(), Referer: r.Referer(), Status: rec.status})
-		o.mu.Unlock()
-	}))
+	server := httptest.NewServer(o.record(handler))
 	t.Cleanup(func() { close(closing); server.Close() })
 	o.URL = server.URL + "/" + cmp.Or(s.Entry.Path, out.Entry)
 	return o
+}
+
+// record reserves the trace entry on arrival, then fills completion separately.
+func (o *Origin) record(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		o.mu.Lock()
+		index := len(o.requests)
+		o.requests = append(o.requests, Request{Path: r.URL.Path, UserAgent: r.UserAgent(), Referer: r.Referer(), Arrived: time.Now()})
+		o.mu.Unlock()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		defer func() {
+			o.mu.Lock()
+			o.requests[index].Status = rec.status
+			o.requests[index].Completed = time.Now()
+			o.mu.Unlock()
+		}()
+		next.ServeHTTP(rec, r)
+	})
 }
 
 type statusRecorder struct {

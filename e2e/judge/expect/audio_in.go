@@ -38,7 +38,7 @@ func (l audioIn) Judge(e judge.Evidence) []string {
 		}
 	}
 	if len(played) == 0 || played[len(played)-1] != string(l) {
-		return []string{fmt.Sprintf("castor played audio segments of %v, want its last read to be %s", played[len(played)-1:], l)}
+		return []string{fmt.Sprintf("castor played audio segments of %v, want its last read to be %s", played, l)}
 	}
 	return nil
 }

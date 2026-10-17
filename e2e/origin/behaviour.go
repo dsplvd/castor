@@ -3,6 +3,7 @@ package origin
 import (
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/stupside/castor/e2e/strategy"
@@ -20,6 +21,7 @@ type Edge interface{ LiveEdge() }
 // Published is what a behaviour needs to know about the files it serves.
 type Published struct {
 	SegmentExt string
+	InitPrefix string
 	// Since is when the origin started serving, the zero of any timeline.
 	Since time.Time
 	// Closing closes before the origin shuts down, releasing any request a behaviour holds.
@@ -35,4 +37,6 @@ func (p Published) Held(r *http.Request) {
 }
 
 // IsSegment reports whether a request is for a media segment rather than a playlist or init segment.
-func (p Published) IsSegment(r *http.Request) bool { return path.Ext(r.URL.Path) == p.SegmentExt }
+func (p Published) IsSegment(r *http.Request) bool {
+	return path.Ext(r.URL.Path) == p.SegmentExt && (p.InitPrefix == "" || !strings.HasPrefix(path.Base(r.URL.Path), p.InitPrefix))
+}

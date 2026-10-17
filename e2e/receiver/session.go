@@ -77,8 +77,12 @@ type Session struct {
 	first, done chan struct{}
 
 	// clock is the handed playback's clock, which the family's transport holds and releases.
-	clock clock
+	clock        clock
+	stopPlayback context.CancelCauseFunc
+	realtime     bool
 }
+
+var errSenderStopped = errors.New("sender stopped playback")
 
 func NewSession(t *testing.T, setup Setup) *Session {
 	// The tape lands in the artifact directory, so `go test -artifacts` keeps what the receiver played.
@@ -86,6 +90,10 @@ func NewSession(t *testing.T, setup Setup) *Session {
 	t.Cleanup(s.wg.Wait)
 	return s
 }
+
+// PlayInRealtime keeps finite buffered playback active for its measured duration.
+// Configure before Hand for protocols whose polling must observe actual playback.
+func (s *Session) PlayInRealtime() { s.realtime = true }
 
 // Context ends when the test does.
 func (s *Session) Context() context.Context { return s.ctx }
@@ -131,19 +139,35 @@ func (s *Session) Hand(url, declared string) {
 	if first {
 		s.received.URL, s.received.ContentType = url, declared
 	}
+	playback, stop := context.WithCancelCause(s.ctx)
+	if first {
+		s.stopPlayback = stop
+	}
 	s.mu.Unlock()
 	if !first {
+		stop(nil)
 		s.Problem("handed a second URL %s; a cast hands over once", url)
 		return
 	}
 	close(s.first)
 	s.Go(func() {
-		ended := s.play(url)
+		defer stop(nil)
+		ended := s.play(playback, url)
 		s.mu.Lock()
 		s.received.Playback, s.received.Ended = ended, time.Now()
 		s.mu.Unlock()
 		close(s.done)
 	})
+}
+
+// Stop models a receiver obeying a sender's STOP command, including during LOAD.
+func (s *Session) Stop() {
+	s.mu.Lock()
+	stop := s.stopPlayback
+	s.mu.Unlock()
+	if stop != nil {
+		stop(errSenderStopped)
+	}
 }
 
 // Hold pauses or resumes the handed playback, as the device's transport is told to.
@@ -195,13 +219,15 @@ func (s *Session) Received(t *testing.T, handOff time.Duration) (Received, bool)
 }
 
 // play fetches url, hands the response to the first player that takes it, and measures the tape.
-func (s *Session) play(url string) Playback {
-	watched, cancel := s.setup.Viewer.Watch(s.ctx)
+func (s *Session) play(playback context.Context, url string) Playback {
+	watched, cancel := s.setup.Viewer.Watch(playback)
 	defer cancel()
 	ctx, starve := context.WithCancelCause(watched)
 	defer starve(nil)
 	ended := func() Playback {
 		switch {
+		case errors.Is(context.Cause(ctx), errSenderStopped):
+			return Stopped
 		case errors.Is(context.Cause(ctx), errStarved):
 			return Starved
 		case s.setup.Viewer.Stopped(watched):
@@ -223,6 +249,9 @@ func (s *Session) play(url string) Playback {
 	s.mu.Unlock()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if outcome := ended(); outcome != Ended {
+			return outcome
+		}
 		s.Problem("fetching %s: %v", url, err)
 		return Ended
 	}
@@ -249,6 +278,7 @@ func (s *Session) play(url string) Playback {
 	}
 	// The device plays what it took in at 1x and gives up on an empty buffer, so a sender late to pause it is caught.
 	go s.clock.starve(ctx, starve)
+	started := time.Now()
 	tape, err := player.Record(ctx, Recording{
 		URL: url, Body: &timed{r: body, clock: &s.clock}, Tape: filepath.Join(s.dir, "tape"), FFmpeg: s.setup.Tools.FFmpeg, Viewer: s.setup.Viewer,
 	})
@@ -265,5 +295,27 @@ func (s *Session) play(url string) Playback {
 	s.mu.Lock()
 	s.received.Played = played
 	s.mu.Unlock()
+	if s.realtime && outcome == Ended {
+		s.drain(ctx, started, played.Duration)
+		outcome = ended()
+	}
 	return outcome
+}
+
+// drain waits for downloaded media to play, honoring pause and STOP. Reading a
+// finite file into the tape is faster than displaying it on a receiver.
+func (s *Session) drain(ctx context.Context, started time.Time, duration time.Duration) {
+	tick := time.NewTicker(20 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		_, held := s.clock.paused()
+		if !s.Held() && time.Since(started)-held >= duration {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }

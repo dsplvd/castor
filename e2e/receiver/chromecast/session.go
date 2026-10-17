@@ -42,11 +42,23 @@ type request struct {
 // handlers answer each namespace#type a sender sends; the reply goes back under the request's id.
 func (c *castSession) handlers() map[string]func(msg *pb.CastMessage, req request) map[string]any {
 	return map[string]func(*pb.CastMessage, request) map[string]any{
+		"urn:x-cast:com.google.cast.tp.heartbeat#PING": func(*pb.CastMessage, request) map[string]any {
+			return map[string]any{"type": "PONG"}
+		},
 		nsReceiver + "#LAUNCH": func(*pb.CastMessage, request) map[string]any {
 			c.launched = true
 			return c.receiverStatus()
 		},
 		nsReceiver + "#GET_STATUS": func(*pb.CastMessage, request) map[string]any { return c.receiverStatus() },
+		nsReceiver + "#STOP": func(*pb.CastMessage, request) map[string]any {
+			c.session.Stop()
+			c.launched = false
+			return c.receiverStatus()
+		},
+		nsMedia + "#STOP": func(*pb.CastMessage, request) map[string]any {
+			c.session.Stop()
+			return mediaStatus(c.content, "IDLE", "CANCELLED")
+		},
 		nsMedia + "#GET_STATUS": func(*pb.CastMessage, request) map[string]any {
 			return map[string]any{"type": "MEDIA_STATUS", "status": []any{}}
 		},
@@ -149,7 +161,7 @@ func mediaStatus(content, state, idleReason string) map[string]any {
 	return map[string]any{"type": "MEDIA_STATUS", "status": []any{status}}
 }
 
-// send frames one message; a sender that already hung up is not a violation, a handed-off cast does so by design.
+// send frames one message; a sender may disconnect during teardown.
 func (c *castSession) send(source, destination, namespace string, payload map[string]any) {
 	body, err := json.Marshal(payload)
 	if err != nil {

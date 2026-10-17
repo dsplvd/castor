@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,29 +53,32 @@ type live struct {
 }
 
 // place is where a segment sits in its media playlist, of how many.
-type place struct{ at, of int }
+type place struct {
+	at, of     int
+	start, end int64
+	ranged     bool
+}
 
 func (live) Name() string { return "live" }
 func (live) LiveEdge()    {}
 
 func (l live) Wrap(next http.Handler, p origin.Published) http.Handler {
 	var mu sync.Mutex
-	places := map[string]place{}
+	places := map[string][]place{}
 	playlists := serving.RewritesPlaylists(next, func(playlist string) (string, bool) {
-		if l.Window > 0 {
-			mu.Lock()
-			maps.Copy(places, placed(playlist))
-			mu.Unlock()
-		}
+		mu.Lock()
+		maps.Copy(places, placed(playlist))
+		mu.Unlock()
 		return l.edge(playlist, l.revealed(p)), true
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if l.Window > 0 && p.IsSegment(r) {
+		if p.IsSegment(r) {
 			mu.Lock()
-			s, listed := places[path.Base(r.URL.Path)]
+			spans := places[path.Base(r.URL.Path)]
+			allowed := l.available(spans, l.revealed(p), r.Header.Get("Range"))
 			mu.Unlock()
-			if listed && s.at < min(l.revealed(p), s.of)-l.Window {
-				http.Error(w, "segment expired", http.StatusNotFound)
+			if !allowed {
+				http.Error(w, "segment not currently published", http.StatusNotFound)
 				return
 			}
 		}
@@ -85,22 +89,82 @@ func (l live) Wrap(next http.Handler, p origin.Published) http.Handler {
 func (l live) revealed(p origin.Published) int { return l.Start + int(time.Since(p.Since)/l.Every) }
 
 // placed maps each segment a media playlist lists to its place, so a segment request knows whether it slid out.
-func placed(playlist string) map[string]place {
-	var uris []string
+func placed(playlist string) map[string][]place {
+	places := map[string][]place{}
+	total := strings.Count(playlist, "#EXTINF")
+	index := 0
+	ends := map[string]int64{}
 	for line := range serving.Lines(playlist) {
-		if line.Entry() {
-			uris = append(uris, path.Base(strings.TrimSpace(line.URI)))
+		if !line.Entry() {
+			continue
 		}
-	}
-	places := make(map[string]place, len(uris))
-	for i, uri := range uris {
-		places[uri] = place{at: i, of: len(uris)}
+		uri := path.Base(uriPath(line.URI))
+		span := place{at: index, of: total}
+		for tag := range strings.Lines(line.Text) {
+			if value, ok := strings.CutPrefix(strings.TrimSpace(tag), "#EXT-X-BYTERANGE:"); ok {
+				length, offset, explicit := strings.Cut(value, "@")
+				n, lengthErr := strconv.ParseInt(length, 10, 64)
+				var err error
+				start := ends[uri]
+				if explicit {
+					start, err = strconv.ParseInt(offset, 10, 64)
+				}
+				if lengthErr == nil && err == nil && n > 0 && start >= 0 && start <= (1<<63-1)-n {
+					span.start, span.end, span.ranged = start, start+n-1, true
+					ends[uri] = start + n
+				}
+			}
+		}
+		places[uri] = append(places[uri], span)
+		index++
 	}
 	return places
 }
 
+// available guards bytes as well as filenames, so a single-file live fixture
+// cannot expose its future through an unrestricted or oversized range request.
+func (l live) available(spans []place, revealed int, header string) bool {
+	if len(spans) == 0 {
+		return false
+	}
+	if !spans[0].ranged {
+		for _, s := range spans {
+			if s.at < revealed && (l.Window == 0 || s.at >= min(revealed, s.of)-l.Window) {
+				return true
+			}
+		}
+		return false
+	}
+	raw, ok := strings.CutPrefix(header, "bytes=")
+	if !ok || strings.Contains(raw, ",") {
+		return false
+	}
+	low, high, ok := strings.Cut(raw, "-")
+	start, e1 := strconv.ParseInt(low, 10, 64)
+	end, e2 := strconv.ParseInt(high, 10, 64)
+	if !ok || e1 != nil || e2 != nil || start < 0 || end < start {
+		return false
+	}
+	if end < spans[0].start {
+		return true
+	} // initialization bytes precede media
+	for _, s := range spans {
+		if s.at >= revealed || (l.Window > 0 && s.at < min(revealed, s.of)-l.Window) {
+			continue
+		}
+		if start >= s.start && start <= s.end {
+			if end <= s.end {
+				return true
+			}
+			start = s.end + 1
+		}
+	}
+	return false
+}
+
 // edge is a media playlist cut to its revealed segments, the newest window of them if any, typed as live; a master passes through.
 func (l live) edge(playlist string, revealed int) string {
+	spans := placed(playlist)
 	var out strings.Builder
 	total := strings.Count(playlist, "#EXTINF")
 	last := min(revealed, total)
@@ -116,7 +180,22 @@ func (l live) edge(playlist string, revealed int) string {
 			fmt.Fprintf(&out, "#EXT-X-MEDIA-SEQUENCE:%d\n", first)
 		case line.Entry():
 			if seen >= first && seen < last {
-				out.WriteString(line.Text)
+				// A sliding window may remove the preceding implicit byte offset.
+				text := line.Text
+				for _, span := range spans[path.Base(uriPath(line.URI))] {
+					if span.at == seen && span.ranged {
+						var explicit strings.Builder
+						for tag := range strings.Lines(text) {
+							if value, ok := strings.CutPrefix(strings.TrimSpace(tag), "#EXT-X-BYTERANGE:"); ok && !strings.Contains(value, "@") {
+								fmt.Fprintf(&explicit, "#EXT-X-BYTERANGE:%s@%d\n", value, span.start)
+							} else {
+								explicit.WriteString(tag)
+							}
+						}
+						text = explicit.String()
+					}
+				}
+				out.WriteString(text)
 				out.WriteString(line.URI)
 			}
 			seen++

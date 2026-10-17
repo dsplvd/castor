@@ -16,7 +16,7 @@ import (
 type upnp struct {
 	session *receiver.Session
 	sink    string
-	fetch   func(s *receiver.Session, uri, declared string)
+	fetch   func(s *receiver.Session, uri, declared, features string)
 
 	mu sync.Mutex
 	// locked is how many more SetAVTransportURI the transport refuses.
@@ -93,7 +93,7 @@ func (u *upnp) actions() map[string]func(envelope) (string, int) {
 			for _, track := range didlCaptions(meta) {
 				u.fetchCaption(track)
 			}
-			u.fetch(u.session, uri, didlContentType(meta))
+			u.fetch(u.session, uri, didlContentType(meta), didlFeatures(meta))
 			return "", 0
 		},
 		"Pause": func(envelope) (string, int) {
@@ -104,7 +104,7 @@ func (u *upnp) actions() map[string]func(envelope) (string, int) {
 			u.session.Hold(true)
 			return "", 0
 		},
-		"Stop": func(envelope) (string, int) { return "", 0 },
+		"Stop": func(envelope) (string, int) { u.session.Stop(); return "", 0 },
 		"GetTransportInfo": func(envelope) (string, int) {
 			return "<CurrentTransportState>" + u.transportState() + "</CurrentTransportState><CurrentTransportStatus>OK</CurrentTransportStatus><CurrentSpeed>1</CurrentSpeed>", 0
 		},

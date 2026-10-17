@@ -47,5 +47,7 @@ type Output struct {
 	Files map[string][]byte
 	// SegmentExt is the extension segments were written with; Types maps every extension written to its MIME.
 	SegmentExt string
+	// InitPrefix distinguishes initialization objects sharing the media extension.
+	InitPrefix string
 	Types      map[string]string
 }

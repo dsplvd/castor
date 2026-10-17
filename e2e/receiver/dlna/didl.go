@@ -5,25 +5,25 @@ import (
 	"strings"
 )
 
-// didlContentType reads the MIME the DIDL-Lite res declares (http-get:*:<mime>:<features>).
-func didlContentType(meta string) string {
+// didlProtocolInfo reads what the DIDL-Lite res declares (http-get:*:<mime>:<features>).
+func didlProtocolInfo(meta string) []string {
 	var didl struct {
 		Res []struct {
 			ProtocolInfo string `xml:"protocolInfo,attr"`
 		} `xml:"item>res"`
 	}
 	if err := xml.Unmarshal([]byte(meta), &didl); err != nil {
-		return ""
+		return nil
 	}
 	if len(didl.Res) == 0 {
-		return ""
+		return nil
 	}
 	// The first res is the media; later ones are companions such as captions.
 	fields := strings.SplitN(didl.Res[0].ProtocolInfo, ":", 4)
 	if len(fields) < 3 {
-		return ""
+		return nil
 	}
-	return fields[2]
+	return fields
 }
 
 // didlCaptions are the URLs of the text tracks the DIDL-Lite offers beside the media.
@@ -44,4 +44,19 @@ func didlCaptions(meta string) []string {
 		}
 	}
 	return urls
+}
+
+func didlContentType(meta string) string {
+	fields := didlProtocolInfo(meta)
+	if len(fields) < 3 {
+		return ""
+	}
+	return fields[2]
+}
+func didlFeatures(meta string) string {
+	fields := didlProtocolInfo(meta)
+	if len(fields) < 4 || fields[3] == "*" {
+		return ""
+	}
+	return fields[3]
 }

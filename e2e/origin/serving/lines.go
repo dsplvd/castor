@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-// Line is one line of an HLS playlist, each with its ending; an entry is an #EXTINF line and the line after it.
+// Line is one line of an HLS playlist, each with its ending; an entry is an #EXTINF, its intervening tags, and its URI.
 type Line struct {
 	Text string
-	// URI is the line after an entry's #EXTINF, empty for any other line.
+	// URI is the URI introduced by an entry's #EXTINF, empty for any other line.
 	URI string
 }
 
@@ -21,6 +21,8 @@ func Lines(playlist string) iter.Seq[Line] {
 		info := ""
 		for text := range strings.Lines(playlist) {
 			switch {
+			case info != "" && (strings.HasPrefix(strings.TrimSpace(text), "#") || strings.TrimSpace(text) == ""):
+				info += text
 			case info != "":
 				if !yield(Line{Text: info, URI: text}) {
 					return

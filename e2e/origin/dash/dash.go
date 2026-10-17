@@ -31,6 +31,7 @@ func (Packager) Package(dir string, l origin.Layout) origin.Output {
 	return origin.Output{
 		Entry:      entry,
 		SegmentExt: ext,
+		InitPrefix: "init-",
 		Types:      map[string]string{".mpd": "application/dash+xml", ext: "video/mp4"},
 		Args: []string{"-f", "dash", "-seg_duration", "1", "-adaptation_sets", sets,
 			"-init_seg_name", "init-$RepresentationID$" + ext, "-media_seg_name", "chunk-$RepresentationID$-$Number%05d$" + ext,
