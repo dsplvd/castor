@@ -354,6 +354,28 @@ func TestDiscoverDoesNotReadUnappliedGenreDraft(t *testing.T) {
 	}
 }
 
+func TestDiscoverMediaKeySwitchesAppliedSelectionWithoutAnOpenEditor(t *testing.T) {
+	m := newModel(t.Context(), shelf{}, "")
+	m.mode = modeDiscover
+	m.genres.applied.selected[28] = struct{}{}
+	m, _ = drive(t, m, tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
+	if m.genres.draft != nil || m.genres.applied.media != tmdb.MediaTV || len(m.genres.applied.selected) != 0 {
+		t.Fatalf("media switch: draft open = %t, media = %s, selected = %v", m.genres.draft != nil, m.genres.applied.media, m.genres.applied.genreIDs())
+	}
+	if got := m.discParams(1); got.MediaType != tmdb.MediaTV || len(got.GenreIDs) != 0 {
+		t.Fatalf("discover query after media switch = %+v", got)
+	}
+	m, _ = drive(t, m, tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
+	if m.genres.draft == nil || m.genres.draft.media != tmdb.MediaTV || len(m.genres.draft.selected) != 0 {
+		t.Fatal("genre editor did not open on the newly applied TV selection")
+	}
+	m, _ = drive(t, m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	m, _ = drive(t, m, tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
+	if m.genres.applied.media != tmdb.MediaMovie {
+		t.Fatalf("second media switch selected %s, want movies", m.genres.applied.media)
+	}
+}
+
 func TestGenreDraftChangesDoNotMutateEarlierSnapshots(t *testing.T) {
 	m := newModel(t.Context(), shelf{}, "")
 	m.genres.applied.selected[28] = struct{}{}

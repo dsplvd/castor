@@ -30,9 +30,9 @@ func TestOnlyAFrameOnTheWebIsOpened(t *testing.T) {
 }
 
 func TestVisibleIframeNavigationWaitsForItsDocumentAndPreservesReferrer(t *testing.T) {
-	chrome := os.Getenv("CASTOR_TEST_CHROME")
+	chrome := os.Getenv("TEST_CASTOR_CHROME")
 	if chrome == "" {
-		t.Skip("set CASTOR_TEST_CHROME to exercise real browser navigation")
+		t.Skip("set TEST_CASTOR_CHROME to exercise real browser navigation")
 	}
 	requests := make(chan string, 8)
 	ts := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,9 +110,9 @@ func TestVisibleIframeNavigationWaitsForItsDocumentAndPreservesReferrer(t *testi
 }
 
 func TestOffscreenLazyIframeIsDiscovered(t *testing.T) {
-	chrome := os.Getenv("CASTOR_TEST_CHROME")
+	chrome := os.Getenv("TEST_CASTOR_CHROME")
 	if chrome == "" {
-		t.Skip("set CASTOR_TEST_CHROME to exercise real browser navigation")
+		t.Skip("set TEST_CASTOR_CHROME to exercise real browser navigation")
 	}
 	ts := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

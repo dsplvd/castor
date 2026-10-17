@@ -99,6 +99,20 @@ func TestUnknownKeysFailEvenInSectionsThisCommandDoesNotDecode(t *testing.T) {
 	}
 }
 
+func TestUnknownEnvironmentNamespacesStillFail(t *testing.T) {
+	for _, tc := range []struct{ key, path string }{
+		{"CASTOR_WEB__PASSWORD", "web"},
+		{"CASTOR_TEST_CHROME", "test_chrome"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Setenv(tc.key, "example")
+			if _, err := read(filepath.Join(t.TempDir(), "config.yaml"), defaulted()); err == nil || !strings.Contains(err.Error(), tc.path) {
+				t.Errorf("%s returned %v, want unknown-key error naming %s", tc.key, err, tc.path)
+			}
+		})
+	}
+}
+
 func TestKnownKeysInOtherCommandsSectionsRemainValid(t *testing.T) {
 	path := write(t, "servers:\n  api:\n    token: secret\n  scraping:\n    browser:\n      timeout: 30s\nsources:\n  - proxies: [https://example.com]\n    templates:\n      movie: /watch\n      episode: /episode\n", "")
 	if _, err := read(path, defaulted()); err != nil {

@@ -1,6 +1,6 @@
 # Native dev loop: `tilt up`. Tokens come from .env, as in docker-compose.yml.
 tokens = 'set -a; . ./.env; set +a; '
-run = tokens + 'eval "$(make env)"; '
+run = tokens + 'unset CASTOR_WEB__PASSWORD CASTOR_WEB__TRUSTED_LAN; eval "$(make env)"; '
 src = ['cmd', 'services', 'internal', 'gen', 'go.mod', 'go.sum']
 
 # whisper.cpp, once; make skips it when libwhisper.a exists.

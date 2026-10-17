@@ -16,7 +16,7 @@ import (
 )
 
 func TestWorkerHelper(t *testing.T) {
-	mode := os.Getenv("CASTOR_WORKER_TEST")
+	mode := os.Getenv("TEST_CASTOR_WORKER")
 	if mode == "" {
 		return
 	}
@@ -43,7 +43,7 @@ func stubWorker(mode string) *workerRecognizer {
 	r.timeout = 2 * time.Second
 	r.start = func() *exec.Cmd {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestWorkerHelper$")
-		cmd.Env = append(os.Environ(), "CASTOR_WORKER_TEST="+mode)
+		cmd.Env = append(os.Environ(), "TEST_CASTOR_WORKER="+mode)
 		return cmd
 	}
 	return r

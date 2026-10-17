@@ -245,7 +245,7 @@ func (m model) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(km, m.keys.media):
 		if m.mode == modeDiscover {
-			m.genres.toggleMedia(m.w, m.h)
+			m.genres.applied = m.genres.applied.otherMedia()
 			return m, m.enterDiscover()
 		}
 		return m, nil

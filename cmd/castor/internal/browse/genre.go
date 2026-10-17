@@ -36,6 +36,14 @@ type genreSelection struct {
 
 func (s genreSelection) genreIDs() []int { return slices.Sorted(maps.Keys(s.selected)) }
 
+func (s genreSelection) otherMedia() genreSelection {
+	media := tmdb.MediaTV
+	if s.media == tmdb.MediaTV {
+		media = tmdb.MediaMovie
+	}
+	return genreSelection{media: media, selected: map[int]struct{}{}}
+}
+
 // genreKeys are the bindings only the genre overlay answers to.
 type genreKeys struct{ space, clear, media key.Binding }
 
@@ -141,11 +149,8 @@ func (g *genrePicker) update(msg tea.KeyPressMsg, keys keyMap, w, h int) (tea.Cm
 
 // toggleMedia clears the draft selection, because genre ids are namespaced per media type.
 func (g *genrePicker) toggleMedia(w, h int) {
-	media := tmdb.MediaTV
-	if g.draft.media == tmdb.MediaTV {
-		media = tmdb.MediaMovie
-	}
-	g.draft = &genreSelection{media: media, selected: map[int]struct{}{}}
+	next := g.draft.otherMedia()
+	g.draft = &next
 	if g.loaded {
 		g.resize(w, h)
 		g.reload()

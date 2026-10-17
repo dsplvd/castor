@@ -13,9 +13,9 @@ import (
 )
 
 func TestNativeWorkerRealRecognition(t *testing.T) {
-	model, vad := os.Getenv("CASTOR_TEST_WHISPER_MODEL"), os.Getenv("CASTOR_TEST_WHISPER_VAD")
+	model, vad := os.Getenv("TEST_CASTOR_WHISPER_MODEL"), os.Getenv("TEST_CASTOR_WHISPER_VAD")
 	if model == "" || vad == "" {
-		t.Fatal("set CASTOR_TEST_WHISPER_MODEL and CASTOR_TEST_WHISPER_VAD to existing model files for native integration")
+		t.Fatal("set TEST_CASTOR_WHISPER_MODEL and TEST_CASTOR_WHISPER_VAD to existing model files for native integration")
 	}
 	pcm, err := exec.CommandContext(t.Context(), "ffmpeg", "-v", "error", "-i", "../../../../../third_party/whisper.cpp/samples/jfk.wav", "-f", "f32le", "-ar", "16000", "-ac", "1", "pipe:1").Output()
 	if err != nil {
@@ -26,10 +26,10 @@ func TestNativeWorkerRealRecognition(t *testing.T) {
 		t.Fatal(err)
 	}
 	windows := 2
-	if raw := os.Getenv("CASTOR_TEST_WHISPER_WINDOWS"); raw != "" {
+	if raw := os.Getenv("TEST_CASTOR_WHISPER_WINDOWS"); raw != "" {
 		windows, err = strconv.Atoi(raw)
 		if err != nil || windows < 1 || windows > 256 {
-			t.Fatal("CASTOR_TEST_WHISPER_WINDOWS must be between 1 and 256")
+			t.Fatal("TEST_CASTOR_WHISPER_WINDOWS must be between 1 and 256")
 		}
 	}
 	for range 2 {

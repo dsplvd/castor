@@ -42,8 +42,8 @@ jobs:
           curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz | sudo tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
       - run: |
           eval "$(make env)"
-          CASTOR_TEST_CHROME="$(command -v google-chrome)"
-          export CASTOR_TEST_CHROME
+          TEST_CASTOR_CHROME="$(command -v google-chrome)"
+          export TEST_CASTOR_CHROME
           ./scripts/tested.sh
 
   lint:
