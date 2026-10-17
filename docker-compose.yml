@@ -14,8 +14,8 @@ services:
     ports:
       - "127.0.0.1:8412:8412"
     environment:
-      CASTOR_SCRAPING__LISTEN: ":8412"
-      CASTOR_SCRAPING__TOKEN: ${CASTOR_SCRAPING__TOKEN:?set it in .env}
+      CASTOR_SERVERS__SCRAPING__LISTEN: ":8412"
+      CASTOR_SERVERS__SCRAPING__TOKEN: ${CASTOR_SERVERS__SCRAPING__TOKEN:?set it in .env}
 
   media-server:
     <<: *castor
@@ -26,8 +26,8 @@ services:
     devices:
       - /dev/dri:/dev/dri
     environment:
-      CASTOR_SERVER__LISTEN: ":8410"
-      CASTOR_SERVER__TOKEN: ${CASTOR_SERVER__TOKEN:?set it in .env}
+      CASTOR_SERVERS__MEDIA__LISTEN: ":8410"
+      CASTOR_SERVERS__MEDIA__TOKEN: ${CASTOR_SERVERS__MEDIA__TOKEN:?set it in .env}
 
   api-server:
     <<: *castor
@@ -38,12 +38,12 @@ services:
       - media-server
       - scraping-server
     environment:
-      CASTOR_API__LISTEN: ":8411"
-      CASTOR_API__TOKEN: ${CASTOR_API__TOKEN:?set it in .env}
-      CASTOR_SERVER__URL: http://127.0.0.1:8410
-      CASTOR_SERVER__TOKEN: ${CASTOR_SERVER__TOKEN:?set it in .env}
-      CASTOR_SCRAPING__URL: http://127.0.0.1:8412
-      CASTOR_SCRAPING__TOKEN: ${CASTOR_SCRAPING__TOKEN:?set it in .env}
+      CASTOR_SERVERS__API__LISTEN: ":8411"
+      CASTOR_SERVERS__API__TOKEN: ${CASTOR_SERVERS__API__TOKEN:?set it in .env}
+      CASTOR_SERVERS__MEDIA__URL: http://127.0.0.1:8410
+      CASTOR_SERVERS__MEDIA__TOKEN: ${CASTOR_SERVERS__MEDIA__TOKEN:?set it in .env}
+      CASTOR_SERVERS__SCRAPING__URL: http://127.0.0.1:8412
+      CASTOR_SERVERS__SCRAPING__TOKEN: ${CASTOR_SERVERS__SCRAPING__TOKEN:?set it in .env}
 
 volumes:
   castor-cache:

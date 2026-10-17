@@ -932,11 +932,11 @@ func TestAMediaServerRefusingThisServerIsThisServersFaultWithAHint(t *testing.T)
 	c := serve(t, setup{media: newMedia(false), family: newFamily(), guard: refusing})
 
 	_, err := c.casts.Resolve(t.Context(), &castorv1.ResolveRequest{Source: streamOf("https://cdn.example/direct")})
-	if connect.CodeOf(err) != connect.CodeInternal || !strings.Contains(err.Error(), "server.token") {
-		t.Errorf("a resolve the media server refused was met with %v, want an internal error naming server.token", err)
+	if connect.CodeOf(err) != connect.CodeInternal || !strings.Contains(err.Error(), "servers.media.token") {
+		t.Errorf("a resolve the media server refused was met with %v, want an internal error naming servers.media.token", err)
 	}
-	if w := watch(t, c, cast(t, c, streamOf("https://cdn.example/direct"))); w.ended.GetFailed().GetCode() != castorv1.FailureCode_FAILURE_CODE_INTERNAL || !strings.Contains(w.ended.GetFailed().GetMessage(), "server.token") {
-		t.Errorf("a cast the media server refused ended %v, want its reason naming server.token", w.ended)
+	if w := watch(t, c, cast(t, c, streamOf("https://cdn.example/direct"))); w.ended.GetFailed().GetCode() != castorv1.FailureCode_FAILURE_CODE_INTERNAL || !strings.Contains(w.ended.GetFailed().GetMessage(), "servers.media.token") {
+		t.Errorf("a cast the media server refused ended %v, want its reason naming servers.media.token", w.ended)
 	}
 }
 

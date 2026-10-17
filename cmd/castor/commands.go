@@ -35,7 +35,7 @@ func castCommand(local Local) *cli.Command {
 			if err := cfg.browsable(); err != nil {
 				return err
 			}
-			api, release, err := dial(ctx, cmd, cfg.API, local)
+			api, release, err := dial(ctx, cmd, cfg.Servers.API, local)
 			if err != nil {
 				return err
 			}
@@ -117,7 +117,7 @@ func castSource(ctx context.Context, cmd *cli.Command, local Local, source func(
 	if err != nil {
 		return err
 	}
-	api, release, err := dial(ctx, cmd, cfg.API, local)
+	api, release, err := dial(ctx, cmd, cfg.Servers.API, local)
 	if err != nil {
 		return err
 	}
@@ -139,12 +139,14 @@ func scanCommand(local Local) *cli.Command {
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			// Scanning needs only the API endpoint; a device is what it discovers.
 			cfg, err := settings.Load(cmd, struct {
-				API apiConfig `yaml:"api"`
+				Servers struct {
+					API apiConfig `yaml:"api"`
+				} `yaml:"servers"`
 			}{})
 			if err != nil {
 				return err
 			}
-			api, release, err := dial(ctx, cmd, cfg.API, local)
+			api, release, err := dial(ctx, cmd, cfg.Servers.API, local)
 			if err != nil {
 				return err
 			}

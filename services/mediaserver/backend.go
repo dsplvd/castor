@@ -58,7 +58,7 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 		e.client = web.New(fetchTimeout)
 		e.machinery.Timelines = follow.New(e.client, formats, follow.Repackager(ffmpegBinary))
 		return caster{
-			Ranker: rank.New(e.cfg.Resolver.Config, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
+			Ranker: rank.New(e.cfg.Servers.Media.Resolver.Config, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
 				return e.machinery.Probes.Link(probe.Link{URL: s.URL, Headers: s.Headers, InputArgs: formats.InputArgs(s.ContentType, 0)}, fetchTimeout)
 			}),
 			engine: &e,
@@ -84,7 +84,7 @@ func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtit
 		language = "auto"
 	}
 	return func(ctx context.Context) execute.Transcript {
-		b, err := whisper.New(ctx, e.cfg.Whisper, language)
+		b, err := whisper.New(ctx, e.cfg.Servers.Media.Whisper, language)
 		if err != nil {
 			slog.WarnContext(ctx, "whisper init failed; casting without subtitles", "error", err)
 			return nil

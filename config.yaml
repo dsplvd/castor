@@ -2,15 +2,21 @@
 # else has a working default; any key can be overridden with CASTOR_SECTION__FIELD.
 
 device:
+  # Two devices sharing a name are refused as ambiguous; pick one by the id `castor scan` prints.
+  # id: "uuid:..."
   # Run `castor scan` and paste the device's name and type (dlna, chromecast or roku).
   name: "Samsung Q80CA 55 TV"
   type: "dlna"
-  # Two devices sharing a name are refused as ambiguous; pick one by the id `castor scan` prints.
-  # id: "uuid:..."
   # Reach the device by unicast where discovery can't (VLANs, Android/Termux); name becomes a label.
   # Its IP, or for a DLNA device that does not answer there, its description URL.
   # host: 192.168.0.3
 
+tmdb:
+  # For the interactive `castor cast`; get a free key at https://www.themoviedb.org/settings/api.
+  # Keep the real one in config.local.yaml (git-ignored) or CASTOR_TMDB__API_KEY.
+  api_key: "<YOUR_TMDB_API_KEY>"
+
+# Default playback preferences; the API server applies these unless a cast request overrides them.
 cast:
   # auto (the default) hands a device that fetches for itself the source when it can play it;
   # serve always relays, for a source a device refuses. `--debug` logs which and why.
@@ -18,14 +24,15 @@ cast:
   # The tallest picture sent to the device (default 1080). A taller source castor measured is
   # relayed and scaled down, re-encoding the whole title.
   # max_height: 1080
-  # Subtitles: a language code (en, fr) or auto; unset for none. The source's own captions are shown
-  # when it has the language (auto takes its default one), else a whisper transcription is burned
-  # in, which only reaches devices castor always streams to (DLNA), never one that fetches itself.
-  # subtitles: en
   # The audio language to play where a source offers several (fr, en); unset takes the source's default.
   # A source that offers no such track plays its default, logged as a warning.
   audio: fr
+  # Subtitles: a language code (en, fr) or auto; unset for none. The source's own captions are shown
+  # when it has the language (auto takes its default one). Otherwise Whisper transcribes the audio;
+  # generated captions are carried as a native track where supported, or burned into served video.
+  subtitles: en
 
+# The CLI uses these templates to turn a title into page URLs before requesting extraction.
 sources:
   # Castor ships no sources: add sites you are authorized to use. `proxies` are base URLs tried
   # in order; `templates` map an IMDB or TMDB id to the site's movie and episode paths.
@@ -42,51 +49,57 @@ sources:
       movie: "/embed?type=movie&id={itemID}"
       episode: "/embed?type=tv&id={itemID}&season={season}&episode={episode}"
 
-whisper:
-  # Downloads ggml-tiny.en for English, multilingual ggml-tiny for other languages or auto.
-  # Point at a larger model to trade speed for accuracy.
-  # model_path: ""
+# Endpoints and runtime settings for Castor's three services.
+servers:
+  # The API server finds your devices and runs casts on them.
+  api:
+    # One elsewhere on your network; unset (the default), each castor command runs its own.
+    # url: http://my-nas:8411
+    # Where `castor api-server` listens (default :8411, every interface).
+    # listen: ":8411"
+    # The token every request must carry; set it whenever this server listens on a network.
+    # token: "<A_LONG_RANDOM_STRING>"
+    # network:
+    #   timeout: 5s        # device discovery and control
+    # devices:
+    #   roku:
+    #     password: "<ROKU_DEVELOPER_PASSWORD>"  # for sideloading
+    #     app_id: "<PUBLISHED_CHANNEL_ID>"  # use a published channel instead
 
-tmdb:
-  # For the interactive `castor cast`; get a free key at https://www.themoviedb.org/settings/api.
-  # Keep the real one in config.local.yaml (git-ignored) or CASTOR_TMDB__API_KEY.
-  api_key: "<YOUR_TMDB_API_KEY>"
+  # The media server does the heavy work and serves your devices.
+  media:
+    # One on another machine, such as a NAS; required by `castor api-server`, otherwise unset (the default) runs one in each castor command.
+    # url: http://my-nas:8410
+    # The token its API asks for, the same here and on that machine.
+    # token: "<A_LONG_RANDOM_STRING>"
+    # Where `castor media-server` listens (default :8410, every interface).
+    # listen: ":8410"
+    # Where devices reach it, for a server outside their network (default: its own address).
+    # advertise: http://castor.example.com:8410
+    # network:
+    #   interface: "eth0" # pin the LAN interface if automatic selection fails
+    # resolver:
+    #   probe_max_concurrency: 2
+    whisper:
+      # Downloads ggml-tiny.en for English, multilingual ggml-tiny for other languages or auto.
+      # Point at a larger model to trade speed for accuracy.
+      # model_path: ""
 
-# The API server finds your devices and runs casts on them.
-api:
-  # One elsewhere on your network; unset (the default), each castor command runs its own.
-  # url: http://my-nas:8411
-  # Where `castor api-server` listens (default :8411, every interface).
-  # listen: ":8411"
-  # The token every request must carry; set it whenever this server listens on a network.
-  # token: "<A_LONG_RANDOM_STRING>"
+  # The scraping server alone owns Chrome, page navigation, and stream capture.
+  scraping:
+    # Remote resolver; unset, CLI commands run one on loopback. `api-server` uses
+    # http://localhost:8412 when unset, never the media endpoint.
+    # url: http://my-nas:8412
+    # Where `castor scraping-server` listens (default :8412).
+    # listen: ":8412"
+    # Its own token, independent of servers.media.token and servers.api.token.
+    # token: "<A_LONG_RANDOM_STRING>"
+    # Read only by scraping-server (including the CLI's embedded resolver).
+    browser:
+      # chrome_path: /usr/bin/chromium
+      # headless: true
+      # no_sandbox: false
+      # timeout: 30s
 
-# The media server does the heavy work and serves your devices.
-server:
-  # One on another machine, such as a NAS; required by `castor api-server`, otherwise unset (the default) runs one in each castor command.
-  # url: http://my-nas:8410
-  # The token its API asks for, the same here and on that machine.
-  # token: "<A_LONG_RANDOM_STRING>"
-  # Where `castor media-server` listens (default :8410, every interface).
-  # listen: ":8410"
-  # Where devices reach it, for a server outside their network (default: its own address).
-  # advertise: http://castor.example.com:8410
-
-# The scraping server alone owns Chrome, page navigation, and stream capture.
-scraping:
-  # Remote resolver; unset, CLI commands run one on loopback. `api-server` uses
-  # http://localhost:8412 when unset, never the media endpoint.
-  # url: http://my-nas:8412
-  # Where `castor scraping-server` listens (default :8412).
-  # listen: ":8412"
-  # Its own token, independent of server.token and api.token.
-  # token: "<A_LONG_RANDOM_STRING>"
-
-# Read only by scraping-server (including the CLI's embedded resolver).
-browser:
-  # chrome_path: /usr/bin/chromium
-  # headless: true
-  # no_sandbox: false
-  # timeout: 30s
-capture:
-  # max_concurrency: 4
+    capture:
+      # max_concurrency: 4

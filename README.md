@@ -99,22 +99,26 @@ Encoding uses a working GPU encoder, falling back to software.
 
 Castor reads `config.yaml` (or `--config <path>`), then overlays git-ignored `config.local.yaml`. Environment variables such as `CASTOR_CAST__MAX_HEIGHT=720` override both. CLI casting needs `device`; other keys have defaults. Keep secrets out of git; see [SECURITY.md](SECURITY.md).
 
+Service settings are grouped under `servers.api`, `servers.media`, and `servers.scraping`. For example, set `CASTOR_SERVERS__SCRAPING__BROWSER__CHROME_PATH` to choose Chrome. Move older top-level `api`, `server`, and `scraping` sections to those paths, renaming `server` to `media`; move top-level `browser` and `capture` to `servers.scraping`, and `whisper` to `servers.media`. Unknown configuration keys now cause an error. Top-level `sources` holds the CLI's title-to-page templates; top-level `cast` holds playback defaults that an API request may override.
+
 ### Logs
 
 Every log line of a cast carries `cast_id`, the same in all three services, so one cast can be filtered from the rest. Set `telemetry.endpoint` (or `CASTOR_TELEMETRY__ENDPOINT`) on a server to also export its logs over OTLP/HTTP, such as `http://localhost:4318`; unset, logs stay on stderr and in `castor.log`.
 
 ### Subtitles
 
-Castor shows the captions a source publishes (an HLS stream's WebVTT renditions) in the language you pick, as a native caption track on Chromecast and DLNA. Roku shows none yet. When the source has none in that language, castor transcribes the sound with Whisper and burns the text into served, read-once video (e.g. DLNA), not self-fetching Chromecast/Roku playback. The source's captions win; the two never show together. The appropriate default model downloads once to your cache.
+Castor shows the captions a source publishes (an HLS stream's WebVTT renditions) in the language you pick, as a native caption track on Chromecast and DLNA. Roku does not support these source caption tracks yet. When the source has none in that language, Castor transcribes the sound with Whisper and serves the video itself. Generated captions use a native track where the device and output support one; otherwise they are burned into the served video. The source's captions take priority, so the two never show together. The appropriate default model downloads once to your cache.
 
 ```yaml
 cast:
   subtitles: en            # a language code, or auto to detect it; unset for none
-whisper:
-  # model_path: ""         # ggml-tiny.en for en, multilingual ggml-tiny otherwise
+servers:
+  media:
+    whisper:
+      # model_path: ""     # ggml-tiny.en for en, multilingual ggml-tiny otherwise
 ```
 
-Set `whisper.model_path` to use a larger model (e.g. multilingual `ggml-base.bin`). English-only models reject other languages and `auto`.
+Set `servers.media.whisper.model_path` to use a larger model (e.g. multilingual `ggml-base.bin`). English-only models reject other languages and `auto`.
 
 ### Audio language
 
@@ -159,21 +163,22 @@ tmdb:
 
 ### A shared media server
 
-Run on the server with `server.token` set:
+Run on the server with `servers.media.token` set:
 
 ```sh
-castor media-server   # listens on :8410 (server.listen)
+castor media-server   # listens on :8410 (servers.media.listen)
 ```
 
 On your computer:
 
 ```yaml
-server:
-  url: http://my-nas:8410
-  token: "<a long random string, the same on both>"
+servers:
+  media:
+    url: http://my-nas:8410
+    token: "<a long random string, the same on both>"
 ```
 
-Your computer discovers and controls the TV; the server processes media. Closing the terminal leaves playback running; Ctrl+C stops it. Cast preferences come from the client, the Whisper model from media. Set `server.advertise` to an address the TV can reach; use HTTPS outside a trusted network.
+Your computer discovers and controls the TV; the server processes media. Closing the terminal leaves playback running; Ctrl+C stops it. The API server applies top-level `cast` defaults, which a cast request can override; the Whisper model is configured under `servers.media`. Set `servers.media.advertise` to an address the TV can reach; use HTTPS outside a trusted network.
 
 ### The API, for apps and integrations
 
@@ -185,7 +190,7 @@ castor scraping-server   # :8412
 castor api-server        # :8411
 ```
 
-Set `server.url: http://localhost:8410` and `scraping.url: http://localhost:8412` for API. Configure independent `server.token`, `scraping.token`, and `api.token`; `$TOKEN` below is the API token.
+Set `servers.media.url: http://localhost:8410` and `servers.scraping.url: http://localhost:8412` for API. Configure independent `servers.media.token`, `servers.scraping.token`, and `servers.api.token`; `$TOKEN` below is the API token.
 
 ```sh
 curl -X POST http://localhost:8411/castor.v1.DeviceService/ListDevices \
@@ -198,9 +203,9 @@ curl -X POST http://localhost:8411/castor.v1.CastService/Cast \
   -d '{"target": {"deviceId": "<id from ListDevices>"}, "source": {"stream": {"url": "https://example.com/video.m3u8"}}}'
 ```
 
-For a page, use `"source": {"pages": {"urls": ["https://example.com/watch"]}}`. `Stop` ends a cast; `Watch` streams feedback (use [`buf curl`](https://buf.build/docs/reference/cli/buf/curl) or a generated [client](proto/castor/v1)). CLI clients connect with `api.url` and `api.token`.
+For a page, use `"source": {"pages": {"urls": ["https://example.com/watch"]}}`. `Stop` ends a cast; `Watch` streams feedback (use [`buf curl`](https://buf.build/docs/reference/cli/buf/curl) or a generated [client](proto/castor/v1)). CLI clients connect with `servers.api.url` and `servers.api.token`.
 
-Page casts go API → scraping → media; direct streams bypass scraping. Media never receives webpages. Without `api.url`, CLI starts missing services on loopback. See [ARCHITECTURE.md](ARCHITECTURE.md) for contracts, ownership, and lifecycle.
+Page casts go API → scraping → media; direct streams bypass scraping. Media never receives webpages. Without `servers.api.url`, CLI starts missing services on loopback. See [ARCHITECTURE.md](ARCHITECTURE.md) for contracts, ownership, and lifecycle.
 
 ## Supported devices
 
@@ -217,17 +222,19 @@ Castor sideloads a playback channel:
 1. **Turn on Developer Mode** (once, by hand): on the remote press **Home x3, Up x2, Right, Left, Right, Left, Right**, enable developer mode, and set a **web-server password**. The device reboots.
 2. **Put the password in your config** (out of git, see [Configuration](#configuration)):
    ```yaml
-   devices:
-     roku:
-       password: "<dev-web-server-password>"   # first cast only
+   servers:
+     api:
+       devices:
+         roku:
+           password: "<dev-web-server-password>"   # first cast only
    ```
 3. **Cast.** Castor sideloads its channel automatically; later casts reuse it.
 
-For a published channel, set `devices.roku.app_id` instead; no developer mode/password needed. Relayed Roku playback runs about 30 s behind.
+For a published channel, set `servers.api.devices.roku.app_id` instead; no developer mode/password needed. Relayed Roku playback runs about 30 s behind.
 
 ## Network and firewall
 
-- **Devices reach castor on one TCP port**: `server.listen` of `castor media-server` (8410). Per-cast listeners are loopback only, relayed through that port. Plain `castor` embeds a media server on a random LAN port each run, so allow the `castor` binary, or run `castor media-server` for a fixed port. `server.advertise` and `network.interface` pick the address devices are given.
+- **Devices reach castor on one TCP port**: `servers.media.listen` of `castor media-server` (8410). Per-cast listeners are loopback only, relayed through that port. Plain `castor` embeds a media server on a random LAN port each run, so allow the `castor` binary, or run `castor media-server` for a fixed port. `servers.media.advertise` and `servers.media.network.interface` pick the address devices are given.
 - **The API (8411) and scraping (8412) servers are not for devices.** They bind every interface, so set their tokens (see [SECURITY.md](SECURITY.md)).
 - **Discovery** sends SSDP (DLNA, Roku) to UDP 239.255.255.250:1900 and mDNS (Chromecast) to UDP 5353, and expects replies back, so it stays on one subnet unless you pin `host`.
 - **Outbound control**: Chromecast TCP 8009, Roku TCP 8060 (80 for the first sideload), DLNA the port the device advertises. Castor opens no callback port.
@@ -255,7 +262,7 @@ device:
   host: 192.168.0.3        # the device's LAN IP
 ```
 
-For DLNA, `host` can be a full description URL (e.g. `http://192.168.0.3:9197/dmr`). On Android/Termux, leave `network.interface` empty.
+For DLNA, `host` can be a full description URL (e.g. `http://192.168.0.3:9197/dmr`). On Android/Termux, leave `servers.media.network.interface` empty.
 
 ### The page won't play
 
@@ -289,7 +296,7 @@ docker run --rm --network host --device /dev/dri \
   cast player https://example.com/watch/some-video
 ```
 
-The cache volume preserves Whisper models. On Linux, put `CASTOR_SERVER__TOKEN`, `CASTOR_SCRAPING__TOKEN`, and `CASTOR_API__TOKEN` in git-ignored `.env`, then run `docker compose up -d`. API and media use host networking; scraping is published only on loopback. Remove the `/dev/dri` mapping on hosts without Intel VA-API. A standalone bridged media container needs `-p 8410:8410` and `server.advertise` set to a device-reachable address.
+The cache volume preserves Whisper models. On Linux, put `CASTOR_SERVERS__MEDIA__TOKEN`, `CASTOR_SERVERS__SCRAPING__TOKEN`, and `CASTOR_SERVERS__API__TOKEN` in git-ignored `.env`, then run `docker compose up -d`. API and media use host networking; scraping is published only on loopback. Remove the `/dev/dri` mapping on hosts without Intel VA-API. A standalone bridged media container needs `-p 8410:8410` and `servers.media.advertise` set to a device-reachable address.
 
 Tags: `:latest` (stable), `:canary` (preview), or a pinned `:vX.Y.Z`.
 

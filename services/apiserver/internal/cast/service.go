@@ -174,7 +174,7 @@ func (s *Service) resolve(ctx context.Context, source *castorv1.Source) (*mediav
 	if err != nil {
 		switch connect.CodeOf(err) {
 		case connect.CodeUnauthenticated, connect.CodePermissionDenied, connect.CodeInvalidArgument:
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scrapingserver refused the API server (check scraping.token): %w", err))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scrapingserver refused the API server (check servers.scraping.token): %w", err))
 		}
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (s *Service) resolve(ctx context.Context, source *castorv1.Source) (*mediav
 func fromMedia(err error) error {
 	switch connect.CodeOf(err) {
 	case connect.CodeUnauthenticated, connect.CodePermissionDenied, connect.CodeInvalidArgument:
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("the media server refused this API server (check server.token): %w", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("the media server refused this API server (check servers.media.token): %w", err))
 	}
 	return err
 }

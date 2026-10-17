@@ -9,19 +9,19 @@ import (
 
 // deviceListener opens where devices on this machine's network reach its embedded media server.
 func (c *Config) deviceListener(ctx context.Context) (net.Listener, error) {
-	ip, err := lanIPv4(ctx, c.Network.Interface)
+	ip, err := lanIPv4(ctx, c.Servers.Media.Network.Interface)
 	if err != nil {
 		return nil, err
 	}
 	return net.Listen("tcp", net.JoinHostPort(ip, "0"))
 }
 
-// advertised is where devices reach a server listening on l: server.advertise, or l's port on this machine's network.
+// advertised is where devices reach a server listening on l: servers.media.advertise, or l's port on this machine's network.
 func (c *Config) advertised(ctx context.Context, l net.Listener) (*url.URL, error) {
-	if c.Server.Advertise != "" {
-		return url.Parse(c.Server.Advertise)
+	if c.Servers.Media.Advertise != "" {
+		return url.Parse(c.Servers.Media.Advertise)
 	}
-	ip, err := lanIPv4(ctx, c.Network.Interface)
+	ip, err := lanIPv4(ctx, c.Servers.Media.Network.Interface)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func lanIPv4(ctx context.Context, iface string) (string, error) {
 	if iface == "" {
 		conn, err := (&net.Dialer{}).DialContext(ctx, "udp4", "8.8.8.8:53")
 		if err != nil {
-			return "", fmt.Errorf("detecting default-route address (set network.interface to pin one): %w", err)
+			return "", fmt.Errorf("detecting default-route address (set servers.media.network.interface to pin one): %w", err)
 		}
 		defer conn.Close()
 		return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil

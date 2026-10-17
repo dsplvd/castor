@@ -14,8 +14,8 @@ import (
 func (c *Config) backend(media transport.Endpoint, scraping transport.Endpoint) Backend {
 	return Backend{
 		Devices: device.Registry{
-			Families: []device.Family{dlna.Family{}, chromecast.Family{}, roku.Family{Config: c.Devices.Roku}},
-			Timeout:  c.Network.Timeout,
+			Families: []device.Family{dlna.Family{}, chromecast.Family{}, roku.Family{Config: c.Servers.API.Devices.Roku}},
+			Timeout:  c.Servers.API.Network.Timeout,
 		},
 		Media:    mediaclient.New(media.Client(), media.URL),
 		Scraping: scrapingclient.New(scraping.Client(), scraping.URL),

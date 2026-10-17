@@ -24,18 +24,18 @@ func Command() *cli.Command {
 			if err != nil {
 				return err
 			}
-			l, err := transport.Listen(ctx, cfg.Server.Listen, cfg.Server.Token, "server.token")
+			l, err := transport.Listen(ctx, cfg.Servers.Media.Listen, cfg.Servers.Media.Token, "servers.media.token")
 			if err != nil {
 				return err
 			}
 			defer l.Close()
 			reach, err := cfg.advertised(ctx, l)
 			if err != nil {
-				return fmt.Errorf("resolving where devices reach this server (set server.advertise): %w", err)
+				return fmt.Errorf("resolving where devices reach this server (set servers.media.advertise): %w", err)
 			}
 			slog.InfoContext(ctx, "serving", "address", l.Addr().String(), "devices_reach", reach.String())
 			srv := New(cfg.backend(), reach)
-			return transport.Serve(ctx, l, onePort(srv, cfg.Server.Token), srv.Shutdown)
+			return transport.Serve(ctx, l, onePort(srv, cfg.Servers.Media.Token), srv.Shutdown)
 		},
 	}
 }
@@ -60,7 +60,7 @@ func Embedded(ctx context.Context, cmd *cli.Command) (transport.Endpoint, func()
 	}
 	reach := &url.URL{Scheme: "http", Host: lan.Addr().String()}
 	srv := New(cfg.backend(), reach)
-	api, stopAPI, err := transport.Loopback(ctx, srv.API, cfg.Server.Token, srv.Shutdown)
+	api, stopAPI, err := transport.Loopback(ctx, srv.API, cfg.Servers.Media.Token, srv.Shutdown)
 	if err != nil {
 		_ = lan.Close()
 		return transport.Endpoint{}, nil, err

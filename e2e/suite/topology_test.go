@@ -36,18 +36,20 @@ func (split) Name() string { return "split" }
 func (split) Cast(t *testing.T, ctx context.Context, carrier settings.Carrier, doc map[string]any, args []string) ([]byte, error) {
 	mediaToken, apiToken, scrapingToken := rand.Text(), rand.Text(), rand.Text()
 	// Port 0 so parallel cases never race for one; castor's config only accepts it on every interface.
-	media := start(t, carrier, with(t, doc, map[string]any{"server": map[string]any{"listen": ":0", "token": mediaToken}}), "media-server")
+	media := start(t, carrier, with(t, doc, map[string]any{"servers": map[string]any{"media": map[string]any{"listen": ":0", "token": mediaToken}}}), "media-server")
 	mediaURL := media.ready(t, mediaToken)
-	scraping := start(t, carrier, with(t, doc, map[string]any{"scraping": map[string]any{"listen": ":0", "token": scrapingToken}}), "scraping-server")
+	scraping := start(t, carrier, with(t, doc, map[string]any{"servers": map[string]any{"scraping": map[string]any{"listen": ":0", "token": scrapingToken}}}), "scraping-server")
 	scrapingURL := scraping.ready(t, scrapingToken)
 	api := start(t, carrier, with(t, doc, map[string]any{
-		"server":   map[string]any{"url": mediaURL, "token": mediaToken},
-		"scraping": map[string]any{"url": scrapingURL, "token": scrapingToken},
-		"api":      map[string]any{"listen": ":0", "token": apiToken},
+		"servers": map[string]any{
+			"media":    map[string]any{"url": mediaURL, "token": mediaToken},
+			"scraping": map[string]any{"url": scrapingURL, "token": scrapingToken},
+			"api":      map[string]any{"listen": ":0", "token": apiToken},
+		},
 	}), "api-server")
 	apiURL := api.ready(t, apiToken)
 
-	launch, err := carrier.Carry(t, with(t, doc, map[string]any{"api": map[string]any{"url": apiURL, "token": apiToken}}))
+	launch, err := carrier.Carry(t, with(t, doc, map[string]any{"servers": map[string]any{"api": map[string]any{"url": apiURL, "token": apiToken}}}))
 	if err != nil {
 		t.Fatal(err)
 	}

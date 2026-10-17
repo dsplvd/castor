@@ -20,10 +20,10 @@ func TestEmbeddedCompositionStartsOnlyMissingServices(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := defaults()
 			if !tc.media {
-				cfg.Server.URL = "http://media.example:8410"
+				cfg.Servers.Media.URL = "http://media.example:8410"
 			}
 			if !tc.scraping {
-				cfg.Scraping.URL = "http://scraping.example:8412"
+				cfg.Servers.Scraping.URL = "http://scraping.example:8412"
 			}
 			var mediaRuns, scrapingRuns, mediaStops, scrapingStops int
 			media := func(context.Context, *cli.Command) (transport.Endpoint, func(), error) {

@@ -21,9 +21,9 @@ func (s *session) ensureChannel(ctx context.Context, cfg Config) error {
 			if strings.TrimSpace(apps[i].Title) == channelTitle {
 				return nil
 			}
-			return errors.New("a different sideloaded channel occupies the Roku dev slot; set devices.roku.password so Castor can replace it")
+			return errors.New("a different sideloaded channel occupies the Roku dev slot; set servers.api.devices.roku.password so Castor can replace it")
 		}
-		return errors.New("roku channel not installed and no developer password set: enable Developer Mode on the Roku, set a web-server password, and put it in devices.roku.password")
+		return errors.New("roku channel not installed and no developer password set: enable Developer Mode on the Roku, set a web-server password, and put it in servers.api.devices.roku.password")
 	}
 	slog.InfoContext(ctx, "sideloading roku channel", "host", s.ecp.Hostname())
 	return s.sideloadChannel(ctx, cfg.Password)

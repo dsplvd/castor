@@ -8,7 +8,7 @@ local_resource('lib', 'make lib', labels=['go'])
 
 local_resource(
     'app',
-    serve_cmd=tokens + 'CASTOR_API__URL=http://localhost:8411 exec yarn workspace castor-app dev',
+    serve_cmd=tokens + 'CASTOR_SERVERS__API__URL=http://localhost:8411 exec yarn workspace castor-app dev',
     resource_deps=['app-generate', 'api-server'],
     links=['http://localhost:3000'],
     labels=['app'],
@@ -24,7 +24,7 @@ local_resource(
 
 local_resource(
     'api-server',
-    serve_cmd=run + 'CASTOR_SERVER__URL=http://localhost:8410 CASTOR_SCRAPING__URL=http://localhost:8412 exec go run ./cmd/castor api-server',
+    serve_cmd=run + 'CASTOR_SERVERS__MEDIA__URL=http://localhost:8410 CASTOR_SERVERS__SCRAPING__URL=http://localhost:8412 exec go run ./cmd/castor api-server',
     deps=src,
     ignore=['**/*_test.go'],
     resource_deps=['media-server', 'scraping-server'],

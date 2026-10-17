@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,14 +13,18 @@ type sections struct {
 	Cast struct {
 		MaxHeight uint32 `yaml:"max_height"`
 	} `yaml:"cast"`
-	Network struct {
-		Timeout time.Duration `yaml:"timeout"`
-	} `yaml:"network"`
+	Servers struct {
+		API struct {
+			Network struct {
+				Timeout time.Duration `yaml:"timeout"`
+			} `yaml:"network"`
+		} `yaml:"api"`
+	} `yaml:"servers"`
 }
 
 func defaulted() sections {
 	var s sections
-	s.Network.Timeout = 5 * time.Second
+	s.Servers.API.Network.Timeout = 5 * time.Second
 	return s
 }
 
@@ -42,12 +47,12 @@ func write(t *testing.T, yaml, local string) string {
 }
 
 func TestTheOverlayThenTheEnvironmentWinOverTheFileAndTheDefaults(t *testing.T) {
-	path := write(t, "cast:\n  max_height: 1080\nnetwork:\n  timeout: 2s\n", "cast:\n  max_height: 720\n")
+	path := write(t, "cast:\n  max_height: 1080\nservers:\n  api:\n    network:\n      timeout: 2s\n", "cast:\n  max_height: 720\n")
 	got, err := read(path, defaulted())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Cast.MaxHeight != 720 || got.Network.Timeout != 2*time.Second {
+	if got.Cast.MaxHeight != 720 || got.Servers.API.Network.Timeout != 2*time.Second {
 		t.Errorf("read %+v, want the overlay's height over the file's, and the file's timeout over the default", got)
 	}
 
@@ -62,7 +67,7 @@ func TestTheOverlayThenTheEnvironmentWinOverTheFileAndTheDefaults(t *testing.T) 
 
 func TestNoFileLeavesTheDefaults(t *testing.T) {
 	got, err := read(filepath.Join(t.TempDir(), "config.yaml"), defaulted())
-	if err != nil || got.Network.Timeout != 5*time.Second {
+	if err != nil || got.Servers.API.Network.Timeout != 5*time.Second {
 		t.Errorf("read %+v %v without a file, want the defaults", got, err)
 	}
 }
@@ -71,5 +76,43 @@ func TestAnUnreadableConfigPathIsNotTreatedAsAMissingFile(t *testing.T) {
 	path := write(t, "network:\n  timeout: 2s\n", "")
 	if _, err := read(filepath.Join(path, "config.yaml"), defaulted()); err == nil {
 		t.Error("a path through a regular file was ignored instead of reporting the filesystem error")
+	}
+}
+
+func TestUnknownKeysFailEvenInSectionsThisCommandDoesNotDecode(t *testing.T) {
+	for _, tc := range []struct{ doc, unknown string }{
+		{"api:\n  token: old-value\n", "api"},
+		{"network:\n  timeout: 2s\n", "network"},
+		{"resolver:\n  probe_max_concurrency: 2\n", "resolver"},
+		{"devices:\n  roku:\n    app_id: example\n", "devices"},
+		{"servers:\n  media:\n    tokne: typo\n", "servers.media.tokne"},
+		{"sources:\n  - proxies: [https://example.com]\n    templates:\n      movvie: /watch\n", "sources[0].templates.movvie"},
+	} {
+		path := write(t, tc.doc, "")
+		if _, err := read(path, defaulted()); err == nil || !strings.Contains(err.Error(), tc.unknown) {
+			t.Errorf("config returned %v, want an unknown-key error naming %s", err, tc.unknown)
+		}
+	}
+	t.Setenv("CASTOR_API__TOKEN", "old-value")
+	if _, err := read(filepath.Join(t.TempDir(), "config.yaml"), defaulted()); err == nil || !strings.Contains(err.Error(), "api") {
+		t.Errorf("old token environment variable returned %v, want an unknown-key error", err)
+	}
+}
+
+func TestKnownKeysInOtherCommandsSectionsRemainValid(t *testing.T) {
+	path := write(t, "servers:\n  api:\n    token: secret\n  scraping:\n    browser:\n      timeout: 30s\nsources:\n  - proxies: [https://example.com]\n    templates:\n      movie: /watch\n      episode: /episode\n", "")
+	if _, err := read(path, defaulted()); err != nil {
+		t.Fatalf("known keys used by other commands were rejected: %v", err)
+	}
+}
+
+func TestExampleConfigurationUsesKnownKeys(t *testing.T) {
+	example, err := os.ReadFile("../../config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := write(t, string(example), "")
+	if _, err := read(path, defaulted()); err != nil {
+		t.Fatalf("example configuration rejected: %v", err)
 	}
 }

@@ -13,20 +13,22 @@ import (
 
 // Config is the API server's sections of castor's configuration.
 type Config struct {
-	Cast   CastConfig   `yaml:"cast"`
-	API    APIConfig    `yaml:"api" validate:"required"`
-	Server ServerConfig `yaml:"server"`
+	Cast    CastConfig    `yaml:"cast"`
+	Servers ServersConfig `yaml:"servers" validate:"required"`
+}
+
+type ServersConfig struct {
+	API   APIConfig    `yaml:"api" validate:"required"`
+	Media ServerConfig `yaml:"media"`
 	// Scraping names only the resolver endpoint and credentials, never browser settings.
-	Scraping ServerConfig  `yaml:"scraping"`
-	Network  NetworkConfig `yaml:"network" validate:"required"`
-	Devices  DevicesConfig `yaml:"devices"`
+	Scraping ServerConfig `yaml:"scraping"`
 }
 
 // CastConfig is what every cast asks unless its request says otherwise; New holds it to the contract's rules.
 type CastConfig struct {
 	Delivery  Delivery `yaml:"delivery"`
 	MaxHeight uint32   `yaml:"max_height"`
-	// Subtitles is the language to burn in, a whisper code or auto to detect it, empty for none.
+	// Subtitles is the requested caption language, or auto to detect it; empty disables captions.
 	Subtitles string `yaml:"subtitles"`
 	// Audio is the language to play where a source offers several, empty for the source's default.
 	Audio string `yaml:"audio"`
@@ -46,8 +48,10 @@ func (d *Delivery) UnmarshalText(text []byte) error {
 
 // APIConfig is where `castor api-server` listens, and the token it asks every request to carry.
 type APIConfig struct {
-	Listen string `yaml:"listen" validate:"required,hostname_port|startswith=:"`
-	Token  string `yaml:"token"`
+	Listen  string        `yaml:"listen" validate:"required,hostname_port|startswith=:"`
+	Token   string        `yaml:"token"`
+	Network NetworkConfig `yaml:"network" validate:"required"`
+	Devices DevicesConfig `yaml:"devices"`
 }
 
 // ServerConfig is the media server this API server casts through; unset, castor runs one beside it in its own process.
@@ -69,8 +73,7 @@ type DevicesConfig struct {
 func defaults() Config {
 	return Config{
 		Cast:    CastConfig{Delivery: Delivery(castorv1.Delivery_DELIVERY_AUTO), MaxHeight: 1080},
-		API:     APIConfig{Listen: ":8411"},
-		Network: NetworkConfig{Timeout: 5 * time.Second},
+		Servers: ServersConfig{API: APIConfig{Listen: ":8411", Network: NetworkConfig{Timeout: 5 * time.Second}}},
 	}
 }
 

@@ -50,7 +50,7 @@ func cacheDir() (string, error) {
 func ensureModel(ctx context.Context, configured, language string) (string, error) {
 	if configured != "" {
 		if _, err := os.Stat(configured); err != nil {
-			return "", fmt.Errorf("whisper.model_path %q: %w", configured, err)
+			return "", fmt.Errorf("servers.media.whisper.model_path %q: %w", configured, err)
 		}
 		return configured, nil
 	}

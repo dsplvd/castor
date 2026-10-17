@@ -12,8 +12,8 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-ENV CASTOR_BROWSER__CHROME_PATH=/usr/bin/chromium \
-    CASTOR_BROWSER__NO_SANDBOX=true
+ENV CASTOR_SERVERS__SCRAPING__BROWSER__CHROME_PATH=/usr/bin/chromium \
+    CASTOR_SERVERS__SCRAPING__BROWSER__NO_SANDBOX=true
 
 COPY --chmod=0755 docker/${TARGETARCH}/castor /usr/local/bin/castor
 ENTRYPOINT ["castor"]

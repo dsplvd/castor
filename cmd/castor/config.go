@@ -13,7 +13,9 @@ type Config struct {
 	Device  cast.Device   `yaml:"device"`
 	Sources sources.Sites `yaml:"sources" validate:"dive"`
 	TMDB    tmdb.Config   `yaml:"tmdb"`
-	API     apiConfig     `yaml:"api"`
+	Servers struct {
+		API apiConfig `yaml:"api"`
+	} `yaml:"servers"`
 }
 
 // apiConfig is castor's API elsewhere, and the token it asks for; unset, the commands run one in their own process.

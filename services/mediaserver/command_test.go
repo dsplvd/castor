@@ -63,9 +63,9 @@ func TestFailedAddressDiscoveryReleasesTheListenPort(t *testing.T) {
 	}
 	addr := l.Addr().String()
 	_ = l.Close()
-	t.Setenv("CASTOR_SERVER__LISTEN", addr)
-	t.Setenv("CASTOR_SERVER__ADVERTISE", "")
-	t.Setenv("CASTOR_NETWORK__INTERFACE", "castor-interface-that-does-not-exist")
+	t.Setenv("CASTOR_SERVERS__MEDIA__LISTEN", addr)
+	t.Setenv("CASTOR_SERVERS__MEDIA__ADVERTISE", "")
+	t.Setenv("CASTOR_SERVERS__MEDIA__NETWORK__INTERFACE", "castor-interface-that-does-not-exist")
 	cmd := Command()
 	cmd.Flags = []cli.Flag{&cli.StringFlag{Name: "config", Value: filepath.Join(t.TempDir(), "absent.yaml")}}
 	if err := cmd.Run(t.Context(), []string{"media-server"}); err == nil || !strings.Contains(err.Error(), "resolving where devices reach this server") {

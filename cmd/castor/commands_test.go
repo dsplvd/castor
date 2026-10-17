@@ -47,7 +47,7 @@ func TestScanUsesTheConfiguredAPIWithoutRequiringACastDevice(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("api:\n  url: "+srv.URL+"\ndevice:\n  name: Living room\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("servers:\n  api:\n    url: "+srv.URL+"\ndevice:\n  name: Living room\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	local := Local(func(context.Context, *cli.Command) (transport.Endpoint, func(), error) {

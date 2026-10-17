@@ -34,9 +34,9 @@ Scraping emits generated `StreamCandidate` contracts directly, with URLs, replay
 | Setup | What runs where |
 | --- | --- |
 | Local CLI | Missing services run embedded, with loopback RPC endpoints. |
-| Shared media | Run `media-server`; clients set `server.url` and `server.token`. |
-| Shared API | Run `api-server` on the devices' network, pointing at media and scraping; clients set `api.url` and `api.token`. |
-| Shared scraping | Run `scraping-server` with Chrome; API sets `scraping.url` and `scraping.token`. |
+| Shared media | Run `media-server`; clients set `servers.media.url` and `servers.media.token`. |
+| Shared API | Run `api-server` on the devices' network, pointing at media and scraping; clients set `servers.api.url` and `servers.api.token`. |
+| Shared scraping | Run `scraping-server` with Chrome; API sets `servers.scraping.url` and `servers.scraping.token`. |
 
 Each standalone command starts only its own service. Standalone API defaults scraping to `http://localhost:8412`. Binary main composes embedded services through callbacks; embedded and remote services use the same HTTP contracts.
 

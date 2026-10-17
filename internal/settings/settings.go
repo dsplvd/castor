@@ -55,6 +55,9 @@ func read[T any](path string, defaults T) (*T, error) {
 	if err := k.Load(env.Provider(envPrefix, ".", envKey), nil); err != nil {
 		return nil, fmt.Errorf("loading environment overrides: %w", err)
 	}
+	if err := checkKeys(k.Raw(), configKeys, ""); err != nil {
+		return nil, err
+	}
 
 	cfg := &defaults
 	if err := k.UnmarshalWithConf("", cfg, koanf.UnmarshalConf{

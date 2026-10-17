@@ -15,12 +15,20 @@ type ServerConfig struct {
 }
 
 type ServiceConfig struct {
-	Config   `yaml:",inline"`
-	Scraping ServerConfig `yaml:"scraping" validate:"required"`
+	Servers struct {
+		Scraping ScrapingConfig `yaml:"scraping" validate:"required"`
+	} `yaml:"servers" validate:"required"`
+}
+
+type ScrapingConfig struct {
+	ServerConfig `yaml:",inline"`
+	Config       `yaml:",inline"`
 }
 
 func defaults() ServiceConfig {
-	return ServiceConfig{Config: Defaults(), Scraping: ServerConfig{Listen: ":8412"}}
+	c := ServiceConfig{}
+	c.Servers.Scraping = ScrapingConfig{ServerConfig: ServerConfig{Listen: ":8412"}, Config: Defaults()}
+	return c
 }
 
 func Command() *cli.Command {
@@ -29,13 +37,13 @@ func Command() *cli.Command {
 		if err != nil {
 			return err
 		}
-		listener, err := transport.Listen(ctx, cfg.Scraping.Listen, cfg.Scraping.Token, "scraping.token")
+		listener, err := transport.Listen(ctx, cfg.Servers.Scraping.Listen, cfg.Servers.Scraping.Token, "servers.scraping.token")
 		if err != nil {
 			return err
 		}
-		srv := New(newExtractor(cfg.Config))
+		srv := New(newExtractor(cfg.Servers.Scraping.Config))
 		slog.InfoContext(ctx, "scraping serving", "address", listener.Addr().String())
-		return transport.Serve(ctx, listener, transport.Authorized(srv, cfg.Scraping.Token), srv.Shutdown)
+		return transport.Serve(ctx, listener, transport.Authorized(srv, cfg.Servers.Scraping.Token), srv.Shutdown)
 	}}
 }
 
@@ -45,6 +53,6 @@ func Embedded(ctx context.Context, cmd *cli.Command) (transport.Endpoint, func()
 	if err != nil {
 		return transport.Endpoint{}, nil, err
 	}
-	srv := New(newExtractor(cfg.Config))
-	return transport.Loopback(ctx, srv, cfg.Scraping.Token, srv.Shutdown)
+	srv := New(newExtractor(cfg.Servers.Scraping.Config))
+	return transport.Loopback(ctx, srv, cfg.Servers.Scraping.Token, srv.Shutdown)
 }
