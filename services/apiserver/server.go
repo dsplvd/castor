@@ -30,8 +30,11 @@ type Server struct {
 
 // New serves the public contract with b, every cast asking what cfg says unless its request says otherwise.
 func New(b Backend, cfg CastConfig) (*Server, error) {
+	if cfg.Subtitles.TranscribeIfMissing && len(cfg.Subtitles.Languages) == 0 {
+		return nil, fmt.Errorf("cast: subtitle transcription requires preferred languages")
+	}
 	defaults := cfg.settings()
-	// The contract alone states what a cast may ask, so the defaults are held to it before the first cast.
+	// Hold the defaults to the same contract as a request before the first cast.
 	if err := protovalidate.Validate(defaults); err != nil {
 		return nil, fmt.Errorf("cast: %w", err)
 	}

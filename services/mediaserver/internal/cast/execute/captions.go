@@ -14,8 +14,8 @@ import (
 
 // Captions is how a cast shows the text the source published, nil for a cast that wants none.
 type Captions struct {
-	Want   captions.Want
-	Client source.Client
+	Languages []string
+	Client    source.Client
 }
 
 // shownCaptions fetches the caption the cast wants from what the source published and serves it for the device.
@@ -31,7 +31,7 @@ func (s *pipeline) shownCaptions() []media.Caption {
 		slog.InfoContext(s.ctx, "the source publishes captions, but the device shows none")
 		return nil
 	}
-	matches := captions.Matches(published, want.Want)
+	matches := captions.Matches(published, want.Languages)
 	if len(matches) == 0 {
 		slog.InfoContext(s.ctx, "the source publishes no caption in the language asked", "published", len(published))
 		return nil

@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stupside/castor/services/mediaserver/internal/captions"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
@@ -32,7 +31,7 @@ func (d *captionPlayback) AwaitEnd(ctx context.Context) error { return d.wait(ct
 func TestHandoffKeepsCaptionsAvailableUntilPlaybackEnds(t *testing.T) {
 	caps := chromecastLike(media.MP4)
 	caps.Formats[0].Captions = []media.CaptionFormat{media.CaptionVTT}
-	s := captionedPipeline(t, caps, captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, caps, []string{"en"})
 	listener := &pipeListener{connections: make(chan net.Conn), done: make(chan struct{})}
 	s.cast.Listeners = listener
 	transport := &http.Transport{DialContext: listener.dial, DisableKeepAlives: true}

@@ -7,7 +7,6 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
-	"github.com/stupside/castor/services/mediaserver/internal/captions"
 	"github.com/stupside/castor/services/mediaserver/internal/cast"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/execute"
@@ -75,7 +74,7 @@ type engine struct {
 
 // subtitles transcribes the selected language with Whisper; delivery chooses a native track or burn-in.
 func (e *engine) subtitles(selection *castorv1.SubtitleSelection, audioLanguage string) execute.Subtitles {
-	if !selection.GetTranscribeIfMissing() || selection.GetDisabled() != nil {
+	if !selection.GetPreferredLanguages().GetTranscribeIfMissing() {
 		return nil
 	}
 	preferred := selection.GetPreferredLanguages().GetLanguages()
@@ -115,7 +114,7 @@ func (e *engine) captions(selection *castorv1.SubtitleSelection) *execute.Captio
 	if selection.GetDisabled() != nil {
 		return nil
 	}
-	return &execute.Captions{Want: captions.Want{Languages: selection.GetPreferredLanguages().GetLanguages()}, Client: e.client}
+	return &execute.Captions{Languages: selection.GetPreferredLanguages().GetLanguages(), Client: e.client}
 }
 
 // caster ranks and plays one cast as it was asked.
@@ -160,7 +159,7 @@ type subtitleRunner struct {
 
 func (r subtitleRunner) Run(ctx context.Context, attempt recovery.Attempt) recovery.Outcome {
 	r.Cast.Subtitles = r.engine.subtitles(r.selection, attempt.Rendition.AudioLanguage)
-	if r.selection.GetTranscribeIfMissing() && r.Cast.Subtitles == nil && r.selection.GetDisabled() == nil {
+	if r.selection.GetPreferredLanguages().GetTranscribeIfMissing() && r.Cast.Subtitles == nil {
 		slog.WarnContext(ctx, "transcription skipped: selected audio language is not among subtitle preferences",
 			"audio_language", attempt.Rendition.AudioLanguage,
 			"preferred_languages", r.selection.GetPreferredLanguages().GetLanguages())

@@ -95,23 +95,18 @@ message AudioSelection {
 }
 
 message SubtitleSelection {
-  reserved 2, 3;
-  option (buf.validate.message).cel = {
-    id: "subtitle.transcription_requires_languages"
-    message: "transcription requires preferred subtitle languages"
-    expression: "!this.transcribe_if_missing || has(this.preferred_languages)"
-  };
+  reserved 2, 3, 4;
   oneof mode {
     option (buf.validate.oneof).required = true;
     google.protobuf.Empty disabled = 1;
-    LanguagePreferences preferred_languages = 5;
+    SubtitlePreferences preferred_languages = 5;
   }
-  // Generate captions with Whisper if the source has no usable caption in the selected language.
-  bool transcribe_if_missing = 4;
 }
 
-message LanguagePreferences {
+message SubtitlePreferences {
   repeated string languages = 1 [(buf.validate.field).repeated.min_items = 1, (buf.validate.field).repeated.items.string.pattern = "^[a-z]{2,3}$"];
+  // Generate captions with Whisper if the source has no usable caption in the selected language.
+  bool transcribe_if_missing = 2;
 }
 
 message WatchRequest {

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stupside/castor/services/mediaserver/internal/captions"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/compose"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -27,14 +26,14 @@ func (textPages) Read(context.Context, *url.URL, http.Header, timeline.Range) (i
 	return nil, io.EOF
 }
 
-func captionedPipeline(t *testing.T, caps media.Capabilities, want captions.Want) *pipeline {
+func captionedPipeline(t *testing.T, caps media.Capabilities, languages []string) *pipeline {
 	t.Helper()
 	published := []source.Caption{{URL: &url.URL{Scheme: "http", Host: "origin.test", Path: "/subs/en.vtt"}, Language: "en", Name: "English"}}
 	client := textPages{"/subs/en.vtt": "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhello\n"}
 	return &pipeline{
 		ctx:      t.Context(),
 		releases: &releases{},
-		cast:     Cast{Machinery: Machinery{Outputs: adapters.Default()}, Device: &fakeDevice{caps: caps}, Listeners: loopback{}, Captions: &Captions{Want: want, Client: client}},
+		cast:     Cast{Machinery: Machinery{Outputs: adapters.Default()}, Device: &fakeDevice{caps: caps}, Listeners: loopback{}, Captions: &Captions{Languages: languages, Client: client}},
 		attempt: recovery.Attempt{
 			Program:   media.Program{Inputs: []media.Input{{ID: media.PrimaryInputID, URL: &url.URL{Scheme: "http", Host: "origin.test", Path: "/v.m3u8"}}}},
 			Rendition: source.Rendition{Captions: published},
@@ -43,7 +42,7 @@ func captionedPipeline(t *testing.T, caps media.Capabilities, want captions.Want
 }
 
 func TestTheSourcesCaptionIsServedToADeviceThatShowsThem(t *testing.T) {
-	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionSRT}}}}, captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionSRT}}}}, []string{"en"})
 	t.Cleanup(func() { _ = s.releases.release() })
 	shown := s.shownCaptions()
 	if len(shown) != 1 || shown[0].Format != media.CaptionSRT || !shown[0].Default {
@@ -62,8 +61,8 @@ func TestTheSourcesCaptionIsServedToADeviceThatShowsThem(t *testing.T) {
 
 func TestNoCaptionIsShownWhenTheDeviceTakesNoneOrTheLanguageIsAbsent(t *testing.T) {
 	for name, s := range map[string]*pipeline{
-		"a device with no caption format": captionedPipeline(t, media.Capabilities{}, captions.Want{Languages: []string{"en"}}),
-		"a language the source lacks":     captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, captions.Want{Languages: []string{"fr"}}),
+		"a device with no caption format": captionedPipeline(t, media.Capabilities{}, []string{"en"}),
+		"a language the source lacks":     captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, []string{"fr"}),
 	} {
 		if shown := s.shownCaptions(); len(shown) != 0 {
 			t.Errorf("%s: shown = %+v, want none", name, shown)
@@ -72,7 +71,7 @@ func TestNoCaptionIsShownWhenTheDeviceTakesNoneOrTheLanguageIsAbsent(t *testing.
 }
 
 func TestTheSourcesCaptionsReplaceTheTranscription(t *testing.T) {
-	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, []string{"en"})
 	t.Cleanup(func() { _ = s.releases.release() })
 	s.cast.Subtitles = func(context.Context) Transcript {
 		t.Error("transcription started beside the source's own captions")
@@ -85,7 +84,7 @@ func TestTheSourcesCaptionsReplaceTheTranscription(t *testing.T) {
 }
 
 func TestBrokenPreferredCaptionTriesTheNextLanguage(t *testing.T) {
-	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, captions.Want{Languages: []string{"en", "fr"}})
+	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, []string{"en", "fr"})
 	s.attempt.Rendition.Captions = append(s.attempt.Rendition.Captions, source.Caption{
 		URL: &url.URL{Scheme: "http", Host: "origin.test", Path: "/subs/fr.vtt"}, Language: "fr",
 	})
@@ -101,7 +100,7 @@ func TestBrokenPreferredCaptionTriesTheNextLanguage(t *testing.T) {
 }
 
 func TestUnusableSourceCaptionsSelectTheTranscriptionPipeline(t *testing.T) {
-	s := captionedPipeline(t, chromecastLike(media.MP4), captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, chromecastLike(media.MP4), []string{"en"})
 	s.attempt.Program = programFromStream(t, handoffStream())
 	s.cast.Subtitles = func(context.Context) Transcript { return nil }
 	if got := s.compose(); got != compose.ReadOnce {
@@ -115,7 +114,7 @@ func TestUnusableSourceCaptionsSelectTheTranscriptionPipeline(t *testing.T) {
 }
 
 func TestRequestedSubtitlesWithoutPublishedTracksNeedPCM(t *testing.T) {
-	s := captionedPipeline(t, chromecastLike(media.MP4), captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, chromecastLike(media.MP4), []string{"en"})
 	s.attempt.Program = programFromStream(t, handoffStream())
 	s.attempt.Rendition.Captions = nil
 	s.cast.Subtitles = func(context.Context) Transcript { return nil }
@@ -138,7 +137,7 @@ func TestSourceSidecarPinsCompatiblePlaybackEnvelopes(t *testing.T) {
 	hls.Transport = media.TransportHLS
 	hls.Captions = []media.CaptionFormat{media.CaptionVTT}
 	caps.Formats = append(caps.Formats, hls)
-	s := captionedPipeline(t, caps, captions.Want{Languages: []string{"en"}})
+	s := captionedPipeline(t, caps, []string{"en"})
 	s.attempt.Program = programFromStream(t, handoffStream())
 	t.Cleanup(func() { _ = s.releases.release() })
 	if got := s.compose(); got != compose.Handoff {

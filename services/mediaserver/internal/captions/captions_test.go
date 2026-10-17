@@ -20,14 +20,14 @@ func TestPickFollowsTheLanguageAskedOrTheSourcesOwnMarks(t *testing.T) {
 	all := []source.Caption{en, fr, de}
 	for _, tc := range []struct {
 		name string
-		want Want
+		want []string
 		got  source.Caption
 		ok   bool
 	}{
-		{"a code matches its primary subtag", Want{Languages: []string{"en"}}, en, true},
-		{"a language the source lacks gives none", Want{Languages: []string{"es"}}, source.Caption{}, false},
-		{"preferred language beats source order", Want{Languages: []string{"fr", "en"}}, fr, true},
-		{"next preferred language is used", Want{Languages: []string{"es", "en"}}, en, true},
+		{"a code matches its primary subtag", []string{"en"}, en, true},
+		{"a language the source lacks gives none", []string{"es"}, source.Caption{}, false},
+		{"preferred language beats source order", []string{"fr", "en"}, fr, true},
+		{"next preferred language is used", []string{"es", "en"}, en, true},
 	} {
 		matches := Matches(all, tc.want)
 		if (len(matches) > 0) != tc.ok || (len(matches) > 0 && matches[0].Language != tc.got.Language) {

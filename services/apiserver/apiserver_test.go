@@ -320,12 +320,12 @@ type setup struct {
 var shipped = apiserver.CastConfig{Delivery: apiserver.Delivery(castorv1.Delivery_DELIVERY_AUTO), MaxHeight: 1080}
 
 func preferred(languages ...string) *castorv1.SubtitleSelection {
-	return &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: languages}}}
+	return &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.SubtitlePreferences{Languages: languages}}}
 }
 
 func preferredWithFallback(languages ...string) *castorv1.SubtitleSelection {
 	selection := preferred(languages...)
-	selection.TranscribeIfMissing = true
+	selection.GetPreferredLanguages().TranscribeIfMissing = true
 	return selection
 }
 
@@ -730,7 +730,7 @@ func TestSubtitleFallbackCanBeOverriddenPerCast(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := (<-m.asked).GetSubtitles().GetTranscribeIfMissing(); got != tc.want {
+		if got := (<-m.asked).GetSubtitles().GetPreferredLanguages().GetTranscribeIfMissing(); got != tc.want {
 			t.Errorf("transcription = %v, want %v", got, tc.want)
 		}
 	}

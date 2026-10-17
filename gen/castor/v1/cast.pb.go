@@ -504,11 +504,9 @@ type SubtitleSelection struct {
 	//
 	//	*SubtitleSelection_Disabled
 	//	*SubtitleSelection_PreferredLanguages
-	Mode isSubtitleSelection_Mode `protobuf_oneof:"mode"`
-	// Generate captions with Whisper if the source has no usable caption in the selected language.
-	TranscribeIfMissing bool `protobuf:"varint,4,opt,name=transcribe_if_missing,json=transcribeIfMissing,proto3" json:"transcribe_if_missing,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	Mode          isSubtitleSelection_Mode `protobuf_oneof:"mode"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubtitleSelection) Reset() {
@@ -557,20 +555,13 @@ func (x *SubtitleSelection) GetDisabled() *emptypb.Empty {
 	return nil
 }
 
-func (x *SubtitleSelection) GetPreferredLanguages() *LanguagePreferences {
+func (x *SubtitleSelection) GetPreferredLanguages() *SubtitlePreferences {
 	if x != nil {
 		if x, ok := x.Mode.(*SubtitleSelection_PreferredLanguages); ok {
 			return x.PreferredLanguages
 		}
 	}
 	return nil
-}
-
-func (x *SubtitleSelection) GetTranscribeIfMissing() bool {
-	if x != nil {
-		return x.TranscribeIfMissing
-	}
-	return false
 }
 
 type isSubtitleSelection_Mode interface {
@@ -582,34 +573,36 @@ type SubtitleSelection_Disabled struct {
 }
 
 type SubtitleSelection_PreferredLanguages struct {
-	PreferredLanguages *LanguagePreferences `protobuf:"bytes,5,opt,name=preferred_languages,json=preferredLanguages,proto3,oneof"`
+	PreferredLanguages *SubtitlePreferences `protobuf:"bytes,5,opt,name=preferred_languages,json=preferredLanguages,proto3,oneof"`
 }
 
 func (*SubtitleSelection_Disabled) isSubtitleSelection_Mode() {}
 
 func (*SubtitleSelection_PreferredLanguages) isSubtitleSelection_Mode() {}
 
-type LanguagePreferences struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Languages     []string               `protobuf:"bytes,1,rep,name=languages,proto3" json:"languages,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type SubtitlePreferences struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Languages []string               `protobuf:"bytes,1,rep,name=languages,proto3" json:"languages,omitempty"`
+	// Generate captions with Whisper if the source has no usable caption in the selected language.
+	TranscribeIfMissing bool `protobuf:"varint,2,opt,name=transcribe_if_missing,json=transcribeIfMissing,proto3" json:"transcribe_if_missing,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
-func (x *LanguagePreferences) Reset() {
-	*x = LanguagePreferences{}
+func (x *SubtitlePreferences) Reset() {
+	*x = SubtitlePreferences{}
 	mi := &file_castor_v1_cast_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LanguagePreferences) String() string {
+func (x *SubtitlePreferences) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LanguagePreferences) ProtoMessage() {}
+func (*SubtitlePreferences) ProtoMessage() {}
 
-func (x *LanguagePreferences) ProtoReflect() protoreflect.Message {
+func (x *SubtitlePreferences) ProtoReflect() protoreflect.Message {
 	mi := &file_castor_v1_cast_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -621,16 +614,23 @@ func (x *LanguagePreferences) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LanguagePreferences.ProtoReflect.Descriptor instead.
-func (*LanguagePreferences) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubtitlePreferences.ProtoReflect.Descriptor instead.
+func (*SubtitlePreferences) Descriptor() ([]byte, []int) {
 	return file_castor_v1_cast_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *LanguagePreferences) GetLanguages() []string {
+func (x *SubtitlePreferences) GetLanguages() []string {
 	if x != nil {
 		return x.Languages
 	}
 	return nil
+}
+
+func (x *SubtitlePreferences) GetTranscribeIfMissing() bool {
+	if x != nil {
+		return x.TranscribeIfMissing
+	}
+	return false
 }
 
 type WatchRequest struct {
@@ -1500,15 +1500,14 @@ const file_castor_v1_cast_proto_rawDesc = "" +
 	"\t_deliveryB\r\n" +
 	"\v_max_heightJ\x04\b\x04\x10\x05\"H\n" +
 	"\x0eAudioSelection\x126\n" +
-	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\x93\x03\n" +
+	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\xbd\x01\n" +
 	"\x11SubtitleSelection\x124\n" +
 	"\bdisabled\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\bdisabled\x12Q\n" +
-	"\x13preferred_languages\x18\x05 \x01(\v2\x1e.castor.v1.LanguagePreferencesH\x00R\x12preferredLanguages\x122\n" +
-	"\x15transcribe_if_missing\x18\x04 \x01(\bR\x13transcribeIfMissing:\xa5\x01\xbaH\xa1\x01\x1a\x9e\x01\n" +
-	")subtitle.transcription_requires_languages\x123transcription requires preferred subtitle languages\x1a<!this.transcribe_if_missing || has(this.preferred_languages)B\r\n" +
-	"\x04mode\x12\x05\xbaH\x02\b\x01J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"O\n" +
-	"\x13LanguagePreferences\x128\n" +
-	"\tlanguages\x18\x01 \x03(\tB\x1a\xbaH\x17\x92\x01\x14\b\x01\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"0\n" +
+	"\x13preferred_languages\x18\x05 \x01(\v2\x1e.castor.v1.SubtitlePreferencesH\x00R\x12preferredLanguagesB\r\n" +
+	"\x04mode\x12\x05\xbaH\x02\b\x01J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\x83\x01\n" +
+	"\x13SubtitlePreferences\x128\n" +
+	"\tlanguages\x18\x01 \x03(\tB\x1a\xbaH\x17\x92\x01\x14\b\x01\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\x122\n" +
+	"\x15transcribe_if_missing\x18\x02 \x01(\bR\x13transcribeIfMissing\"0\n" +
 	"\fWatchRequest\x12 \n" +
 	"\acast_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06castId\"{\n" +
 	"\rWatchResponse\x12/\n" +
@@ -1595,7 +1594,7 @@ var file_castor_v1_cast_proto_goTypes = []any{
 	(*Preferences)(nil),            // 6: castor.v1.Preferences
 	(*AudioSelection)(nil),         // 7: castor.v1.AudioSelection
 	(*SubtitleSelection)(nil),      // 8: castor.v1.SubtitleSelection
-	(*LanguagePreferences)(nil),    // 9: castor.v1.LanguagePreferences
+	(*SubtitlePreferences)(nil),    // 9: castor.v1.SubtitlePreferences
 	(*WatchRequest)(nil),           // 10: castor.v1.WatchRequest
 	(*WatchResponse)(nil),          // 11: castor.v1.WatchResponse
 	(*CastStatus)(nil),             // 12: castor.v1.CastStatus
@@ -1633,7 +1632,7 @@ var file_castor_v1_cast_proto_depIdxs = []int32{
 	8,  // 10: castor.v1.Preferences.subtitles:type_name -> castor.v1.SubtitleSelection
 	7,  // 11: castor.v1.Preferences.audio:type_name -> castor.v1.AudioSelection
 	28, // 12: castor.v1.SubtitleSelection.disabled:type_name -> google.protobuf.Empty
-	9,  // 13: castor.v1.SubtitleSelection.preferred_languages:type_name -> castor.v1.LanguagePreferences
+	9,  // 13: castor.v1.SubtitleSelection.preferred_languages:type_name -> castor.v1.SubtitlePreferences
 	12, // 14: castor.v1.WatchResponse.status:type_name -> castor.v1.CastStatus
 	15, // 15: castor.v1.WatchResponse.ended:type_name -> castor.v1.Ended
 	28, // 16: castor.v1.CastStatus.connecting:type_name -> google.protobuf.Empty

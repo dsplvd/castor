@@ -12,17 +12,12 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
-// Want is the ordered list of caption languages a cast prefers.
-type Want struct {
-	Languages []string
-}
-
 // Matches returns published captions in preference order, including alternative tracks
 // in the same language so a broken track does not hide another usable one.
-func Matches(available []source.Caption, want Want) []source.Caption {
+func Matches(available []source.Caption, languages []string) []source.Caption {
 	var matches []source.Caption
 	seen := make([]bool, len(available))
-	for _, language := range want.Languages {
+	for _, language := range languages {
 		for i, c := range available {
 			if !seen[i] && source.SameLanguage(c.Language, language) {
 				matches = append(matches, c)
