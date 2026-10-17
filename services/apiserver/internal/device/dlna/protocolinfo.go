@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
-
 	"github.com/huin/goupnp"
+	"google.golang.org/protobuf/proto"
 
+	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
@@ -45,7 +45,7 @@ func negotiateCaps(ctx context.Context, loc *goupnp.RootDevice, u *url.URL) (*me
 	if len(caps.Formats) == 0 {
 		return nil, nil, errors.New("the device advertises no complete supported playback envelope in its sink")
 	}
-	slog.InfoContext(ctx, "negotiated device capabilities", "formats", caps.Formats)
+	slog.InfoContext(ctx, "negotiated device capabilities", "formats", len(caps.Formats))
 
 	return caps, sinks, nil
 }
@@ -98,11 +98,15 @@ func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Cont
 		if ct == mediav1.Container_CONTAINER_MPEGTS {
 			progressive = mediav1.ProgressiveSupport_CONTAINER_MPEGTS
 		}
-		alternative := slices.ContainsFunc(r.Formats, func(f *mediav1.FormatSupport) bool {
-			return f.GetProgressive().GetContainer() == progressive
+		format := &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: progressive}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: video, Audio: audioSupportFor(a)}}}
+		duplicate := slices.ContainsFunc(r.Formats, func(existing *mediav1.FormatSupport) bool { return proto.Equal(existing, format) })
+		alternative := slices.ContainsFunc(r.Formats, func(existing *mediav1.FormatSupport) bool {
+			return existing.GetProgressive().GetContainer() == progressive && !proto.Equal(existing, format)
 		})
-		r.Formats = append(r.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: progressive}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: video, Audio: audioSupportFor(a)}}})
-		if alternative {
+		if !duplicate {
+			r.Formats = append(r.Formats, format)
+		}
+		if alternative || sinks[ct].features == "*" {
 			// The play contract names a container, not a DLNA profile. With multiple
 			// alternatives, omit the profile rather than advertise one not selected.
 			sinks[ct] = sinkEntry{mime: device.MIME(ct), features: "*"}

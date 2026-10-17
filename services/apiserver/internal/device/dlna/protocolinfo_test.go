@@ -28,6 +28,17 @@ func TestParseSinkProtocolInfo(t *testing.T) {
 	}
 }
 
+func TestRepeatedSinkProfilesDoNotDuplicateCapabilities(t *testing.T) {
+	const entry = "http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO"
+	caps, sinks := parseSinkProtocolInfo(entry + "," + entry + "," + entry)
+	if len(caps.Formats) != 1 {
+		t.Fatalf("repeated sink entry produced %d formats", len(caps.Formats))
+	}
+	if sinks[mediav1.Container_CONTAINER_MPEGTS].features != "DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO" {
+		t.Fatalf("duplicate entry changed sink metadata: %+v", sinks)
+	}
+}
+
 func TestAContainerIsSpokenForByTheEntryNamingACodec(t *testing.T) {
 	caps, sinks := parseSinkProtocolInfo("http-get:*:video/mpeg:*,http-get:*:video/mp2t:DLNA.ORG_PN=MPEG_TS_SD_EU,http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO")
 	if got := sinks[mediav1.Container_CONTAINER_MPEGTS].features; got != "DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO" {
