@@ -64,21 +64,6 @@ func TestParsePlaylistPlaysTheAudioLanguageAskedElseTheDefault(t *testing.T) {
 			t.Errorf("language %q: ladder = %+v, want audio %s", language, rungs, want)
 		}
 	}
-	if !master.offersAudioIn("fr") || master.offersAudioIn("de") {
-		t.Error("offersAudioIn disagrees with the group")
-	}
-	for _, tc := range []struct {
-		languages []string
-		want      string
-	}{
-		{[]string{"fr", "en"}, "fr"},
-		{[]string{"de", "en"}, "en"},
-		{[]string{"de"}, ""},
-	} {
-		if got := master.preferredAudioLanguage(tc.languages); got != tc.want {
-			t.Errorf("preferredAudioLanguage(%v) = %q, want %q", tc.languages, got, tc.want)
-		}
-	}
 }
 
 func TestAudioPreferencesAreTriedWithinEachVariantsGroup(t *testing.T) {

@@ -79,9 +79,6 @@ func inspect(ctx context.Context, env source.Env, stream source.Stream, origin s
 		return origin, source.Rendition{}, true, nil
 	}
 	languages := env.AudioLanguages
-	if len(languages) > 0 && doc.preferredAudioLanguage(languages) == "" {
-		slog.WarnContext(ctx, "the source offers no audio in the preferred languages; playing its default", "languages", languages)
-	}
 	origin.Renditions = ladder(doc, stream.Probe, languages...)
 	if len(origin.Renditions) == 0 {
 		return origin, source.Rendition{}, false, fmt.Errorf("HLS playlist offers no video rendition")

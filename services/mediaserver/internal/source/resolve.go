@@ -54,6 +54,18 @@ func (r *Resolver) Resolve(ctx context.Context, stream *Stream, chosen Rendition
 	if drm := resolved.Origin.Protection; drm != "" {
 		return resolved, fmt.Errorf("the source is protected by DRM (%s), which castor cannot decrypt", drm)
 	}
+	if selected := resolved.Rendition.AudioLanguage; selected != "" && len(r.env.AudioLanguages) > 0 {
+		matched := false
+		for _, preferred := range r.env.AudioLanguages {
+			if SameLanguage(selected, preferred) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			slog.WarnContext(ctx, "the selected audio is not in the preferred languages", "selected", selected, "languages", r.env.AudioLanguages)
+		}
+	}
 	slog.InfoContext(ctx, "source resolved", "content_type", stream.ContentType)
 	return resolved, nil
 }

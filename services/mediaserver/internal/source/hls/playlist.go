@@ -77,25 +77,6 @@ type audioRendition struct {
 	isDefault bool
 }
 
-// offersAudioIn reports whether any audio group lists a rendition of its own in language.
-func (d document) offersAudioIn(language string) bool {
-	for _, group := range d.audio {
-		if slices.ContainsFunc(group, func(a audioRendition) bool { return a.url != nil && source.SameLanguage(a.language, language) }) {
-			return true
-		}
-	}
-	return false
-}
-
-func (d document) preferredAudioLanguage(languages []string) string {
-	for _, language := range languages {
-		if d.offersAudioIn(language) {
-			return language
-		}
-	}
-	return ""
-}
-
 // audioFor is the rendition v plays its sound from: the first preferred language its group offers, else the group's default
 // (the last one marked; nil when that is muxed into the variant), else the group's first.
 func (d document) audioFor(v variant, languages []string) audioRendition {
