@@ -1,3 +1,5 @@
+import { context, propagation } from "@opentelemetry/api";
+
 const protocolHeaders = ["content-type", "connect-protocol-version", "connect-timeout-ms", "connect-content-encoding", "connect-accept-encoding"];
 
 function copyProtocolHeaders(from: Headers) {
@@ -16,6 +18,7 @@ export async function proxyWatch(req: Request, api: { url: string; token: string
   if (req.signal.aborted) cancel();
   const release = () => req.signal.removeEventListener("abort", cancel);
   const headers = copyProtocolHeaders(req.headers);
+  propagation.inject(context.active(), headers, { set: (carrier, key, value) => carrier.set(key, value) });
   // Fetch decodes HTTP compression; never advertise the browser's encodings or relay its credentials.
   headers.set("accept-encoding", "identity");
   if (api.token) headers.set("authorization", `Bearer ${api.token}`);

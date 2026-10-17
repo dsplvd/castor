@@ -1,10 +1,12 @@
+import { authorize } from "@/lib/authorize";
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = { title: "Castor" };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await authorize();
   return (
     <html lang="en">
       <body className="bg-[#1b1d1a] antialiased **:[button,a,summary]:cursor-pointer **:[button:disabled]:cursor-not-allowed motion-reduce:**:animate-none motion-reduce:**:transition-none">

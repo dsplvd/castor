@@ -1,8 +1,10 @@
 "use server";
 
-import { revalidatePath, updateTag } from "next/cache";
+import { authorize } from "@/lib/authorize";
+
+import { revalidatePath } from "next/cache";
 
 export async function refreshDevicesAction() {
-  updateTag("devices");
+  await authorize();
   revalidatePath("/");
 }

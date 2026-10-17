@@ -1,5 +1,7 @@
 "use server";
 
+import { authorize } from "@/lib/authorize";
+
 import { redirect } from "next/navigation";
 import { describe } from "@/lib/errors";
 import { casts } from "@/lib/server";
@@ -10,6 +12,7 @@ export type FormState = { error?: string; deviceId?: string; kind?: string; url?
 export async function submitAction(_: FormState, f: FormData): Promise<FormState> {
   let castId: string;
   try {
+    await authorize();
     ({ castId } = await casts.cast({
       target: { target: { case: "deviceId", value: String(f.get("deviceId") ?? "") } },
       source: source(f),
