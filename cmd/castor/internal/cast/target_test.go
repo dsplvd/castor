@@ -36,3 +36,28 @@ func TestDiscoveredDeviceIsMatchedByEnumAndName(t *testing.T) {
 		t.Errorf("Target = %v, want dlna:right", got)
 	}
 }
+
+func TestDeviceIDBeatsName(t *testing.T) {
+	devices := listedDevices{
+		{Id: "dlna:a", Name: "TV", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA},
+		{Id: "dlna:b", Name: "TV", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA},
+	}
+	got, err := Target(t.Context(), devices, Device{Name: "TV", ID: "dlna:b", Type: "dlna"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetDeviceId() != "dlna:b" {
+		t.Errorf("Target = %v, want dlna:b", got)
+	}
+}
+
+func TestSharedNameIsAmbiguousNotFirstWins(t *testing.T) {
+	devices := listedDevices{
+		{Id: "dlna:a", Name: "TV", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA},
+		{Id: "dlna:b", Name: "TV", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA},
+	}
+	got, err := Target(t.Context(), devices, Device{Name: "TV", Type: "dlna"})
+	if got != nil || err == nil || !strings.Contains(err.Error(), "device.id") {
+		t.Errorf("Target = %v, %v, want an error naming device.id", got, err)
+	}
+}

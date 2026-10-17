@@ -1,23 +1,34 @@
 package cast
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/gen/castor/v1/castorv1connect"
 )
 
-// Device is the device the commands cast to: found by name, or pinned at its host.
+// Device is the device the commands cast to: pinned at its host, or found by id or by name.
 type Device struct {
-	Name string `yaml:"name" validate:"required_without=Host"`
+	Name string `yaml:"name" validate:"required_without_all=Host ID"`
 	Type string `yaml:"type" validate:"required"`
 	Host string `yaml:"host"`
+	ID   string `yaml:"id"`
 }
 
-// Target is the device d names: pinned at its host, or found by name among those the API lists.
+// Is reports whether found is the device d names: by id when it sets one, else by name.
+func (d Device) Is(found *castorv1.Device) bool {
+	if d.ID != "" {
+		return found.GetId() == d.ID
+	}
+	return strings.EqualFold(found.GetName(), d.Name)
+}
+
+// Target is the device d names: pinned at its host, or found by id or name among those the API lists.
 func Target(ctx context.Context, devices castorv1connect.DeviceServiceClient, d Device) (*castorv1.Target, error) {
 	if d.Type == "" {
 		return nil, errors.New("no device to cast to: set device.name and device.type (castor scan lists them)")
@@ -33,12 +44,18 @@ func Target(ctx context.Context, devices castorv1connect.DeviceServiceClient, d 
 	if err != nil {
 		return nil, err
 	}
-	for _, found := range listed.GetDevices() {
-		if found.GetType() == kind && strings.EqualFold(found.GetName(), d.Name) {
-			return &castorv1.Target{Target: &castorv1.Target_DeviceId{DeviceId: found.GetId()}}, nil
-		}
+	matches := slices.DeleteFunc(slices.Clone(listed.GetDevices()), func(found *castorv1.Device) bool {
+		return found.GetType() != kind || !d.Is(found)
+	})
+	label := cmp.Or(d.ID, d.Name)
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("device %q (type %s) not found", label, d.Type)
+	case 1:
+		return &castorv1.Target{Target: &castorv1.Target_DeviceId{DeviceId: matches[0].GetId()}}, nil
+	default:
+		return nil, fmt.Errorf("%d devices of type %s are named %q: set device.id (castor scan lists ids) or device.host", len(matches), d.Type, label)
 	}
-	return nil, fmt.Errorf("device %q (type %s) not found", d.Name, d.Type)
 }
 
 var deviceTypes = map[string]castorv1.DeviceType{

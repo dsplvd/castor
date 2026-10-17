@@ -19,9 +19,9 @@ import (
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 )
 
-// Device is the device the operator picks, preselecting the one named defaultName; ok is false when they quit without one.
-func Device(ctx context.Context, discover Discover, defaultName string) (picked *castorv1.Device, ok bool, err error) {
-	final, err := tea.NewProgram(newModel(ctx, discover, defaultName), tea.WithContext(ctx)).Run()
+// Device is the device the operator picks, preselecting the first one preselect accepts; ok is false when they quit without one.
+func Device(ctx context.Context, discover Discover, preselect func(*castorv1.Device) bool) (picked *castorv1.Device, ok bool, err error) {
+	final, err := tea.NewProgram(newModel(ctx, discover, preselect), tea.WithContext(ctx)).Run()
 	if err != nil {
 		return nil, false, err
 	}
@@ -34,16 +34,16 @@ type devicesDoneMsg struct {
 }
 
 type model struct {
-	ctx         context.Context
-	discover    Discover
-	defaultName string
-	pal         palette.Palette
-	list        list.Model
-	help        help.Model
-	spin        spinner.Model
-	loading     bool
-	selected    *castorv1.Device
-	w           int
+	ctx       context.Context
+	discover  Discover
+	preselect func(*castorv1.Device) bool
+	pal       palette.Palette
+	list      list.Model
+	help      help.Model
+	spin      spinner.Model
+	loading   bool
+	selected  *castorv1.Device
+	w         int
 }
 
 type item struct{ *castorv1.Device }
@@ -54,7 +54,7 @@ func (i item) Description() string {
 }
 func (i item) FilterValue() string { return i.GetName() }
 
-func newModel(ctx context.Context, discover Discover, defaultName string) model {
+func newModel(ctx context.Context, discover Discover, preselect func(*castorv1.Device) bool) model {
 	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -64,13 +64,13 @@ func newModel(ctx context.Context, discover Discover, defaultName string) model 
 	l.DisableQuitKeybindings()
 
 	m := model{
-		ctx:         ctx,
-		discover:    discover,
-		defaultName: defaultName,
-		spin:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		list:        l,
-		help:        help.New(),
-		loading:     true,
+		ctx:       ctx,
+		discover:  discover,
+		preselect: preselect,
+		spin:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		list:      l,
+		help:      help.New(),
+		loading:   true,
 	}
 	m.restyle(true)
 	return m
@@ -116,8 +116,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			items[i] = item{d}
 		}
 		m.list.SetItems(items)
-		if i := slices.IndexFunc(msg.devices, func(d *castorv1.Device) bool { return strings.EqualFold(d.GetName(), m.defaultName) }); i >= 0 {
-			m.list.Select(i)
+		if m.preselect != nil {
+			if i := slices.IndexFunc(msg.devices, m.preselect); i >= 0 {
+				m.list.Select(i)
+			}
 		}
 		return m, nil
 

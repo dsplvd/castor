@@ -10,12 +10,13 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
+	"github.com/stupside/castor/cmd/castor/internal/cast"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 )
 
 // Esc must not return a device as the selection.
 func TestEscDoesNotQuit(t *testing.T) {
-	m := newModel(t.Context(), func(context.Context) []*castorv1.Device { return nil }, "")
+	m := newModel(t.Context(), func(context.Context) []*castorv1.Device { return nil }, nil)
 	tm, _ := m.Update(devicesDoneMsg{devices: []*castorv1.Device{{Name: "Living room", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA, Address: "10.0.0.2"}}})
 	m = tm.(model)
 
@@ -33,7 +34,7 @@ func TestEscDoesNotQuit(t *testing.T) {
 
 // q leaves at once, asking nothing, and selects nothing.
 func TestQQuitsWithoutSelecting(t *testing.T) {
-	m := newModel(t.Context(), func(context.Context) []*castorv1.Device { return nil }, "")
+	m := newModel(t.Context(), func(context.Context) []*castorv1.Device { return nil }, nil)
 	tm, _ := m.Update(devicesDoneMsg{devices: []*castorv1.Device{{Name: "Living room", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA, Address: "10.0.0.2"}}})
 	tm, cmd := tm.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd == nil {
@@ -52,7 +53,7 @@ func TestTheConfiguredDeviceIsPreselectedAndEnterCastsToIt(t *testing.T) {
 	discover := func(context.Context) []*castorv1.Device {
 		return []*castorv1.Device{{Name: "Living room", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA, Address: "10.0.0.2"}, bedroom}
 	}
-	tm := teatest.NewTestModel(t, newModel(t.Context(), discover, "Bedroom"),
+	tm := teatest.NewTestModel(t, newModel(t.Context(), discover, cast.Device{Name: "Bedroom"}.Is),
 		teatest.WithInitialTermSize(80, 20),
 		teatest.WithProgramOptions(tea.WithColorProfile(colorprofile.Ascii)),
 	)

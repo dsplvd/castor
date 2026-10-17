@@ -57,7 +57,7 @@ func pickDevice(ctx context.Context, devices castorv1connect.DeviceServiceClient
 		to, err = cast.Target(ctx, devices, d)
 		return to, cmp.Or(d.Name, d.Host), d.Type, err
 	}
-	picked, ok, err := picker.Device(ctx, listDevices(devices), d.Name)
+	picked, ok, err := picker.Device(ctx, listDevices(devices), d.Is)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("picking device: %w", err)
 	}

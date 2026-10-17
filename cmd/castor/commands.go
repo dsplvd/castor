@@ -157,7 +157,7 @@ func scanCommand(local Local) *cli.Command {
 				fmt.Println("no devices found")
 			}
 			for _, d := range listed.GetDevices() {
-				fmt.Printf("%s\t%s\t%s\n", d.GetName(), cast.DeviceTypeName(d.GetType()), d.GetAddress())
+				fmt.Printf("%s\t%s\t%s\t%s\n", d.GetName(), cast.DeviceTypeName(d.GetType()), d.GetAddress(), d.GetId())
 			}
 			return nil
 		},
