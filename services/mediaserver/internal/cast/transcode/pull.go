@@ -59,7 +59,10 @@ func pcmOutputArgs(opts PullOptions) []string {
 	}
 	args = append(args, "-vn")
 	args = append(args, opts.Source.outputArgs()...)
+	// Raw PCM has no timestamps: materialize delayed starts and gaps as silence
+	// on FFmpeg's normalized program clock before Whisper counts samples.
 	return append(args,
+		"-af", "aresample=async=1:first_pts=0",
 		"-ac", "1",
 		"-ar", strconv.Itoa(opts.PCMSampleRate),
 		"-f", "s16le", ffmpeg.PCMPipe,

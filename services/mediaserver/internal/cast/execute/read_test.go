@@ -10,12 +10,13 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
+	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
 )
 
-// fakeBurn is a burn-in without whisper; production needs a transcription model and cgo.
-type fakeBurn struct {
-	burnIn string
-	lead   *fakeLead
+// fakeTranscript is a burn-in without whisper; production needs a transcription model and cgo.
+type fakeTranscript struct {
+	cues subtitle.Cues
+	lead *fakeLead
 
 	// linger is how long Run keeps going once its feed ends, as a transcription flushing its last cues does.
 	linger time.Duration
@@ -23,11 +24,10 @@ type fakeBurn struct {
 	attached atomic.Int64
 	ended    atomic.Int64
 	drained  atomic.Int64
-	samples  atomic.Int64
 	leadAsks atomic.Int64
 }
 
-func (b *fakeBurn) Run(_ context.Context, pcm io.ReadCloser) {
+func (b *fakeTranscript) Run(_ context.Context, pcm io.ReadCloser) {
 	b.attached.Add(1)
 	defer b.ended.Add(1)
 	if pcm == nil {
@@ -40,15 +40,11 @@ func (b *fakeBurn) Run(_ context.Context, pcm io.ReadCloser) {
 }
 
 // SampleRate is whisper's, so the read tees what a real transcription asks for.
-func (b *fakeBurn) SampleRate() int { return 16000 }
+func (b *fakeTranscript) SampleRate() int { return 16000 }
 
-func (b *fakeBurn) Inputs() (string, error) { return b.burnIn, nil }
+func (b *fakeTranscript) Cues() *subtitle.Cues { return &b.cues }
 
-func (b *fakeBurn) Follow(context.Context) func(media.Progress) {
-	return func(media.Progress) { b.samples.Add(1) }
-}
-
-func (b *fakeBurn) LatestEnd() float64 {
+func (b *fakeTranscript) LatestEnd() float64 {
 	b.leadAsks.Add(1)
 	if b.lead == nil {
 		return 0
@@ -56,11 +52,11 @@ func (b *fakeBurn) LatestEnd() float64 {
 	return b.lead.latest
 }
 
-func (b *fakeBurn) Done() bool { return b.lead == nil || b.lead.done }
+func (b *fakeTranscript) Done() bool { return b.lead == nil || b.lead.done }
 
 // subtitling burns in b, whatever the cast reads.
-func subtitling(b Burn) Subtitles {
-	return func(context.Context, string) Burn { return b }
+func subtitling(b Transcript) Subtitles {
+	return func(context.Context) Transcript { return b }
 }
 
 // TestASilentSourceRunsNoBurnInAtAll: a PCM tee of a source with no audio maps nothing and ffmpeg refuses.
@@ -70,7 +66,7 @@ func TestASilentSourceRunsNoBurnInAtAll(t *testing.T) {
 
 	program := programFromStream(t, origin.stream())
 	c := realCast(&fakeDevice{}, ffmpegPath, ffprobePath)
-	c.Subtitles = subtitling(&fakeBurn{})
+	c.Subtitles = subtitling(&fakeTranscript{})
 	s := readingPipeline(t, c, recovery.Attempt{Program: program, Fetch: sourceFetchPlan(t, program, testReadDeadline)})
 
 	followed, err := s.follow(program)
@@ -85,7 +81,7 @@ func TestASilentSourceRunsNoBurnInAtAll(t *testing.T) {
 	if err := buf.reader.Err(); err != nil {
 		t.Fatalf("the read of a silent source failed: %v\n%q", err, buf.reader.Evidence())
 	}
-	if buf.burn != nil || buf.reader.pcm != nil {
+	if buf.transcript != nil || buf.reader.pcm != nil {
 		t.Error("a silent source was given a burn-in or a PCM tee")
 	}
 	if buf.reader.spool.Size() == 0 {
@@ -98,7 +94,7 @@ func TestReleasingAReadStopsItsTranscriptionBeforeTheWorkDirGoes(t *testing.T) {
 	ffmpegPath, ffprobePath := requireFFmpegTools(t)
 	origin := serveFixture(t, ffmpegPath)
 
-	burn := &fakeBurn{linger: 200 * time.Millisecond}
+	burn := &fakeTranscript{linger: 200 * time.Millisecond}
 	c := realCast(&fakeDevice{}, ffmpegPath, ffprobePath)
 	c.Subtitles = subtitling(burn)
 	program := programFromStream(t, origin.stream())
@@ -150,7 +146,7 @@ func TestABurnInIsFedAndAwaitedByTheCastThatRunsIt(t *testing.T) {
 	ffmpegPath, ffprobePath := requireFFmpegTools(t)
 	origin := serveFixture(t, ffmpegPath)
 
-	burn := &fakeBurn{lead: &fakeLead{done: true}}
+	burn := &fakeTranscript{lead: &fakeLead{done: true}}
 	dev := &fakeDevice{caps: dlnaLike(), drain: true}
 
 	ctx, cancel := context.WithTimeout(t.Context(), castTimeout)
@@ -171,9 +167,6 @@ func TestABurnInIsFedAndAwaitedByTheCastThatRunsIt(t *testing.T) {
 	}
 	if burn.leadAsks.Load() == 0 {
 		t.Error("nothing asked the burn how far it had committed, so the gate is not holding for it")
-	}
-	if burn.samples.Load() == 0 {
-		t.Error("no sample of the encoder reached the burn")
 	}
 }
 

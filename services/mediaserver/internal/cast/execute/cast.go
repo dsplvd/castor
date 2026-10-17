@@ -8,14 +8,19 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast/codec"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/probe"
+	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
 )
 
 // Machinery is what every attempt of every cast runs on.
 type Machinery struct {
+	// Outputs are the delivery adapters installed by the media server.
+	Outputs output.Factory
+
 	// FFmpegPath is the binary every read and encode runs, and Binary what it understands.
 	FFmpegPath string
 	Binary     ffmpeg.Binary
@@ -44,7 +49,7 @@ type Cast struct {
 	// Captions is nil for a cast that wants none of the source's own.
 	Captions *Captions
 
-	// Subtitles is nil for a cast that burns none in.
+	// Subtitles is nil when generated subtitles are disabled.
 	Subtitles Subtitles
 
 	// MaxHeight is the tallest picture the cast may show.
@@ -64,25 +69,21 @@ type Device interface {
 	Capabilities() media.Capabilities
 }
 
-// Subtitles starts the burn-in a cast reading into workDir draws, nil when it cannot.
-type Subtitles func(ctx context.Context, workDir string) Burn
+// Subtitles opens a transcription independently of how its cues are rendered.
+type Subtitles func(ctx context.Context) Transcript
 
-// Burn is a transcription a cast feeds its sound and draws into its picture.
-type Burn interface {
-	// Lead is how far the transcription has committed, which the playback gate waits on.
+// Transcript owns recognition and exposes committed timed cues to the selected renderer.
+type Transcript interface {
 	health.Lead
-
-	// SampleRate is the rate of the mono PCM feed Run reads.
 	SampleRate() int
-
-	// Run transcribes the PCM feed until it ends, and closes it.
 	Run(ctx context.Context, pcm io.ReadCloser)
+	Cues() *subtitle.Cues
+}
 
-	// Inputs is the file the encode draws the cues from.
-	Inputs() (burnIn string, err error)
-
-	// Follow shows each cue as the encoder's progress reaches it.
-	Follow(ctx context.Context) func(media.Progress)
+// burnRenderer draws committed cues into video for receivers without native delivery.
+type burnRenderer interface {
+	Create() (string, error)
+	Writer(ctx context.Context) func(media.Progress)
 }
 
 // Timelines republishes a program's followed inputs for one read; the func stops serving them.

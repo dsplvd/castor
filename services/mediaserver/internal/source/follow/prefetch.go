@@ -91,6 +91,9 @@ func (f *feed) fetched(ctx context.Context, sequence int64, s timeline.Segment) 
 
 // pump starts reads past the reader, playhead order first, until the window is covered or every slot is busy; f.mu is held.
 func (f *feed) pump() {
+	if f.life.Err() != nil {
+		return
+	}
 	var covered time.Duration
 	for next := f.reached + 1; covered < ahead && f.inFlight < parallel; next++ {
 		s, listed := f.ledger.Entry(next)
@@ -109,7 +112,7 @@ func (f *feed) launch(sequence int64, s timeline.Segment) *slot {
 	sl := &slot{done: make(chan struct{})}
 	f.slots[sequence] = sl
 	f.inFlight++
-	go func() {
+	f.work.Go(func() {
 		began := time.Now()
 		body, err := f.hedged(f.life, s)
 		f.mu.Lock()
@@ -121,7 +124,7 @@ func (f *feed) launch(sequence int64, s timeline.Segment) *slot {
 		}
 		close(sl.done)
 		f.pump()
-	}()
+	})
 	return sl
 }
 
@@ -143,6 +146,12 @@ func (f *feed) hedged(ctx context.Context, s timeline.Segment) ([]byte, error) {
 			answers <- answer{body, err}
 		}()
 	}
+	defer func() {
+		cancel()
+		for ; running > 0; running-- {
+			<-answers
+		}
+	}()
 	ask()
 	hedge := time.NewTimer(f.hedgeAfter())
 	defer hedge.Stop()

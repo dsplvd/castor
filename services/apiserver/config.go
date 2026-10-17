@@ -7,7 +7,6 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
-	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/apiserver/internal/device/roku"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -18,10 +17,9 @@ type Config struct {
 	API    APIConfig    `yaml:"api" validate:"required"`
 	Server ServerConfig `yaml:"server"`
 	// Scraping names only the resolver endpoint and credentials, never browser settings.
-	Scraping  ServerConfig     `yaml:"scraping"`
-	Network   NetworkConfig    `yaml:"network" validate:"required"`
-	Devices   DevicesConfig    `yaml:"devices"`
-	Telemetry telemetry.Config `yaml:"telemetry"`
+	Scraping ServerConfig  `yaml:"scraping"`
+	Network  NetworkConfig `yaml:"network" validate:"required"`
+	Devices  DevicesConfig `yaml:"devices"`
 }
 
 // CastConfig is what every cast asks unless its request says otherwise; New holds it to the contract's rules.

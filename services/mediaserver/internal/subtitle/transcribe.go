@@ -1,4 +1,4 @@
-// Package subtitle turns a cast's transcribed speech into the captions burnt into its picture.
+// Package subtitle turns transcribed speech into timed captions for native tracks or burn-in.
 package subtitle
 
 import (
@@ -9,8 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 	"unicode"
 )
@@ -38,42 +36,10 @@ type Recognizer interface {
 	Recognize(ctx context.Context, samples []float32, offset float64, prompt string) ([]Word, error)
 }
 
-// Transcription commits a PCM feed's words by LocalAgreement-2: a word is committed once two successive hypotheses agree on it.
-type Transcription struct {
-	mu        sync.Mutex
-	done      atomic.Bool // Run has returned; no more words are coming
-	latestEnd float64     // end of the last committed word, in seconds
-}
-
-// LatestEnd is the end of the last committed word, in seconds.
-func (t *Transcription) LatestEnd() float64 {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.latestEnd
-}
-
-// Done reports whether Run has returned, so no further words will appear.
-func (t *Transcription) Done() bool { return t.done.Load() }
-
-func (t *Transcription) setFrontier(sec float64) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.latestEnd = max(t.latestEnd, sec)
-}
-
-func (t *Transcription) markDone() { t.done.Store(true) }
-
-// Run commits pcm's words into sink until pcm ends; open readies the recognizer, and release frees it.
-func (t *Transcription) Run(ctx context.Context, pcm io.Reader, open func(context.Context) (r Recognizer, release func(), err error), sink *Cues) error {
-	defer t.markDone() // runs last: cues are flushed before Done() flips
-	defer sink.Close() // runs first: flush the final pending words
-
-	recognizer, release, err := open(ctx)
-	if err != nil {
-		return err
-	}
-	defer release()
-
+// Transcribe commits a PCM feed's words by LocalAgreement-2: a word is committed
+// once two successive hypotheses agree on it. The caller owns the recognizer.
+func Transcribe(ctx context.Context, pcm io.Reader, recognizer Recognizer, sink *Cues) error {
+	defer sink.Close()
 	step := make([]byte, stepSeconds*bytesPerSec)
 	var (
 		buf      []float32 // working audio window
@@ -105,15 +71,22 @@ func (t *Transcription) Run(ctx context.Context, pcm io.Reader, open func(contex
 		var agreed []Word
 		// The recognizer needs at least 100ms, which only the final step can lack.
 		if len(buf) >= SampleRate/10 {
-			agreed, prev = confirm(ctx, recognizer, buf, bufStart, prompt, prev, frontier, atEOF)
+			agreed, prev, err = confirm(ctx, recognizer, buf, bufStart, prompt, prev, frontier, atEOF)
+			if err != nil {
+				return err
+			}
 			if len(agreed) > 0 {
 				frontier = agreed[len(agreed)-1].End
 				history = append(history, agreed...)
-				t.setFrontier(frontier)
 			}
 		}
 
-		sink.Commit(agreed, settledTo(frontier, bufStart, buf, prev))
+		settled := settledTo(frontier, bufStart, buf, prev)
+		if !atEOF && len(prev) == 0 {
+			// Silence also needs a successor window before it becomes immutable.
+			settled = max(frontier, settled-stepSeconds)
+		}
+		sink.Commit(agreed, settled)
 
 		if atEOF {
 			slog.InfoContext(ctx, "transcription finished", "transcribed_seconds", int(frontier))
@@ -139,19 +112,18 @@ func readStep(pcm io.Reader, step []byte) (int, bool, error) {
 	return n, atEOF, nil
 }
 
-func confirm(ctx context.Context, r Recognizer, buf []float32, bufStart float64, prompt string, prev []Word, frontier float64, atEOF bool) (agreed, tail []Word) {
+func confirm(ctx context.Context, r Recognizer, buf []float32, bufStart float64, prompt string, prev []Word, frontier float64, atEOF bool) (agreed, tail []Word, err error) {
 	words, err := r.Recognize(ctx, buf, bufStart, prompt)
 	if err != nil {
-		slog.WarnContext(ctx, "speech recognition failed", "error", err)
-		return nil, prev
+		return nil, prev, fmt.Errorf("recognizing speech: %w", err)
 	}
 	fresh := dropCommitted(words, frontier)
 	// The final window has no successor to agree with, so it is committed whole.
 	if atEOF {
-		return fresh, prev
+		return fresh, nil, nil
 	}
 	agreed = agreedPrefix(prev, fresh)
-	return agreed, fresh[len(agreed):]
+	return agreed, fresh[len(agreed):], nil
 }
 
 // settledTo is how far the cues are settled: the frontier while a tail is pending, the buffer's end otherwise.

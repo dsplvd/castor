@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
@@ -118,6 +119,8 @@ func (s *session) keypress(ctx context.Context, key string) error {
 // Stop leaves the channel for the home screen, which ends its playback.
 func (s *session) Stop(ctx context.Context) error { return s.keypress(ctx, "Home") }
 
+const startupTimeout = 30 * time.Second
+
 const mediaPlayerQuery = "/query/media-player"
 
 // playerState is the state /query/media-player reports.
@@ -127,10 +130,16 @@ func (s *session) playerState(ctx context.Context) (string, error) {
 		return "", err
 	}
 	var player struct {
-		State string `xml:"state,attr"`
+		State        string `xml:"state,attr"`
+		Error        bool   `xml:"error,attr"`
+		ErrorMessage string `xml:"error-message"`
+		ErrorCode    string `xml:"error-code"`
 	}
 	if err := xml.Unmarshal(body, &player); err != nil {
 		return "", fmt.Errorf("decoding roku player state: %w", err)
+	}
+	if player.Error {
+		return "", &device.PlaybackError{Err: fmt.Errorf("roku playback failed (code %s): %s", player.ErrorCode, player.ErrorMessage)}
 	}
 	return player.State, nil
 }
@@ -138,29 +147,31 @@ func (s *session) playerState(ctx context.Context) (string, error) {
 // AwaitEnd polls the player until it closes or stops after having played.
 func (s *session) AwaitEnd(ctx context.Context) error {
 	var active bool
+	started := time.Now()
 	return device.AwaitPolledEnd(ctx, s.name, mediaPlayerQuery, func(ctx context.Context) (bool, error) {
 		state, err := s.playerState(ctx)
 		if err != nil {
 			return false, err
 		}
-		active = active || playing(state) || state == statePause
+		active = active || state == "play" || state == statePause
+		if !active && time.Since(started) >= startupTimeout {
+			return false, &device.PlaybackError{Err: fmt.Errorf("roku did not start playback within %s (state %q)", startupTimeout, state)}
+		}
 		return active && over(state), nil
 	})
 }
 
 // Capabilities describes what Castor's channel plays.
 func (s *session) Capabilities() *mediav1.Capabilities {
-	return &mediav1.Capabilities{
-		SelfFetch:       true,
-		Containers:      []mediav1.Container{mediav1.Container_CONTAINER_HLS, mediav1.Container_CONTAINER_MP4, mediav1.Container_CONTAINER_MKV},
-		ServedContainer: mediav1.Container_CONTAINER_HLS,
-		Video:           []*mediav1.VideoSupport{device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264)},
-		Audio: []*mediav1.AudioSupport{
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 6},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_AC3},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_EAC3},
-		},
+	caps := &mediav1.Capabilities{Provenance: "Castor Roku channel defaults; model/firmware limits unverified", SelfFetch: true}
+	for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3} {
+		tracks := &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}}
+		caps.Formats = append(caps.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{}}, Tracks: tracks})
+		for _, container := range []mediav1.ProgressiveSupport_Container{mediav1.ProgressiveSupport_CONTAINER_MP4, mediav1.ProgressiveSupport_CONTAINER_MKV} {
+			caps.Formats = append(caps.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: container}}, Tracks: tracks})
+		}
 	}
+	return caps
 }
 
 func (s *session) Close() error { return nil }

@@ -23,6 +23,7 @@ import (
 func TestACastNobodyLendsADeviceIsAbandonedAfterItsGrace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		svc := New(func(*mediav1.PlaybackSettings) Caster { return nil }, &url.URL{Scheme: "http", Host: "127.0.0.1:8410"})
+		t.Cleanup(func() { svc.Drain(context.Background()) })
 		id := castid.New()
 		if _, err := svc.Start(t.Context(), &mediav1.StartRequest{CastId: id}); err != nil {
 			t.Fatal(err)

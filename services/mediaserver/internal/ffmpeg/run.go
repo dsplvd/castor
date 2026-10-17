@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os/exec"
 	"strings"
@@ -16,6 +17,9 @@ func Run(ctx context.Context, path string, args []string, stdin io.Reader, stdou
 	stderr := &byteTail{}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	err = cmd.Run()
+	if cause := context.Cause(ctx); err != nil && cause != nil {
+		err = errors.Join(cause, err)
+	}
 	return strings.TrimSpace(string(stderr.buf)), err
 }
 

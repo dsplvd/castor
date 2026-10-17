@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"testing"
@@ -11,6 +12,19 @@ import (
 
 func probeJSON(format, streams string) []byte {
 	return []byte(`{"streams":[` + streams + `],"format":{` + format + `}}`)
+}
+
+func TestProbeDistinguishesUnknownAndZeroMediaOrigins(t *testing.T) {
+	for _, value := range []string{"0", "10.25", "N/A", "NaN", "Inf", "999999999999999"} {
+		info, err := decode(probeJSON(fmt.Sprintf(`"format_name":"mpegts","start_time":%q`, value), h264Stream), 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := value == "0" || value == "10.25"
+		if info.StartKnown != want {
+			t.Errorf("start %s known=%v, want %v", value, info.StartKnown, want)
+		}
+	}
 }
 
 const (
@@ -127,7 +141,7 @@ func TestTheProbeReadsWhatDecidesWhetherAPictureCanBeCopied(t *testing.T) {
 }
 
 func TestAHighBitDepthPictureCannotBeCopiedAsEightBit(t *testing.T) {
-	device := media.Capabilities{Video: []media.VideoSupport{{Codec: media.CodecH264}}}
+	device := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
 	for _, format := range []string{"yuv444p9le", "yuv444p14le", "yuv444p16le"} {
 		out := probeJSON(vodFormat, `{"codec_type":"video","codec_name":"h264","width":64,"height":64,"pix_fmt":"`+format+`"}`)
 		info, err := decode(out, 0, -1)
@@ -142,5 +156,40 @@ func TestAHighBitDepthPictureCannotBeCopiedAsEightBit(t *testing.T) {
 	info, err := decode(out, 0, -1)
 	if err != nil || !device.CanCopyVideo(info) {
 		t.Errorf("eight-bit NV12 was refused: %+v (%v)", info, err)
+	}
+}
+
+func TestSelectedVideoOffsetUsesItsInputClock(t *testing.T) {
+	for _, tc := range []struct {
+		name, formatStart, videoStart string
+		offset                        time.Duration
+		known                         bool
+	}{
+		{"audio leads", "7", "9", 2 * time.Second, true},
+		{"picture starts first", "7", "7", 0, true},
+		{"reordered frames", "1.4", "1.464", 64 * time.Millisecond, true},
+		{"negative origin", "-2", "0", 2 * time.Second, true},
+		{"unknown input", "N/A", "2", 0, false},
+		{"unknown video", "0", "N/A", 0, false},
+		{"nonfinite video", "0", "NaN", 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			streams := fmt.Sprintf(`{"codec_type":"video","codec_name":"h264","width":64,"height":64,"start_time":%q}`, tc.videoStart)
+			info, err := decode(probeJSON(fmt.Sprintf(`"format_name":"mp4","start_time":%q`, tc.formatStart), streams), 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			delta := time.Duration(0)
+			if info.VideoStartOffset != nil {
+				delta = *info.VideoStartOffset - tc.offset
+			}
+			if (info.VideoStartOffset != nil) != tc.known || delta < -time.Nanosecond || delta > time.Nanosecond {
+				t.Fatalf("offset=%v known=%v; want %v %v", info.VideoStartOffset, info.VideoStartOffset != nil, tc.offset, tc.known)
+			}
+			carried := (media.ProbeInfo{}).TakeVideo(info)
+			if carried.VideoStartOffset != info.VideoStartOffset {
+				t.Fatal("TakeVideo lost selected track clock")
+			}
+		})
 	}
 }

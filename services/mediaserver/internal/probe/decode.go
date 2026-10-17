@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json/v2"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 )
 
 const showEntries = "format=format_name,bit_rate,duration,start_time:" +
-	"stream=index,codec_type,codec_name,profile,level,width,height,pix_fmt,color_transfer,field_order,channels,sample_rate:" +
+	"stream=index,start_time,codec_type,codec_name,profile,level,width,height,pix_fmt,color_transfer,field_order,channels,sample_rate:" +
 	"stream_disposition=attached_pic:stream_side_data=rotation:" +
 	"program=program_id:program_stream_disposition=attached_pic:" +
 	"frame=stream_index,interlaced_frame"
@@ -23,6 +24,7 @@ const showEntries = "format=format_name,bit_rate,duration,start_time:" +
 func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 	var result struct {
 		Streams []struct {
+			StartTime     string `json:"start_time"`
 			Index         int    `json:"index"`
 			CodecType     string `json:"codec_type"`
 			CodecName     string `json:"codec_name"`
@@ -73,8 +75,9 @@ func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 	if secs, err := strconv.ParseFloat(result.Format.Duration, 64); err == nil && secs > 0 {
 		info.Duration = time.Duration(secs * float64(time.Second))
 	}
-	if secs, err := strconv.ParseFloat(result.Format.StartTime, 64); err == nil {
+	if secs, err := strconv.ParseFloat(result.Format.StartTime, 64); err == nil && !math.IsNaN(secs) && !math.IsInf(secs, 0) && math.Abs(secs) < float64(math.MaxInt64)/float64(time.Second) {
 		info.Start = time.Duration(secs * float64(time.Second))
+		info.StartKnown = true
 	}
 
 	videoSeen, audioSeen := 0, 0
@@ -88,6 +91,10 @@ func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 			if videoSeen == videoIndex {
 				// Dimensionless selected stream occupies real map index but establishes no picture envelope.
 				if s.Width > 0 && s.Height > 0 {
+					if secs, err := strconv.ParseFloat(s.StartTime, 64); info.StartKnown && err == nil && !math.IsNaN(secs) && !math.IsInf(secs, 0) && math.Abs(secs-info.Start.Seconds()) < float64(math.MaxInt64)/float64(time.Second) {
+						offset := time.Duration((secs - info.Start.Seconds()) * float64(time.Second))
+						info.VideoStartOffset = &offset
+					}
 					info.VideoCodec = media.Codec(s.CodecName)
 					info.VideoProfile = media.Profile(s.Profile)
 					info.VideoHeight = s.Height

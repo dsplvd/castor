@@ -164,7 +164,7 @@ func TestAnUntypedResponseIsTypedByItsName(t *testing.T) {
 	}
 }
 
-// adDocument is a closed pre-roll: real media too short to be the title.
+// adDocument is a short closed playlist. Its duration is not evidence of advertising.
 const adDocument = "#EXTM3U\n#EXTINF:6.000,\nad_1.ts\n#EXTINF:6.000,\nad_2.ts\n#EXT-X-ENDLIST\n"
 
 func featureDocument() string {
@@ -182,8 +182,8 @@ func timedCollector(t *testing.T, preRoll time.Duration) *collector {
 	return newCollector(t.Context(), unreadable, time.Second, 50*time.Millisecond, preRoll)
 }
 
-// Collection stops at the window once anything but an ad is held, and at the pre-roll's end when nothing is.
-func TestCollectionStopsOnceItHoldsMoreThanAds(t *testing.T) {
+// Unlabeled content, including short clips, ends collection at the normal window.
+func TestCollectionStopsForUnlabeledContent(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		body string
@@ -191,7 +191,7 @@ func TestCollectionStopsOnceItHoldsMoreThanAds(t *testing.T) {
 	}{
 		{"a feature ends it at the window", featureDocument(), 50 * time.Millisecond},
 		{"a playlist of unknown length ends it at the window", "#EXTM3U\n#EXTINF:6.000,\nlive.ts\n", 50 * time.Millisecond},
-		{"only ads end it at the pre-roll", adDocument, 400 * time.Millisecond},
+		{"short videos end it at the window", adDocument, 50 * time.Millisecond},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -337,5 +337,121 @@ func TestCollectorRetainsStreamHeadersAfterRequestFlood(t *testing.T) {
 	}
 	if entries[0].GetStream().GetHeaders()["If-None-Match"] != "" || entries[0].GetStream().GetHeaders()["X-Hop"] != "" {
 		t.Fatalf("replay carries cache/connection headers: %v", entries[0].Stream.Headers)
+	}
+}
+
+func TestCollectorQueuesDocumentsDuringReadSaturation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		started := make(chan struct{}, 20)
+		c := newCollector(t.Context(), func(network.RequestID) ([]byte, error) {
+			started <- struct{}{}
+			<-release
+			return []byte(masterDocument), nil
+		}, time.Second, time.Second, time.Second)
+		for i := range 20 {
+			id := network.RequestID(fmt.Sprintf("r%d", i))
+			c.addByURL(fmt.Sprintf("https://cdn.example/%d/master.m3u8", i), id)
+			c.askForDocument(id, 100)
+		}
+		synctest.Wait()
+		c.mu.Lock()
+		active, pending := len(started), len(c.documents)
+		c.mu.Unlock()
+		if active != maxDocumentReads || pending != 20-maxDocumentReads {
+			t.Fatalf("active=%d pending=%d", active, pending)
+		}
+		close(release)
+		c.close()
+		for _, cp := range c.entries() {
+			if cp.Ladder != castorv1.Ladder_LADDER_MULTIVARIANT {
+				t.Fatal("queued manifest lost")
+			}
+		}
+	})
+}
+
+func TestAdvertisementsAreIdentifiedByEvidenceNotDuration(t *testing.T) {
+	c := testCollector(t)
+	captureWithBody(c, "https://cdn.example/short.m3u8", "short", adDocument)
+	captureWithBody(c, "https://cdn.example/ad/preroll.m3u8", "ad", featureDocument())
+	if got := urls(c.entries()); !slices.Equal(got, []string{"https://cdn.example/short.m3u8"}) {
+		t.Fatalf("candidates=%v", got)
+	}
+	if _, onlyAds, _ := c.progress(); onlyAds {
+		t.Fatal("short video labeled as ad")
+	}
+}
+
+func TestAdLabelsRequireWholePathComponents(t *testing.T) {
+	for _, raw := range []string{"https://ad.example/feature.m3u8", "https://cdn.example/adventure/film.m3u8", "https://cdn.example/film.m3u8?ad=true", "https://cdn.example/preroll-film.m3u8", "https://cdn.example/ad/film.m3u8", "https://cdn.example/tutorial/preroll.m3u8", "https://cdn.example/ads/prerolling.m3u8", "https://cdn.example/ads/preroll7.m3u8"} {
+		if advertisementURL(raw) {
+			t.Errorf("unlabeled content rejected: %s", raw)
+		}
+	}
+}
+
+func TestExplicitAdsWaitForContentAndAreNotReturned(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := timedCollector(t, 400*time.Millisecond)
+		captureWithBody(c, "https://cdn.example/ads/mid-roll_720p.m3u8", "ad", adDocument)
+		start := time.Now()
+		entries, err := c.Wait(t.Context())
+		if err == nil || len(entries) != 0 {
+			t.Fatalf("ad-only result: %v, %v", entries, err)
+		}
+		if time.Since(start) != 400*time.Millisecond {
+			t.Fatal("did not wait for content")
+		}
+	})
+}
+
+func TestCollectorCancellationDiscardsQueuedReads(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		started := make(chan struct{}, maxDocumentReads)
+		c := newCollector(ctx, func(network.RequestID) ([]byte, error) {
+			started <- struct{}{}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}, time.Second, time.Second, time.Second)
+		for i := range 20 {
+			id := network.RequestID(fmt.Sprintf("cancel%d", i))
+			c.addByURL(fmt.Sprintf("https://cdn.example/%d.m3u8", i), id)
+			c.askForDocument(id, 100)
+		}
+		synctest.Wait()
+		cancel()
+		c.close()
+		if len(c.documents) != 0 || len(started) != maxDocumentReads {
+			t.Fatal("cancellation retained queued work")
+		}
+	})
+}
+
+func TestAdvertisingLabelsCombineNamespaceAndRole(t *testing.T) {
+	for _, path := range []string{"/ads/pre-roll/720p/index.m3u8", "/advertisement/midroll_1080.mpd", "/ad/post-roll_1.mp4", "/ads/clip-preroll-high.m3u8"} {
+		if !advertisementURL("https://cdn.example" + path) {
+			t.Errorf("explicit role not recognized: %s", path)
+		}
+	}
+}
+
+func TestCollectorCloseEndsEventAdmissionAndRetainsAcceptedDocuments(t *testing.T) {
+	c := newCollector(t.Context(), func(network.RequestID) ([]byte, error) { return []byte(masterDocument), nil }, time.Second, time.Second, time.Second)
+	c.addByURL("https://cdn.example/master.m3u8", "accepted")
+	c.askForDocument("accepted", 100)
+	c.close()
+	c.close()
+	select {
+	case <-c.events.Done():
+	default:
+		t.Fatal("browser listener context outlived collector")
+	}
+	c.addByURL("https://cdn.example/late.m3u8", "late")
+	c.askForDocument("late", 100)
+	entries := c.entries()
+	if len(entries) != 1 || entries[0].Ladder != castorv1.Ladder_LADDER_MULTIVARIANT {
+		t.Fatalf("accepted document was not drained or late event was admitted: %v", entries)
 	}
 }

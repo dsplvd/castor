@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
@@ -24,7 +23,6 @@ type session struct {
 	collector   *collector
 	centerX     float64
 	centerY     float64
-	snapshotDir string
 }
 
 func newSession(ctx context.Context, cfg BrowserConfig, targetURL string) (*session, error) {
@@ -39,16 +37,8 @@ func newSession(ctx context.Context, cfg BrowserConfig, targetURL string) (*sess
 		centerX:     float64(width) / 2,
 		centerY:     float64(height) / 2,
 	}
-	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		// Never write page tokens through a path a different user can pre-create.
-		if dir, err := os.MkdirTemp("", "castor-debug-"); err == nil {
-			s.snapshotDir = dir
-		} else {
-			slog.DebugContext(ctx, "snapshot directory unavailable", "error", err)
-		}
-	}
-	s.collector = newCollector(ctx, s.readBody, graceAfterActions, collectionWindow, preRollWindow)
-	chromedp.ListenTarget(taskCtx, s.collector.listen)
+	s.collector = newCollector(taskCtx, s.readBody, graceAfterActions, collectionWindow, preRollWindow)
+	chromedp.ListenTarget(s.collector.events, s.collector.listen)
 
 	// No deadline here: the first Run starts the browser, and its context is the browser's lifetime.
 	if err := chromedp.Run(taskCtx,
@@ -73,7 +63,6 @@ func newSession(ctx context.Context, cfg BrowserConfig, targetURL string) (*sess
 			"url", targetURL, "timeout", cfg.Timeout, "error", err)
 	}
 
-	snapshot(taskCtx, s.snapshotDir, "after_nav")
 	return s, nil
 }
 
@@ -85,9 +74,6 @@ func allocatorOpts(cfg BrowserConfig) []chromedp.ExecAllocatorOption {
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("no-sandbox", cfg.NoSandbox),
 		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
-		chromedp.Flag("disable-features", "IsolateOrigins,site-per-process"),
-		chromedp.Flag("disable-site-isolation-trials", true),
 		chromedp.Flag("disable-background-timer-throttling", true),
 		chromedp.Flag("disable-backgrounding-occluded-windows", true),
 		chromedp.Flag("disable-renderer-backgrounding", true),
@@ -122,8 +108,6 @@ type action struct {
 
 // runActions drives the page until it has been driven as far as it can usefully be driven.
 func (s *session) runActions() {
-	snapshot(s.ctx, s.snapshotDir, "pipeline_start")
-
 	actions := []action{
 		{"click", func() error { return click(s.ctx, s.centerX, s.centerY) }},
 		{"navigate iframe", func() error {
@@ -135,23 +119,18 @@ func (s *session) runActions() {
 		{"click", func() error { return click(s.ctx, s.centerX, s.centerY) }},
 	}
 
-	ran := len(actions)
-	for i, a := range actions {
+	for _, a := range actions {
 		if s.ctx.Err() != nil {
-			ran = i
-			break
+			return
 		}
 		// A master playlist is what the page was driven for, so nothing further is asked of it.
 		if s.collector.hasMaster() {
-			ran = i
-			break
+			return
 		}
 		if err := a.do(); err != nil {
 			slog.DebugContext(s.ctx, a.name+" failed", "error", err)
 		}
-		snapshot(s.ctx, s.snapshotDir, fmt.Sprintf("step_%d", i))
 	}
-	slog.DebugContext(s.ctx, "action pipeline finished", "actions_run", ran, "actions", len(actions))
 }
 
 func (s *session) Close() {

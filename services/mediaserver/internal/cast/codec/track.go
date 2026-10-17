@@ -42,7 +42,10 @@ func (t Track[E]) Name() string {
 
 // VideoEncode is the video re-encode: the encoder and the picture it produces.
 type VideoEncode struct {
-	Encoder ffmpeg.Encoder
+	Encoder  ffmpeg.Encoder
+	Profile  string
+	Level    string
+	MaxWidth int
 
 	// Bitrate is the average target (e.g. "4M"); Maxrate and Bufsize bound the instantaneous rate via VBV.
 	Bitrate string

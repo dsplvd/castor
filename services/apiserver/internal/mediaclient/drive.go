@@ -12,18 +12,17 @@ import (
 	"connectrpc.com/connect"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
-	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
-// Drive lends lent, shown as named, to cast id for the whole cast, playing what the media server asks until the cast ends or ctx does.
-func (c *Client) Drive(parent context.Context, id string, lent device.Device, named *castorv1.Device) error {
+// Drive lends lent, to cast id for the whole cast, playing what the media server asks until the cast ends or ctx does.
+func (c *Client) Drive(parent context.Context, id string, lent device.Device) error {
 	// Leaving ends the stream and every call on the device; the cast plays on without it.
 	ctx, leave := context.WithCancelCause(parent)
 	defer leave(nil)
 	d := &driver{ctx: ctx, leave: leave, c: c, castID: id, device: lent, running: map[string]context.CancelFunc{}}
 	defer d.release()
-	stream, err := c.devices.Drive(ctx, &mediav1.DriveRequest{CastId: id, Device: named, Capabilities: lent.Capabilities()})
+	stream, err := c.devices.Drive(ctx, &mediav1.DriveRequest{CastId: id, Capabilities: lent.Capabilities()})
 	if err != nil {
 		return fmt.Errorf("driving cast: %w", err)
 	}
@@ -55,14 +54,18 @@ type driver struct {
 	wg      sync.WaitGroup
 }
 
-func (d *driver) run(cmd *mediav1.DeviceCommand) error {
-	if cancel := cmd.GetCancel(); cancel != nil {
+func (d *driver) run(envelope *mediav1.DeviceCommand) error {
+	if cancel := envelope.GetCancel(); cancel != nil {
 		d.mu.Lock()
 		if stop, ok := d.running[cancel.GetCommandId()]; ok {
 			stop()
 		}
 		d.mu.Unlock()
 		return nil
+	}
+	cmd := envelope.GetCall()
+	if cmd == nil {
+		return fmt.Errorf("media server sent neither a call nor a cancellation")
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
 	d.mu.Lock()
@@ -91,19 +94,19 @@ func (d *driver) run(cmd *mediav1.DeviceCommand) error {
 	return nil
 }
 
-func (d *driver) exec(ctx context.Context, cmd *mediav1.DeviceCommand) *mediav1.AnswerRequest {
-	switch c := cmd.GetCommand().(type) {
-	case *mediav1.DeviceCommand_Play_:
+func (d *driver) exec(ctx context.Context, cmd *mediav1.DeviceCommand_Call) *mediav1.AnswerRequest {
+	switch c := cmd.GetOperation().(type) {
+	case *mediav1.DeviceCommand_Call_Play:
 		target, err := url.Parse(c.Play.GetUrl())
 		if err != nil {
 			return failure(err)
 		}
 		return outcome(d.device.Play(ctx, target, c.Play.GetContainer(), c.Play.GetCaptions()))
-	case *mediav1.DeviceCommand_AwaitEnd_:
+	case *mediav1.DeviceCommand_Call_AwaitEnd:
 		return outcome(d.device.AwaitEnd(ctx))
-	case *mediav1.DeviceCommand_Pause_:
+	case *mediav1.DeviceCommand_Call_Pause:
 		return outcome(d.device.Pause(ctx))
-	case *mediav1.DeviceCommand_Resume_:
+	case *mediav1.DeviceCommand_Call_Resume:
 		return outcome(d.device.Resume(ctx))
 	}
 	return failure(fmt.Errorf("device command %q is one this drive does not know", cmd.GetId()))
@@ -111,11 +114,7 @@ func (d *driver) exec(ctx context.Context, cmd *mediav1.DeviceCommand) *mediav1.
 
 // release abandons every call still running: nothing drives the device past this drive.
 func (d *driver) release() {
-	d.mu.Lock()
-	for _, stop := range d.running {
-		stop()
-	}
-	d.mu.Unlock()
+	d.leave(nil)
 	d.wg.Wait()
 }
 

@@ -46,8 +46,7 @@ func seen(t *testing.T) (client *http.Client, url string, got chan string) {
 		got <- id
 		return out.Send(&emptypb.Empty{})
 	}, connect.WithInterceptors(Interceptor())))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+	srv := httptest.NewTestServer(t, mux)
 	return srv.Client(), srv.URL, got
 }
 

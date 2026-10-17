@@ -4,18 +4,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
-	"github.com/stupside/castor/services/mediaserver/internal/probe"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
@@ -35,8 +34,8 @@ func handoffStream() *source.Stream {
 
 func TestAHandoffBuildsNoLocalMachinery(t *testing.T) {
 	var asked atomic.Int64
-	dev := &fakeDevice{caps: chromecastLike(media.MP4)}
-	got := Cast{Timelines: direct{}, MaxHeight: 1080, Device: dev, Listeners: countedListeners{asked: &asked}}.Run(t.Context(),
+	dev := &fakeDevice{caps: chromecastLike(media.MP4), ended: true}
+	got := Cast{Timelines: direct{}, Outputs: adapters.Default(), MaxHeight: 1080, Device: dev, Listeners: countedListeners{asked: &asked}}.Run(t.Context(),
 		recovery.Attempt{Program: programFromStream(t, handoffStream())})
 	if got.Err != nil {
 		t.Fatalf("a handoff depended on local relay resources: %v", got.Err)
@@ -69,28 +68,18 @@ func TestADeviceThatRefusesPlayIsBlamed(t *testing.T) {
 // TestEveryAttemptOwnsAFreshWorkDirectoryAndLeavesNoneBehind is what makes a revised cast safe to offer.
 func TestEveryAttemptOwnsAFreshWorkDirectoryAndLeavesNoneBehind(t *testing.T) {
 	var dirs []string
-	watchDir := func(_ context.Context, workDir string) Burn {
-		dirs = append(dirs, workDir)
-		if _, err := os.Stat(workDir); err != nil {
-			t.Errorf("the read started with no work directory to buffer into: %v", err)
-		}
-		return nil
-	}
-
-	candidate := &source.Stream{URL: &url.URL{Scheme: "https", Host: "cdn.example"}, ContentType: media.MP4}
 	for range 2 {
-		// No ffmpeg configured, so the read fails after the work directory exists.
-		program := programFromStream(t, candidate)
-		// Sound the read must carry, so an unprobed read is still transcribed and the hook sees its directory.
-		for i := range program.Tracks {
-			program.Tracks[i].Optional = false
+		s := open(t.Context(), Cast{Timelines: direct{}, Outputs: adapters.Default()}, recovery.Attempt{Program: programFromStream(t, handoffStream())})
+		work, _, err := s.prepare()
+		if err != nil {
+			t.Fatal(err)
 		}
-		out := Cast{
-			Probes: probe.FFprobe(""), Timelines: direct{}, InputArgs: formats.InputArgs,
-			Device: &fakeDevice{caps: dlnaLike()}, Subtitles: watchDir, Listeners: loopback{},
-		}.Run(t.Context(), recovery.Attempt{Program: program, Fetch: sourceFetchPlan(t, program, 30*time.Second)})
-		if out.Err == nil {
-			t.Fatal("a cast with no ffmpeg to read with reported success")
+		dirs = append(dirs, work)
+		if _, err := os.Stat(work); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.releases.release(); err != nil {
+			t.Fatal(err)
 		}
 	}
 

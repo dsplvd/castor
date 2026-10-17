@@ -5,8 +5,6 @@
 import type { GenEnum, GenExtension, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, extDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { Device } from "../../v1/device_pb";
-import { file_castor_v1_device } from "../../v1/device_pb";
 import type { EnumValueOptions } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_descriptor } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -15,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file castor/media/v1/device.proto.
  */
 export const file_castor_media_v1_device: GenFile = /*@__PURE__*/
-  fileDesc("ChxjYXN0b3IvbWVkaWEvdjEvZGV2aWNlLnByb3RvEg9jYXN0b3IubWVkaWEudjEikAEKDERyaXZlUmVxdWVzdBIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABEikKBmRldmljZRgCIAEoCzIRLmNhc3Rvci52MS5EZXZpY2VCBrpIA8gBARI7CgxjYXBhYmlsaXRpZXMYAyABKAsyHS5jYXN0b3IubWVkaWEudjEuQ2FwYWJpbGl0aWVzQga6SAPIAQEiSAoNRHJpdmVSZXNwb25zZRI3Cgdjb21tYW5kGAEgASgLMh4uY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmRCBrpIA8gBASLDAQoNQW5zd2VyUmVxdWVzdBIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABEhsKCmNvbW1hbmRfaWQYAiABKAlCB7pIBHICEAESMwoEZG9uZRgDIAEoCzIjLmNhc3Rvci5tZWRpYS52MS5BbnN3ZXJSZXF1ZXN0LkRvbmVIABItCgVlcnJvchgEIAEoCzIcLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VFcnJvckgAGgYKBERvbmVCDwoGYW5zd2VyEgW6SAIIASIQCg5BbnN3ZXJSZXNwb25zZSKTAwoMQ2FwYWJpbGl0aWVzEi4KCmNvbnRhaW5lcnMYASADKA4yGi5jYXN0b3IubWVkaWEudjEuQ29udGFpbmVyEiwKBXZpZGVvGAIgAygLMh0uY2FzdG9yLm1lZGlhLnYxLlZpZGVvU3VwcG9ydBIsCgVhdWRpbxgDIAMoCzIdLmNhc3Rvci5tZWRpYS52MS5BdWRpb1N1cHBvcnQSNAoQc2VydmVkX2NvbnRhaW5lchgEIAEoDjIaLmNhc3Rvci5tZWRpYS52MS5Db250YWluZXISFAoMZGVpbnRlcmxhY2VzGAUgASgIEmEKDnNlcnZlZF9oZWFkZXJzGAYgAygLMjAuY2FzdG9yLm1lZGlhLnYxLkNhcGFiaWxpdGllcy5TZXJ2ZWRIZWFkZXJzRW50cnlCF7pIFJoBESIFcgPAAQEqCHIGyAEAwAECEhIKCnNlbGZfZmV0Y2gYByABKAgaNAoSU2VydmVkSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijQEKDFZpZGVvU3VwcG9ydBIqCgVjb2RlYxgBIAEoDjIbLmNhc3Rvci5tZWRpYS52MS5WaWRlb0NvZGVjEioKCHByb2ZpbGVzGAIgAygOMhguY2FzdG9yLm1lZGlhLnYxLlByb2ZpbGUSEgoKYml0X2RlcHRocxgDIAMoDRIRCgltYXhfbGV2ZWwYBCABKA0iUAoMQXVkaW9TdXBwb3J0EioKBWNvZGVjGAEgASgOMhsuY2FzdG9yLm1lZGlhLnYxLkF1ZGlvQ29kZWMSFAoMbWF4X2NoYW5uZWxzGAIgASgNIuUFCg1EZXZpY2VDb21tYW5kEgoKAmlkGAEgASgJEjMKBHBsYXkYAiABKAsyIy5jYXN0b3IubWVkaWEudjEuRGV2aWNlQ29tbWFuZC5QbGF5SAASPAoJYXdhaXRfZW5kGAMgASgLMicuY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmQuQXdhaXRFbmRIABI3CgZjYW5jZWwYBCABKAsyJS5jYXN0b3IubWVkaWEudjEuRGV2aWNlQ29tbWFuZC5DYW5jZWxIABI1CgVwYXVzZRgFIAEoCzIkLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VDb21tYW5kLlBhdXNlSAASNwoGcmVzdW1lGAYgASgLMiUuY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmQuUmVzdW1lSAAa2AEKBFBsYXkSlAEKA3VybBgBIAEoCUKGAbpIggG6AXoKDXBsYXkudXJsLmh0dHASHG11c3QgYmUgYW4gaHR0cCBvciBodHRwcyBVUkwaS3RoaXMuaXNVcmkoKSAmJiAodGhpcy5zdGFydHNXaXRoKCdodHRwOi8vJykgfHwgdGhpcy5zdGFydHNXaXRoKCdodHRwczovLycpKXIDGIBAEjkKCWNvbnRhaW5lchgCIAEoDjIaLmNhc3Rvci5tZWRpYS52MS5Db250YWluZXJCCrpIB4IBBBABIAAaCgoIQXdhaXRFbmQaBwoFUGF1c2UaCAoGUmVzdW1lGiUKBkNhbmNlbBIbCgpjb21tYW5kX2lkGAEgASgJQge6SARyAhABOnm6SHYadAoRZGV2aWNlX2NvbW1hbmQuaWQSOmlkIGlzIHNldCBvbiBldmVyeSBjb21tYW5kIGJ1dCBjYW5jZWwsIGFuZCBlbXB0eSBvbiBjYW5jZWwaI2hhcyh0aGlzLmNhbmNlbCkgPT0gKHRoaXMuaWQgPT0gJycpQhAKB2NvbW1hbmQSBbpIAggBIqUBCgtEZXZpY2VFcnJvchIaCgdtZXNzYWdlGAEgASgJQge6SARyAhABSAASMQoEZ29uZRgCIAEoCzIhLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VFcnJvci5Hb25lSAAaNwoER29uZRIOCgZkZXZpY2UYASABKAkSEAoIb2JzZXJ2ZWQYAiABKAkSDQoFY2F1c2UYAyABKAlCDgoFZXJyb3ISBbpIAggBKukBCglDb250YWluZXISGQoVQ09OVEFJTkVSX1VOU1BFQ0lGSUVEEAASIAoNQ09OVEFJTkVSX01QNBABGg3C8xgJdmlkZW8vbXA0EiQKEENPTlRBSU5FUl9NUEVHVFMQAhoOwvMYCnZpZGVvL21wMnQSLAoNQ09OVEFJTkVSX0hMUxADGhnC8xgVYXBwbGljYXRpb24veC1tcGVnVVJMEicKDUNPTlRBSU5FUl9NS1YQBBoUwvMYEHZpZGVvL3gtbWF0cm9za2ESIgoOQ09OVEFJTkVSX1dFQk0QBRoOwvMYCnZpZGVvL3dlYm0qagoKVmlkZW9Db2RlYxIbChdWSURFT19DT0RFQ19VTlNQRUNJRklFRBAAEhQKEFZJREVPX0NPREVDX0gyNjQQARIUChBWSURFT19DT0RFQ19IRVZDEAISEwoPVklERU9fQ09ERUNfVlA4EAMqlgEKCkF1ZGlvQ29kZWMSGwoXQVVESU9fQ09ERUNfVU5TUEVDSUZJRUQQABITCg9BVURJT19DT0RFQ19BQUMQARITCg9BVURJT19DT0RFQ19BQzMQAhIUChBBVURJT19DT0RFQ19FQUMzEAMSEwoPQVVESU9fQ09ERUNfTVAzEAQSFgoSQVVESU9fQ09ERUNfVk9SQklTEAUqkwEKB1Byb2ZpbGUSFwoTUFJPRklMRV9VTlNQRUNJRklFRBAAEhQKEFBST0ZJTEVfQkFTRUxJTkUQARIgChxQUk9GSUxFX0NPTlNUUkFJTkVEX0JBU0VMSU5FEAISEAoMUFJPRklMRV9NQUlOEAMSEwoPUFJPRklMRV9NQUlOXzEwEAQSEAoMUFJPRklMRV9ISUdIEAUypAEKDURldmljZVNlcnZpY2USSAoFRHJpdmUSHS5jYXN0b3IubWVkaWEudjEuRHJpdmVSZXF1ZXN0Gh4uY2FzdG9yLm1lZGlhLnYxLkRyaXZlUmVzcG9uc2UwARJJCgZBbnN3ZXISHi5jYXN0b3IubWVkaWEudjEuQW5zd2VyUmVxdWVzdBofLmNhc3Rvci5tZWRpYS52MS5BbnN3ZXJSZXNwb25zZTo3CgRtaW1lEiEuZ29vZ2xlLnByb3RvYnVmLkVudW1WYWx1ZU9wdGlvbnMYuI4DIAEoCVIEbWltZWIGcHJvdG8z", [file_buf_validate_validate, file_castor_v1_device, file_google_protobuf_descriptor]);
+  fileDesc("ChxjYXN0b3IvbWVkaWEvdjEvZGV2aWNlLnByb3RvEg9jYXN0b3IubWVkaWEudjEicwoMRHJpdmVSZXF1ZXN0EhgKB2Nhc3RfaWQYASABKAlCB7pIBHICEAESOwoMY2FwYWJpbGl0aWVzGAMgASgLMh0uY2FzdG9yLm1lZGlhLnYxLkNhcGFiaWxpdGllc0IGukgDyAEBSgQIAhADUgZkZXZpY2UiSAoNRHJpdmVSZXNwb25zZRI3Cgdjb21tYW5kGAEgASgLMh4uY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmRCBrpIA8gBASLDAQoNQW5zd2VyUmVxdWVzdBIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABEhsKCmNvbW1hbmRfaWQYAiABKAlCB7pIBHICEAESMwoEZG9uZRgDIAEoCzIjLmNhc3Rvci5tZWRpYS52MS5BbnN3ZXJSZXF1ZXN0LkRvbmVIABItCgVlcnJvchgEIAEoCzIcLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VFcnJvckgAGgYKBERvbmVCDwoGYW5zd2VyEgW6SAIIASIQCg5BbnN3ZXJSZXNwb25zZSKKAwoMQ2FwYWJpbGl0aWVzEjwKB2Zvcm1hdHMYCSADKAsyHi5jYXN0b3IubWVkaWEudjEuRm9ybWF0U3VwcG9ydEILukgIkgEFCAEQgAESEgoKcHJvdmVuYW5jZRgKIAEoCRIUCgxkZWludGVybGFjZXMYBSABKAgSYQoOc2VydmVkX2hlYWRlcnMYBiADKAsyMC5jYXN0b3IubWVkaWEudjEuQ2FwYWJpbGl0aWVzLlNlcnZlZEhlYWRlcnNFbnRyeUIXukgUmgERIgVyA8ABASoIcgbIAQDAAQISEgoKc2VsZl9mZXRjaBgHIAEoCBo0ChJTZXJ2ZWRIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUoECAEQAkoECAIQA0oECAMQBEoECAQQBUoECAgQCUoECAsQDFIKY29udGFpbmVyc1IFdmlkZW9SBWF1ZGlvUhBzZXJ2ZWRfY29udGFpbmVyUghjYXB0aW9uc1ILaGxzX3dlYl92dHQi+gIKDUZvcm1hdFN1cHBvcnQSOgoLcHJvZ3Jlc3NpdmUYBCABKAsyIy5jYXN0b3IubWVkaWEudjEuUHJvZ3Jlc3NpdmVTdXBwb3J0SAASKgoDaGxzGAUgASgLMhsuY2FzdG9yLm1lZGlhLnYxLkhMU1N1cHBvcnRIABIuCgV2aWRlbxgCIAEoCzIdLmNhc3Rvci5tZWRpYS52MS5WaWRlb1N1cHBvcnRIARIuCgVhdWRpbxgDIAEoCzIdLmNhc3Rvci5tZWRpYS52MS5BdWRpb1N1cHBvcnRIARIoCgJhdhgHIAEoCzIaLmNhc3Rvci5tZWRpYS52MS5BVlN1cHBvcnRIARJBCghjYXB0aW9ucxgGIAMoDjIeLmNhc3Rvci5tZWRpYS52MS5DYXB0aW9uRm9ybWF0Qg+6SAySAQkiB4IBBBABIABCEgoJdHJhbnNwb3J0EgW6SAIIAUIPCgZ0cmFja3MSBbpIAggBSgQIARACUgljb250YWluZXIidwoJQVZTdXBwb3J0EjQKBXZpZGVvGAEgASgLMh0uY2FzdG9yLm1lZGlhLnYxLlZpZGVvU3VwcG9ydEIGukgDyAEBEjQKBWF1ZGlvGAIgASgLMh0uY2FzdG9yLm1lZGlhLnYxLkF1ZGlvU3VwcG9ydEIGukgDyAEBItoBChJQcm9ncmVzc2l2ZVN1cHBvcnQSTAoJY29udGFpbmVyGAEgASgOMi0uY2FzdG9yLm1lZGlhLnYxLlByb2dyZXNzaXZlU3VwcG9ydC5Db250YWluZXJCCrpIB4IBBBABIAAidgoJQ29udGFpbmVyEhkKFUNPTlRBSU5FUl9VTlNQRUNJRklFRBAAEhEKDUNPTlRBSU5FUl9NUDQQARIUChBDT05UQUlORVJfTVBFR1RTEAISEQoNQ09OVEFJTkVSX01LVhADEhIKDkNPTlRBSU5FUl9XRUJNEAQijgEKCkhMU1N1cHBvcnQSQgoJc3VidGl0bGVzGAEgASgOMiUuY2FzdG9yLm1lZGlhLnYxLkhMU1N1cHBvcnQuU3VidGl0bGVzQgi6SAWCAQIQASI8CglTdWJ0aXRsZXMSGQoVU1VCVElUTEVTX1VOU1BFQ0lGSUVEEAASFAoQU1VCVElUTEVTX1dFQlZUVBABIsABCgxWaWRlb1N1cHBvcnQSNgoFY29kZWMYASABKA4yGy5jYXN0b3IubWVkaWEudjEuVmlkZW9Db2RlY0IKukgHggEEEAEgABI9Cghwcm9maWxlcxgCIAMoDjIYLmNhc3Rvci5tZWRpYS52MS5Qcm9maWxlQhG6SA6SAQsQECIHggEEEAEgABImCgpiaXRfZGVwdGhzGAMgAygNQhK6SA+SAQwQCCIIKgYwCDAKMAwSEQoJbWF4X2xldmVsGAQgASgNIlwKDEF1ZGlvU3VwcG9ydBI2CgVjb2RlYxgBIAEoDjIbLmNhc3Rvci5tZWRpYS52MS5BdWRpb0NvZGVjQgq6SAeCAQQQASAAEhQKDG1heF9jaGFubmVscxgCIAEoDSLUCAoNRGV2aWNlQ29tbWFuZBIzCgRjYWxsGAcgASgLMiMuY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmQuQ2FsbEgAEjcKBmNhbmNlbBgEIAEoCzIlLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VDb21tYW5kLkNhbmNlbEgAGpICCgRDYWxsEhMKAmlkGAEgASgJQge6SARyAhABEjMKBHBsYXkYAiABKAsyIy5jYXN0b3IubWVkaWEudjEuRGV2aWNlQ29tbWFuZC5QbGF5SAASPAoJYXdhaXRfZW5kGAMgASgLMicuY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmQuQXdhaXRFbmRIABI1CgVwYXVzZRgEIAEoCzIkLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VDb21tYW5kLlBhdXNlSAASNwoGcmVzdW1lGAUgASgLMiUuY2FzdG9yLm1lZGlhLnYxLkRldmljZUNvbW1hbmQuUmVzdW1lSABCEgoJb3BlcmF0aW9uEgW6SAIIARqSAgoEUGxheRKUAQoDdXJsGAEgASgJQoYBukiCAboBegoNcGxheS51cmwuaHR0cBIcbXVzdCBiZSBhbiBodHRwIG9yIGh0dHBzIFVSTBpLdGhpcy5pc1VyaSgpICYmICh0aGlzLnN0YXJ0c1dpdGgoJ2h0dHA6Ly8nKSB8fCB0aGlzLnN0YXJ0c1dpdGgoJ2h0dHBzOi8vJykpcgMYgEASOQoJY29udGFpbmVyGAIgASgOMhouY2FzdG9yLm1lZGlhLnYxLkNvbnRhaW5lckIKukgHggEEEAEgABI4CghjYXB0aW9ucxgDIAMoCzImLmNhc3Rvci5tZWRpYS52MS5EZXZpY2VDb21tYW5kLkNhcHRpb24akAIKB0NhcHRpb24SlwEKA3VybBgBIAEoCUKJAbpIhQG6AX0KEGNhcHRpb24udXJsLmh0dHASHG11c3QgYmUgYW4gaHR0cCBvciBodHRwcyBVUkwaS3RoaXMuaXNVcmkoKSAmJiAodGhpcy5zdGFydHNXaXRoKCdodHRwOi8vJykgfHwgdGhpcy5zdGFydHNXaXRoKCdodHRwczovLycpKXIDGIBAEjoKBmZvcm1hdBgCIAEoDjIeLmNhc3Rvci5tZWRpYS52MS5DYXB0aW9uRm9ybWF0Qgq6SAeCAQQQASAAEhAKCGxhbmd1YWdlGAMgASgJEgwKBG5hbWUYBCABKAkSDwoHZGVmYXVsdBgFIAEoCBoKCghBd2FpdEVuZBoHCgVQYXVzZRoICgZSZXN1bWUaJQoGQ2FuY2VsEhsKCmNvbW1hbmRfaWQYASABKAlCB7pIBHICEAFCEAoHY29tbWFuZBIFukgCCAFKBAgBEAJKBAgCEANKBAgDEARKBAgFEAZKBAgGEAdSAmlkUgRwbGF5Uglhd2FpdF9lbmRSBXBhdXNlUgZyZXN1bWUipQEKC0RldmljZUVycm9yEhoKB21lc3NhZ2UYASABKAlCB7pIBHICEAFIABIxCgRnb25lGAIgASgLMiEuY2FzdG9yLm1lZGlhLnYxLkRldmljZUVycm9yLkdvbmVIABo3CgRHb25lEg4KBmRldmljZRgBIAEoCRIQCghvYnNlcnZlZBgCIAEoCRINCgVjYXVzZRgDIAEoCUIOCgVlcnJvchIFukgCCAEqXwoNQ2FwdGlvbkZvcm1hdBIeChpDQVBUSU9OX0ZPUk1BVF9VTlNQRUNJRklFRBAAEhYKEkNBUFRJT05fRk9STUFUX1ZUVBABEhYKEkNBUFRJT05fRk9STUFUX1NSVBACKukBCglDb250YWluZXISGQoVQ09OVEFJTkVSX1VOU1BFQ0lGSUVEEAASIAoNQ09OVEFJTkVSX01QNBABGg3C8xgJdmlkZW8vbXA0EiQKEENPTlRBSU5FUl9NUEVHVFMQAhoOwvMYCnZpZGVvL21wMnQSLAoNQ09OVEFJTkVSX0hMUxADGhnC8xgVYXBwbGljYXRpb24veC1tcGVnVVJMEicKDUNPTlRBSU5FUl9NS1YQBBoUwvMYEHZpZGVvL3gtbWF0cm9za2ESIgoOQ09OVEFJTkVSX1dFQk0QBRoOwvMYCnZpZGVvL3dlYm0qagoKVmlkZW9Db2RlYxIbChdWSURFT19DT0RFQ19VTlNQRUNJRklFRBAAEhQKEFZJREVPX0NPREVDX0gyNjQQARIUChBWSURFT19DT0RFQ19IRVZDEAISEwoPVklERU9fQ09ERUNfVlA4EAMqlgEKCkF1ZGlvQ29kZWMSGwoXQVVESU9fQ09ERUNfVU5TUEVDSUZJRUQQABITCg9BVURJT19DT0RFQ19BQUMQARITCg9BVURJT19DT0RFQ19BQzMQAhIUChBBVURJT19DT0RFQ19FQUMzEAMSEwoPQVVESU9fQ09ERUNfTVAzEAQSFgoSQVVESU9fQ09ERUNfVk9SQklTEAUqkwEKB1Byb2ZpbGUSFwoTUFJPRklMRV9VTlNQRUNJRklFRBAAEhQKEFBST0ZJTEVfQkFTRUxJTkUQARIgChxQUk9GSUxFX0NPTlNUUkFJTkVEX0JBU0VMSU5FEAISEAoMUFJPRklMRV9NQUlOEAMSEwoPUFJPRklMRV9NQUlOXzEwEAQSEAoMUFJPRklMRV9ISUdIEAUypAEKDURldmljZVNlcnZpY2USSAoFRHJpdmUSHS5jYXN0b3IubWVkaWEudjEuRHJpdmVSZXF1ZXN0Gh4uY2FzdG9yLm1lZGlhLnYxLkRyaXZlUmVzcG9uc2UwARJJCgZBbnN3ZXISHi5jYXN0b3IubWVkaWEudjEuQW5zd2VyUmVxdWVzdBofLmNhc3Rvci5tZWRpYS52MS5BbnN3ZXJSZXNwb25zZTo3CgRtaW1lEiEuZ29vZ2xlLnByb3RvYnVmLkVudW1WYWx1ZU9wdGlvbnMYuI4DIAEoCVIEbWltZWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_descriptor]);
 
 /**
  * @generated from message castor.media.v1.DriveRequest
@@ -25,13 +23,6 @@ export type DriveRequest = Message<"castor.media.v1.DriveRequest"> & {
    * @generated from field: string cast_id = 1;
    */
   castId: string;
-
-  /**
-   * device is the lent device as the public API names it, for the cast's lines; a pinned one has no id.
-   *
-   * @generated from field: castor.v1.Device device = 2;
-   */
-  device?: Device | undefined;
 
   /**
    * capabilities are the lent device's, read once its lender has connected to it for the whole cast.
@@ -137,26 +128,16 @@ export const AnswerResponseSchema: GenMessage<AnswerResponse> = /*@__PURE__*/
  */
 export type Capabilities = Message<"castor.media.v1.Capabilities"> & {
   /**
-   * @generated from field: repeated castor.media.v1.Container containers = 1;
-   */
-  containers: Container[];
-
-  /**
-   * @generated from field: repeated castor.media.v1.VideoSupport video = 2;
-   */
-  video: VideoSupport[];
-
-  /**
-   * @generated from field: repeated castor.media.v1.AudioSupport audio = 3;
-   */
-  audio: AudioSupport[];
-
-  /**
-   * served_container is what a served cast that remuxes is muxed into.
+   * Atomic playback envelopes in preference order; the first is the default.
    *
-   * @generated from field: castor.media.v1.Container served_container = 4;
+   * @generated from field: repeated castor.media.v1.FormatSupport formats = 9;
    */
-  servedContainer: Container;
+  formats: FormatSupport[];
+
+  /**
+   * @generated from field: string provenance = 10;
+   */
+  provenance: string;
 
   /**
    * @generated from field: bool deinterlaces = 5;
@@ -184,6 +165,180 @@ export type Capabilities = Message<"castor.media.v1.Capabilities"> & {
  */
 export const CapabilitiesSchema: GenMessage<Capabilities> = /*@__PURE__*/
   messageDesc(file_castor_media_v1_device, 4);
+
+/**
+ * @generated from message castor.media.v1.FormatSupport
+ */
+export type FormatSupport = Message<"castor.media.v1.FormatSupport"> & {
+  /**
+   * @generated from oneof castor.media.v1.FormatSupport.transport
+   */
+  transport: {
+    /**
+     * @generated from field: castor.media.v1.ProgressiveSupport progressive = 4;
+     */
+    value: ProgressiveSupport;
+    case: "progressive";
+  } | {
+    /**
+     * @generated from field: castor.media.v1.HLSSupport hls = 5;
+     */
+    value: HLSSupport;
+    case: "hls";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * @generated from oneof castor.media.v1.FormatSupport.tracks
+   */
+  tracks: {
+    /**
+     * @generated from field: castor.media.v1.VideoSupport video = 2;
+     */
+    value: VideoSupport;
+    case: "video";
+  } | {
+    /**
+     * @generated from field: castor.media.v1.AudioSupport audio = 3;
+     */
+    value: AudioSupport;
+    case: "audio";
+  } | {
+    /**
+     * @generated from field: castor.media.v1.AVSupport av = 7;
+     */
+    value: AVSupport;
+    case: "av";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * Complete subtitle documents fetched separately from media.
+   *
+   * @generated from field: repeated castor.media.v1.CaptionFormat captions = 6;
+   */
+  captions: CaptionFormat[];
+};
+
+/**
+ * Describes the message castor.media.v1.FormatSupport.
+ * Use `create(FormatSupportSchema)` to create a new message.
+ */
+export const FormatSupportSchema: GenMessage<FormatSupport> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 5);
+
+/**
+ * @generated from message castor.media.v1.AVSupport
+ */
+export type AVSupport = Message<"castor.media.v1.AVSupport"> & {
+  /**
+   * @generated from field: castor.media.v1.VideoSupport video = 1;
+   */
+  video?: VideoSupport | undefined;
+
+  /**
+   * @generated from field: castor.media.v1.AudioSupport audio = 2;
+   */
+  audio?: AudioSupport | undefined;
+};
+
+/**
+ * Describes the message castor.media.v1.AVSupport.
+ * Use `create(AVSupportSchema)` to create a new message.
+ */
+export const AVSupportSchema: GenMessage<AVSupport> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 6);
+
+/**
+ * @generated from message castor.media.v1.ProgressiveSupport
+ */
+export type ProgressiveSupport = Message<"castor.media.v1.ProgressiveSupport"> & {
+  /**
+   * @generated from field: castor.media.v1.ProgressiveSupport.Container container = 1;
+   */
+  container: ProgressiveSupport_Container;
+};
+
+/**
+ * Describes the message castor.media.v1.ProgressiveSupport.
+ * Use `create(ProgressiveSupportSchema)` to create a new message.
+ */
+export const ProgressiveSupportSchema: GenMessage<ProgressiveSupport> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 7);
+
+/**
+ * @generated from enum castor.media.v1.ProgressiveSupport.Container
+ */
+export enum ProgressiveSupport_Container {
+  /**
+   * @generated from enum value: CONTAINER_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CONTAINER_MP4 = 1;
+   */
+  MP4 = 1,
+
+  /**
+   * @generated from enum value: CONTAINER_MPEGTS = 2;
+   */
+  MPEGTS = 2,
+
+  /**
+   * @generated from enum value: CONTAINER_MKV = 3;
+   */
+  MKV = 3,
+
+  /**
+   * @generated from enum value: CONTAINER_WEBM = 4;
+   */
+  WEBM = 4,
+}
+
+/**
+ * Describes the enum castor.media.v1.ProgressiveSupport.Container.
+ */
+export const ProgressiveSupport_ContainerSchema: GenEnum<ProgressiveSupport_Container> = /*@__PURE__*/
+  enumDesc(file_castor_media_v1_device, 7, 0);
+
+/**
+ * @generated from message castor.media.v1.HLSSupport
+ */
+export type HLSSupport = Message<"castor.media.v1.HLSSupport"> & {
+  /**
+   * Subtitle rendition playlists refreshed alongside the media playlist.
+   *
+   * @generated from field: castor.media.v1.HLSSupport.Subtitles subtitles = 1;
+   */
+  subtitles: HLSSupport_Subtitles;
+};
+
+/**
+ * Describes the message castor.media.v1.HLSSupport.
+ * Use `create(HLSSupportSchema)` to create a new message.
+ */
+export const HLSSupportSchema: GenMessage<HLSSupport> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 8);
+
+/**
+ * @generated from enum castor.media.v1.HLSSupport.Subtitles
+ */
+export enum HLSSupport_Subtitles {
+  /**
+   * @generated from enum value: SUBTITLES_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SUBTITLES_WEBVTT = 1;
+   */
+  WEBVTT = 1,
+}
+
+/**
+ * Describes the enum castor.media.v1.HLSSupport.Subtitles.
+ */
+export const HLSSupport_SubtitlesSchema: GenEnum<HLSSupport_Subtitles> = /*@__PURE__*/
+  enumDesc(file_castor_media_v1_device, 8, 0);
 
 /**
  * @generated from message castor.media.v1.VideoSupport
@@ -217,7 +372,7 @@ export type VideoSupport = Message<"castor.media.v1.VideoSupport"> & {
  * Use `create(VideoSupportSchema)` to create a new message.
  */
 export const VideoSupportSchema: GenMessage<VideoSupport> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 5);
+  messageDesc(file_castor_media_v1_device, 9);
 
 /**
  * @generated from message castor.media.v1.AudioSupport
@@ -239,7 +394,7 @@ export type AudioSupport = Message<"castor.media.v1.AudioSupport"> & {
  * Use `create(AudioSupportSchema)` to create a new message.
  */
 export const AudioSupportSchema: GenMessage<AudioSupport> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 6);
+  messageDesc(file_castor_media_v1_device, 10);
 
 /**
  * DeviceCommand is one call a cast makes on the device lent to it.
@@ -248,14 +403,45 @@ export const AudioSupportSchema: GenMessage<AudioSupport> = /*@__PURE__*/
  */
 export type DeviceCommand = Message<"castor.media.v1.DeviceCommand"> & {
   /**
+   * @generated from oneof castor.media.v1.DeviceCommand.command
+   */
+  command: {
+    /**
+     * @generated from field: castor.media.v1.DeviceCommand.Call call = 7;
+     */
+    value: DeviceCommand_Call;
+    case: "call";
+  } | {
+    /**
+     * Cancellation identifies an existing call and is never answered.
+     *
+     * @generated from field: castor.media.v1.DeviceCommand.Cancel cancel = 4;
+     */
+    value: DeviceCommand_Cancel;
+    case: "cancel";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message castor.media.v1.DeviceCommand.
+ * Use `create(DeviceCommandSchema)` to create a new message.
+ */
+export const DeviceCommandSchema: GenMessage<DeviceCommand> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 11);
+
+/**
+ * @generated from message castor.media.v1.DeviceCommand.Call
+ */
+export type DeviceCommand_Call = Message<"castor.media.v1.DeviceCommand.Call"> & {
+  /**
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * @generated from oneof castor.media.v1.DeviceCommand.command
+   * @generated from oneof castor.media.v1.DeviceCommand.Call.operation
    */
-  command: {
+  operation: {
     /**
      * @generated from field: castor.media.v1.DeviceCommand.Play play = 2;
      */
@@ -269,23 +455,13 @@ export type DeviceCommand = Message<"castor.media.v1.DeviceCommand"> & {
     case: "awaitEnd";
   } | {
     /**
-     * cancel abandons a command still running; it is never answered.
-     *
-     * @generated from field: castor.media.v1.DeviceCommand.Cancel cancel = 4;
-     */
-    value: DeviceCommand_Cancel;
-    case: "cancel";
-  } | {
-    /**
-     * pause holds the device on its current picture until resume; the media server pauses a device its source cannot keep ahead of.
-     *
-     * @generated from field: castor.media.v1.DeviceCommand.Pause pause = 5;
+     * @generated from field: castor.media.v1.DeviceCommand.Pause pause = 4;
      */
     value: DeviceCommand_Pause;
     case: "pause";
   } | {
     /**
-     * @generated from field: castor.media.v1.DeviceCommand.Resume resume = 6;
+     * @generated from field: castor.media.v1.DeviceCommand.Resume resume = 5;
      */
     value: DeviceCommand_Resume;
     case: "resume";
@@ -293,11 +469,11 @@ export type DeviceCommand = Message<"castor.media.v1.DeviceCommand"> & {
 };
 
 /**
- * Describes the message castor.media.v1.DeviceCommand.
- * Use `create(DeviceCommandSchema)` to create a new message.
+ * Describes the message castor.media.v1.DeviceCommand.Call.
+ * Use `create(DeviceCommand_CallSchema)` to create a new message.
  */
-export const DeviceCommandSchema: GenMessage<DeviceCommand> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7);
+export const DeviceCommand_CallSchema: GenMessage<DeviceCommand_Call> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 11, 0);
 
 /**
  * @generated from message castor.media.v1.DeviceCommand.Play
@@ -314,6 +490,11 @@ export type DeviceCommand_Play = Message<"castor.media.v1.DeviceCommand.Play"> &
    * @generated from field: castor.media.v1.Container container = 2;
    */
   container: Container;
+
+  /**
+   * @generated from field: repeated castor.media.v1.DeviceCommand.Caption captions = 3;
+   */
+  captions: DeviceCommand_Caption[];
 };
 
 /**
@@ -321,7 +502,50 @@ export type DeviceCommand_Play = Message<"castor.media.v1.DeviceCommand.Play"> &
  * Use `create(DeviceCommand_PlaySchema)` to create a new message.
  */
 export const DeviceCommand_PlaySchema: GenMessage<DeviceCommand_Play> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7, 0);
+  messageDesc(file_castor_media_v1_device, 11, 1);
+
+/**
+ * Caption is a text track the device shows over the stream; its url is fetched like the stream's.
+ *
+ * @generated from message castor.media.v1.DeviceCommand.Caption
+ */
+export type DeviceCommand_Caption = Message<"castor.media.v1.DeviceCommand.Caption"> & {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * @generated from field: castor.media.v1.CaptionFormat format = 2;
+   */
+  format: CaptionFormat;
+
+  /**
+   * language is the ISO 639 code the track is tagged with, empty when untagged.
+   *
+   * @generated from field: string language = 3;
+   */
+  language: string;
+
+  /**
+   * @generated from field: string name = 4;
+   */
+  name: string;
+
+  /**
+   * default is shown without the viewer choosing it.
+   *
+   * @generated from field: bool default = 5;
+   */
+  default: boolean;
+};
+
+/**
+ * Describes the message castor.media.v1.DeviceCommand.Caption.
+ * Use `create(DeviceCommand_CaptionSchema)` to create a new message.
+ */
+export const DeviceCommand_CaptionSchema: GenMessage<DeviceCommand_Caption> = /*@__PURE__*/
+  messageDesc(file_castor_media_v1_device, 11, 2);
 
 /**
  * @generated from message castor.media.v1.DeviceCommand.AwaitEnd
@@ -334,7 +558,7 @@ export type DeviceCommand_AwaitEnd = Message<"castor.media.v1.DeviceCommand.Awai
  * Use `create(DeviceCommand_AwaitEndSchema)` to create a new message.
  */
 export const DeviceCommand_AwaitEndSchema: GenMessage<DeviceCommand_AwaitEnd> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7, 1);
+  messageDesc(file_castor_media_v1_device, 11, 3);
 
 /**
  * @generated from message castor.media.v1.DeviceCommand.Pause
@@ -347,7 +571,7 @@ export type DeviceCommand_Pause = Message<"castor.media.v1.DeviceCommand.Pause">
  * Use `create(DeviceCommand_PauseSchema)` to create a new message.
  */
 export const DeviceCommand_PauseSchema: GenMessage<DeviceCommand_Pause> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7, 2);
+  messageDesc(file_castor_media_v1_device, 11, 4);
 
 /**
  * @generated from message castor.media.v1.DeviceCommand.Resume
@@ -360,7 +584,7 @@ export type DeviceCommand_Resume = Message<"castor.media.v1.DeviceCommand.Resume
  * Use `create(DeviceCommand_ResumeSchema)` to create a new message.
  */
 export const DeviceCommand_ResumeSchema: GenMessage<DeviceCommand_Resume> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7, 3);
+  messageDesc(file_castor_media_v1_device, 11, 5);
 
 /**
  * @generated from message castor.media.v1.DeviceCommand.Cancel
@@ -377,7 +601,7 @@ export type DeviceCommand_Cancel = Message<"castor.media.v1.DeviceCommand.Cancel
  * Use `create(DeviceCommand_CancelSchema)` to create a new message.
  */
 export const DeviceCommand_CancelSchema: GenMessage<DeviceCommand_Cancel> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 7, 4);
+  messageDesc(file_castor_media_v1_device, 11, 6);
 
 /**
  * DeviceError is a device's failure, typed where the cast's recovery reads its kind.
@@ -408,7 +632,7 @@ export type DeviceError = Message<"castor.media.v1.DeviceError"> & {
  * Use `create(DeviceErrorSchema)` to create a new message.
  */
 export const DeviceErrorSchema: GenMessage<DeviceError> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 8);
+  messageDesc(file_castor_media_v1_device, 12);
 
 /**
  * Gone is a device established unreachable.
@@ -439,7 +663,35 @@ export type DeviceError_Gone = Message<"castor.media.v1.DeviceError.Gone"> & {
  * Use `create(DeviceError_GoneSchema)` to create a new message.
  */
 export const DeviceError_GoneSchema: GenMessage<DeviceError_Gone> = /*@__PURE__*/
-  messageDesc(file_castor_media_v1_device, 8, 0);
+  messageDesc(file_castor_media_v1_device, 12, 0);
+
+/**
+ * CaptionFormat is how a caption track is written.
+ *
+ * @generated from enum castor.media.v1.CaptionFormat
+ */
+export enum CaptionFormat {
+  /**
+   * @generated from enum value: CAPTION_FORMAT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CAPTION_FORMAT_VTT = 1;
+   */
+  VTT = 1,
+
+  /**
+   * @generated from enum value: CAPTION_FORMAT_SRT = 2;
+   */
+  SRT = 2,
+}
+
+/**
+ * Describes the enum castor.media.v1.CaptionFormat.
+ */
+export const CaptionFormatSchema: GenEnum<CaptionFormat> = /*@__PURE__*/
+  enumDesc(file_castor_media_v1_device, 0);
 
 /**
  * Container is how a stream is packaged, as a device takes it.
@@ -482,7 +734,7 @@ export enum Container {
  * Describes the enum castor.media.v1.Container.
  */
 export const ContainerSchema: GenEnum<Container> = /*@__PURE__*/
-  enumDesc(file_castor_media_v1_device, 0);
+  enumDesc(file_castor_media_v1_device, 1);
 
 /**
  * @generated from enum castor.media.v1.VideoCodec
@@ -513,7 +765,7 @@ export enum VideoCodec {
  * Describes the enum castor.media.v1.VideoCodec.
  */
 export const VideoCodecSchema: GenEnum<VideoCodec> = /*@__PURE__*/
-  enumDesc(file_castor_media_v1_device, 1);
+  enumDesc(file_castor_media_v1_device, 2);
 
 /**
  * @generated from enum castor.media.v1.AudioCodec
@@ -554,7 +806,7 @@ export enum AudioCodec {
  * Describes the enum castor.media.v1.AudioCodec.
  */
 export const AudioCodecSchema: GenEnum<AudioCodec> = /*@__PURE__*/
-  enumDesc(file_castor_media_v1_device, 2);
+  enumDesc(file_castor_media_v1_device, 3);
 
 /**
  * Profile is a video codec profile a device decodes.
@@ -597,7 +849,7 @@ export enum Profile {
  * Describes the enum castor.media.v1.Profile.
  */
 export const ProfileSchema: GenEnum<Profile> = /*@__PURE__*/
-  enumDesc(file_castor_media_v1_device, 3);
+  enumDesc(file_castor_media_v1_device, 4);
 
 /**
  * DeviceService lends a device to a cast: its lender holds it for the whole cast, playing what the cast asks through Drive and answering through Answer.

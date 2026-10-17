@@ -5,25 +5,41 @@ import (
 	"slices"
 )
 
+// Capabilities contains atomic playback envelopes in preference order.
 type Capabilities struct {
-	Containers []string
-	Video      []VideoSupport
-	Audio      []AudioSupport
-
-	// SelfFetch reports whether the device fetches a stream URL itself.
-	SelfFetch bool
-
-	// ServedContainer is what castor muxes on a served cast that remuxes.
-	ServedContainer string
-
-	// Deinterlaces is whether the device shows a picture coded as fields without combing.
-	Deinterlaces bool
-
-	// ServedHeaders are set on every response the device fetches what it is served from.
+	Formats       []FormatSupport
+	Provenance    string
+	SelfFetch     bool
+	Deinterlaces  bool
 	ServedHeaders map[string]string
+}
 
-	// Captions are the caption formats the device shows beside a stream; none shows no captions.
-	Captions []CaptionFormat
+// Transport is a complete delivery variant, including its rendition support.
+type Transport uint8
+
+const (
+	TransportMP4 Transport = iota + 1
+	TransportMPEGTS
+	TransportMKV
+	TransportWebM
+	TransportHLS
+	TransportHLSWebVTT
+)
+
+func (t Transport) ContentType() string {
+	switch t {
+	case TransportMP4:
+		return MP4
+	case TransportMPEGTS:
+		return MPEGTS
+	case TransportMKV:
+		return MKV
+	case TransportWebM:
+		return WebM
+	case TransportHLS, TransportHLSWebVTT:
+		return HLS
+	}
+	return ""
 }
 
 // CaptionFormat is how a caption track is written.
@@ -61,7 +77,7 @@ type AudioSupport struct {
 
 // AcceptsContainer reports whether the device plays contentType directly (the pass-through decision).
 func (c Capabilities) AcceptsContainer(contentType string) bool {
-	return slices.Contains(c.Containers, contentType)
+	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool { return f.Transport.ContentType() == contentType })
 }
 
 // PlaybackSampleRate is the highest audio sample rate any device castor serves plays.
@@ -71,19 +87,14 @@ func (c Capabilities) CanCopyVideo(v ProbeInfo) bool {
 	if v.VideoInterlaced && !c.Deinterlaces {
 		return false
 	}
-	return slices.ContainsFunc(c.Video, func(s VideoSupport) bool { return s.accepts(v) })
-}
-
-// SupportsVideoCodec reports whether the device decodes this video codec natively.
-func (c Capabilities) SupportsVideoCodec(codec Codec) bool {
-	return slices.ContainsFunc(c.Video, func(s VideoSupport) bool { return s.Codec == codec })
+	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool { return f.Video.accepts(v) })
 }
 
 func (c Capabilities) CanCopyAudio(p ProbeInfo) bool {
 	if p.AudioSampleRate > PlaybackSampleRate {
 		return false
 	}
-	return slices.ContainsFunc(c.Audio, func(s AudioSupport) bool { return s.accepts(p) })
+	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool { return f.Audio.accepts(p) })
 }
 
 func (s AudioSupport) accepts(p ProbeInfo) bool {
@@ -101,7 +112,7 @@ func (s VideoSupport) accepts(v ProbeInfo) bool {
 	if v.VideoCodec != s.Codec {
 		return false
 	}
-	if len(s.Profiles) > 0 && !slices.Contains(s.Profiles, v.VideoProfile) {
+	if len(s.Profiles) > 0 && !slices.Contains(s.Profiles, v.VideoProfile) && !(v.VideoProfile == ProfileConstrainedBaseline && slices.Contains(s.Profiles, ProfileBaseline)) {
 		return false
 	}
 	// Unknown source level (0) is trusted, as an unknown channel count is.
@@ -113,4 +124,33 @@ func (s VideoSupport) accepts(v ProbeInfo) bool {
 		depths = []int{8}
 	}
 	return slices.Contains(depths, v.VideoBitDepth)
+}
+
+// FormatSupport is one indivisible playback combination.
+type FormatSupport struct {
+	Transport Transport
+	Video     VideoSupport
+	Audio     AudioSupport
+	Captions  []CaptionFormat
+}
+
+func (c Capabilities) CanPlayIn(container string, p ProbeInfo) bool {
+	switch {
+	case p.VideoCodec == "" && p.AudioCodec == "":
+		return false
+	case p.VideoInterlaced && !c.Deinterlaces:
+		return false
+	}
+	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool {
+		switch {
+		case f.Transport.ContentType() != container:
+			return false
+		case p.VideoCodec != "" && !f.Video.accepts(p):
+			return false
+		case p.AudioCodec != "" && !f.Audio.accepts(p):
+			return false
+		default:
+			return true
+		}
+	})
 }

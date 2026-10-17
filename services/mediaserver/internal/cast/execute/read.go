@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"sync"
+	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/codec"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
@@ -13,8 +15,11 @@ import (
 
 // buffered is a read into castor's own spool, and the transcription it feeds (nil where it feeds none).
 type buffered struct {
-	reader *pull
-	burn   Burn
+	reader     *pull
+	transcript Transcript
+	// captionVideoOffset locates the first video sample on the PCM timeline.
+	// An unknown clock cannot safely carry separately timed generated captions.
+	captionVideoOffset *time.Duration
 	// live is a read of an edge that arrives at 1x, which no pause gets ahead of.
 	live bool
 }
@@ -34,7 +39,7 @@ func (s *pipeline) read(work string, program media.Program) (*buffered, error) {
 		return nil, err
 	}
 
-	burn := s.transcription(ctx, work, facts, program)
+	transcript := s.transcription(ctx, facts, program)
 	floor, err := codec.Floor(ctx, codec.Inputs{
 		Probe:     facts.probe,
 		Into:      transcode.SpoolFormat,
@@ -50,10 +55,12 @@ func (s *pipeline) read(work string, program media.Program) (*buffered, error) {
 	logRefusals(ctx, floor)
 
 	var pcmRate int
-	if burn != nil {
-		pcmRate = burn.SampleRate()
+	if transcript != nil {
+		pcmRate = transcript.SampleRate()
 	}
+	live := slices.ContainsFunc(program.Inputs, func(in media.Input) bool { return in.Fetching().Live })
 	reader, err := startPull(ctx, pullSpec{
+		live:       live,
 		ffmpegPath: s.cast.FFmpegPath,
 		source:     source,
 		probe:      facts.probe,
@@ -66,24 +73,26 @@ func (s *pipeline) read(work string, program media.Program) (*buffered, error) {
 		return nil, err
 	}
 
-	transcribed := make(chan struct{})
-	go func() {
-		defer close(transcribed)
-		if burn != nil {
-			burn.Run(ctx, reader.pcm)
-		}
-	}()
+	var transcribing sync.WaitGroup
+	if transcript != nil {
+		transcribing.Go(func() { transcript.Run(ctx, reader.pcm) })
+	}
 	s.releases.push(func() error {
 		stop()
 		<-reader.Done()
-		<-transcribed
-		return nil
+		transcribing.Wait()
+		return reader.spool.Close()
 	})
-	return &buffered{reader: reader, burn: burn, live: slices.ContainsFunc(program.Inputs, func(in media.Input) bool { return in.Fetching().Live })}, nil
+	var videoOffset *time.Duration
+	if track, ok := program.Track(media.TrackVideo); ok && facts.probe.VideoStartOffset != nil {
+		offset := *facts.probe.VideoStartOffset + program.Offsets[track.Input]
+		videoOffset = &offset
+	}
+	return &buffered{reader: reader, transcript: transcript, captionVideoOffset: videoOffset, live: live}, nil
 }
 
-// transcription is the burn-in this read feeds, nil where subtitles are off or nothing shows the source has sound.
-func (s *pipeline) transcription(ctx context.Context, work string, facts facts, program media.Program) Burn {
+// transcription reads sound once; native subtitles and burn-in consume the same cues.
+func (s *pipeline) transcription(ctx context.Context, facts facts, program media.Program) Transcript {
 	if s.cast.Subtitles == nil {
 		return nil
 	}
@@ -95,5 +104,5 @@ func (s *pipeline) transcription(ctx context.Context, work string, facts facts, 
 		slog.InfoContext(ctx, "no subtitles for this cast: nothing shows the source carries sound")
 		return nil
 	}
-	return s.cast.Subtitles(ctx, work)
+	return s.cast.Subtitles(ctx)
 }

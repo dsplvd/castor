@@ -46,6 +46,43 @@ func (p Plan) Encoded() media.Axes {
 
 // Served plans the encode a device is served, from its capabilities, track by track.
 func Served(ctx context.Context, in Inputs) (Plan, error) {
+	if len(in.Caps.Formats) > 0 {
+		var best Plan
+		score := 3
+		var last error
+		for _, f := range in.Caps.Formats {
+			if f.Transport.ContentType() != in.Into.ContentType {
+				continue
+			}
+			candidate := in
+			candidate.Caps.Formats = []media.FormatSupport{f}
+			plan, err := servedTracks(ctx, candidate)
+			if err != nil {
+				last = err
+				continue
+			}
+			cost := 0
+			axes := plan.Encoded()
+			if axes.Video {
+				cost++
+			}
+			if axes.Audio {
+				cost++
+			}
+			if cost < score {
+				best, score = plan, cost
+			}
+		}
+		if score < 3 {
+			return best, nil
+		}
+		return Plan{}, fmt.Errorf("no usable receiver combination for %s: %v", in.Into.ContentType, last)
+	}
+
+	return Plan{}, fmt.Errorf("no playback envelopes advertised")
+}
+
+func servedTracks(ctx context.Context, in Inputs) (Plan, error) {
 	video, videoRefusals, err := decideVideo(ctx, in)
 	if err != nil {
 		return Plan{}, fmt.Errorf("planning video: %w", err)

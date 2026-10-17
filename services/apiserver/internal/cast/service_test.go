@@ -3,6 +3,7 @@ package cast
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"testing/synctest"
 
@@ -101,5 +102,18 @@ func TestListedCastsAndDefaultsDoNotExposeTheServicesSnapshots(t *testing.T) {
 	again, _ := s.ListCasts(t.Context(), &castorv1.ListCastsRequest{})
 	if got := again.Casts[0]; got.Device.Name != "Bedroom" || got.Status.GetCasting().GetAttempt() != 1 {
 		t.Fatalf("mutating a list or a published status changed the stored cast: %v", got)
+	}
+}
+
+type busyDevice struct{ interruptedTarget }
+
+func (busyDevice) Connect(context.Context, device.Info) (device.Device, error) {
+	return nil, &device.Busy{Address: "192.0.2.1"}
+}
+func TestBusyReceiverReportsActionablePlaybackFailure(t *testing.T) {
+	s := &Service{devices: busyDevice{}}
+	ended := s.play(t.Context(), nil, device.Info{}, nil)
+	if ended.GetFailed().GetCode() != castorv1.FailureCode_FAILURE_CODE_PLAYBACK_FAILED || !strings.Contains(ended.GetFailed().GetMessage(), "stop its current cast") {
+		t.Fatalf("ended=%v", ended)
 	}
 }

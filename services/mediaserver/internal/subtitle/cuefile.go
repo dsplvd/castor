@@ -47,6 +47,7 @@ func (f *CueFile) Writer(ctx context.Context) func(media.Progress) {
 	return func(sample media.Progress) {
 		seconds := sample.Position.Seconds()
 		text := wrap(f.cues.cueAt(seconds+cueLeadBias), cueWrapColumns)
+		f.cues.DiscardBefore(seconds)
 		if text == last {
 			return
 		}

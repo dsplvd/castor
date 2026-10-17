@@ -207,21 +207,28 @@ func (s *session) Close() error {
 }
 
 func (s *session) Capabilities() *mediav1.Capabilities {
-	return &mediav1.Capabilities{
-		SelfFetch:       true,
-		Containers:      []mediav1.Container{mediav1.Container_CONTAINER_HLS, mediav1.Container_CONTAINER_MPEGTS, mediav1.Container_CONTAINER_MP4, mediav1.Container_CONTAINER_WEBM},
-		ServedContainer: mediav1.Container_CONTAINER_MP4,
-		Captions:        []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
-		Video: []*mediav1.VideoSupport{
-			device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264),
-			device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_VP8),
-		},
-		Audio: []*mediav1.AudioSupport{
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 6},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_AC3},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_EAC3},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_MP3},
-			{Codec: mediav1.AudioCodec_AUDIO_CODEC_VORBIS},
-		},
+	caps := &mediav1.Capabilities{Provenance: "Cast default Web Receiver family envelopes; model/firmware limits unverified", SelfFetch: true}
+	for _, container := range []mediav1.ProgressiveSupport_Container{mediav1.ProgressiveSupport_CONTAINER_MP4, mediav1.ProgressiveSupport_CONTAINER_MPEGTS} {
+		for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3, mediav1.AudioCodec_AUDIO_CODEC_MP3} {
+			caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
+				Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: container}},
+				Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
+				Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
+			})
+		}
 	}
+	// https://developers.google.com/cast/docs/media/streaming_protocols#http_live_streaming_hls
+	for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3, mediav1.AudioCodec_AUDIO_CODEC_MP3} {
+		caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
+			Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{Subtitles: mediav1.HLSSupport_SUBTITLES_WEBVTT}},
+			Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
+			Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
+		})
+	}
+	caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
+		Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_WEBM}},
+		Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_VP8), Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_VORBIS}}},
+		Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
+	})
+	return caps
 }

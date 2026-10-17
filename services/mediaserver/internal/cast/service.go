@@ -12,14 +12,18 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	"github.com/stupside/castor/internal/registry"
+	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/execute"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
+	"golang.org/x/sync/semaphore"
 )
 
 // linger keeps an ended cast findable, so a watcher that arrives late still learns how it ended.
 const linger = 5 * time.Minute
+
+const resolutionCapacity = 16
 
 var errShutdown = errors.New("server shutting down")
 
@@ -32,24 +36,29 @@ type Caster interface {
 
 // Service runs every cast behind the media contract: it starts, stops and follows them, takes the device each is lent, and ranks streams without casting.
 type Service struct {
-	ctx    context.Context
-	shut   context.CancelCauseFunc
-	caster func(asked *mediav1.PlaybackSettings) Caster
-	reach  *url.URL
-	casts  *registry.Registry[*cast]
+	watchers    *semaphore.Weighted
+	resolutions *semaphore.Weighted
+	ctx         context.Context
+	shut        context.CancelCauseFunc
+	caster      func(asked *mediav1.PlaybackSettings) Caster
+	reach       *url.URL
+	casts       *registry.Registry[*cast]
 }
 
 // New casts with caster, telling devices to reach the media route at reach.
 func New(caster func(asked *mediav1.PlaybackSettings) Caster, reach *url.URL) *Service {
 	// Casts outlive the request that started them, and end only once the server shuts down.
 	ctx, shut := context.WithCancelCause(context.Background())
-	return &Service{ctx: ctx, shut: shut, caster: caster, reach: reach, casts: registry.New[*cast](linger)}
+	return &Service{watchers: semaphore.NewWeighted(256), resolutions: semaphore.NewWeighted(resolutionCapacity), ctx: ctx, shut: shut, caster: caster, reach: reach, casts: registry.New[*cast](linger)}
 }
 
-func (s *Service) Start(_ context.Context, req *mediav1.StartRequest) (*mediav1.StartResponse, error) {
-	c := newCast(s.ctx, req.GetCastId(), s.reach, s.caster(req.GetSettings()), req.GetSource())
+func (s *Service) Start(ctx context.Context, req *mediav1.StartRequest) (*mediav1.StartResponse, error) {
+	c := newCast(telemetry.WithTrace(s.ctx, ctx), req.GetCastId(), s.reach, s.caster(req.GetSettings()), req.GetSource())
 	if err := s.casts.Add(c.id, c, c.done); err != nil {
 		c.cancel(errShutdown)
+		if errors.Is(err, registry.ErrCapacity) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, err)
+		}
 		if errors.Is(err, registry.ErrTaken) {
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("cast %q", c.id))
 		}
@@ -73,10 +82,14 @@ func (s *Service) Serves(id, port string) bool {
 	return ok && c.deliveries.Serves(port)
 }
 
-// Drain ends every cast, failed as the server shuts down, and waits until they have let go of what they hold, or ctx ends.
+// Drain cancels casts and source resolutions, then waits for their cleanup or ctx to end.
 func (s *Service) Drain(ctx context.Context) {
 	s.shut(errShutdown)
 	s.casts.Drain(ctx)
+	// Resolution requests own probes and source readers too; shutdown must join them.
+	if s.resolutions.Acquire(ctx, resolutionCapacity) == nil {
+		s.resolutions.Release(resolutionCapacity)
+	}
 }
 
 func (s *Service) find(id string) (*cast, error) {

@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -33,6 +34,9 @@ func AwaitPolledEnd(ctx context.Context, name, question string, poll func(contex
 			return context.Cause(ctx)
 		}
 		if err != nil {
+			if failed, ok := errors.AsType[*PlaybackError](err); ok {
+				return failed
+			}
 			if silent := time.Since(answered); silent >= UnreachableWindow {
 				// Last failure explains how (refused, timed out, no route).
 				return &Gone{
@@ -49,3 +53,9 @@ func AwaitPolledEnd(ctx context.Context, name, question string, poll func(contex
 		}
 	}
 }
+
+// PlaybackError is an explicit receiver refusal, not a transient polling failure.
+type PlaybackError struct{ Err error }
+
+func (e *PlaybackError) Error() string { return e.Err.Error() }
+func (e *PlaybackError) Unwrap() error { return e.Err }

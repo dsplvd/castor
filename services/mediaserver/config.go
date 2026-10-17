@@ -1,18 +1,16 @@
 package mediaserver
 
 import (
-	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/mediaserver/internal/source/rank"
 	"github.com/stupside/castor/services/mediaserver/internal/subtitle/whisper"
 )
 
 // Config is the media server's sections of castor's configuration.
 type Config struct {
-	Resolver  ResolverConfig   `yaml:"resolver" validate:"required"`
-	Server    ServerConfig     `yaml:"server" validate:"required"`
-	Network   NetworkConfig    `yaml:"network"`
-	Whisper   whisper.Config   `yaml:"whisper"`
-	Telemetry telemetry.Config `yaml:"telemetry"`
+	Resolver ResolverConfig `yaml:"resolver" validate:"required"`
+	Server   ServerConfig   `yaml:"server" validate:"required"`
+	Network  NetworkConfig  `yaml:"network"`
+	Whisper  whisper.Config `yaml:"whisper"`
 }
 
 // ResolverConfig is how found streams are ranked.

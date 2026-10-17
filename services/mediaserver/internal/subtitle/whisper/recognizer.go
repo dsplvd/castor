@@ -12,7 +12,8 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
 )
 
-// recognizer runs one loaded whisper model over each window it is handed.
+// recognizer runs only inside serveWorker's serial loop. Native callback
+// registries never receive concurrent calls within a worker process.
 type recognizer struct {
 	model        wcpp.Model
 	language     string

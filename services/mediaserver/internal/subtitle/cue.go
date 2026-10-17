@@ -3,7 +3,7 @@ package subtitle
 import (
 	"slices"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 )
 
@@ -26,50 +26,149 @@ type Word struct {
 	Text       string
 }
 
-// cue is one subtitle line with absolute timestamps in seconds.
-type cue struct {
-	start, end float64
-	text       string
+// Cue is one immutable subtitle line with absolute timestamps in seconds.
+type Cue struct {
+	Start, End float64
+	Text       string
+}
+
+// Snapshot contains committed cues overlapping a requested time range. SettledTo
+// is the time before which no further cues can start, including confirmed silence.
+// Complete means the producer has returned and no further cues will arrive.
+type Snapshot struct {
+	Cues      []Cue
+	SettledTo float64
+	Complete  bool
 }
 
 // Cues folds a stream of committed words into display cues.
 type Cues struct {
-	mu   sync.Mutex
-	cues []cue
+	published     atomic.Pointer[Snapshot]
+	discardBefore atomic.Pointer[float64]
+	settledTo     float64
 
 	pending []Word // committed words not yet closed into a cue (Commit-only)
 }
 
 // Commit folds newly committed words into cues.
 func (c *Cues) Commit(words []Word, settledTo float64) {
-	c.pending = append(c.pending, words...)
+	// Published cue timelines cannot be revised by a later hypothesis.
+	frontier := 0.0
+	if current := c.published.Load(); current != nil {
+		frontier = current.SettledTo
+	}
+	for _, word := range words {
+		if word.End <= frontier {
+			continue
+		}
+		word.Start = max(word.Start, frontier)
+		c.pending = append(c.pending, word)
+	}
 	silentTail := len(c.pending) > 0 &&
 		settledTo-c.pending[len(c.pending)-1].End >= cueGapSeconds
-	c.pending = c.closeCues(c.pending, silentTail)
+	var committed []Cue
+	c.pending, committed = closeCues(c.pending, silentTail)
+	c.settledTo = max(c.settledTo, settledTo)
+	c.publish(committed, false)
 }
 
 // Close flushes every remaining word into cues. Call it once, after the final Commit.
 func (c *Cues) Close() {
-	c.pending = c.closeCues(c.pending, true)
+	remaining, committed := closeCues(c.pending, true)
+	c.pending = remaining
+	c.publish(committed, true)
+}
+
+// Snapshot returns a detached copy safe for the caller to retain or modify.
+func (c *Cues) Snapshot(start, end float64) Snapshot {
+	current := c.published.Load()
+	if current == nil {
+		return Snapshot{}
+	}
+	result := Snapshot{SettledTo: current.SettledTo, Complete: current.Complete}
+	for _, cue := range current.Cues {
+		if cue.Start >= end {
+			break
+		}
+		if cue.End > start {
+			result.Cues = append(result.Cues, cue)
+		}
+	}
+	return result
+}
+
+// DiscardBefore releases consumed captions immediately, including after the
+// producer has finished. Published snapshots are the sole committed storage.
+func (c *Cues) DiscardBefore(seconds float64) {
+	c.discardBefore.Store(&seconds)
+	for {
+		current := c.published.Load()
+		if current == nil {
+			return
+		}
+		cut := 0
+		for cut < len(current.Cues) && current.Cues[cut].End <= seconds {
+			cut++
+		}
+		if cut == 0 {
+			return
+		}
+		next := &Snapshot{Cues: slices.Clone(current.Cues[cut:]), SettledTo: current.SettledTo, Complete: current.Complete}
+		if c.published.CompareAndSwap(current, next) {
+			return
+		}
+	}
+}
+
+// Only the producer adds cues. A concurrent consumer may prune the snapshot, so
+// retry against that newer view rather than restoring any discarded prefix.
+func (c *Cues) publish(committed []Cue, complete bool) {
+	frontier := c.settledTo
+	if len(c.pending) > 0 {
+		frontier = min(frontier, c.pending[0].Start)
+	}
+	for {
+		current := c.published.Load()
+		var cues []Cue
+		if current != nil {
+			cues = current.Cues
+		}
+		cues = append(cues, committed...)
+		if before := c.discardBefore.Load(); before != nil {
+			cut := 0
+			for cut < len(cues) && cues[cut].End <= *before {
+				cut++
+			}
+			if cut > 0 {
+				cues = slices.Clone(cues[cut:])
+			}
+		}
+		if c.published.CompareAndSwap(current, &Snapshot{Cues: cues, SettledTo: frontier, Complete: complete}) {
+			return
+		}
+	}
 }
 
 // cueAt returns the text of the cue covering time tSec, or "" if none does.
 func (c *Cues) cueAt(tSec float64) string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	i, _ := slices.BinarySearchFunc(c.cues, tSec, func(entry cue, t float64) int {
-		if entry.start > t {
+	current := c.published.Load()
+	if current == nil {
+		return ""
+	}
+	i, _ := slices.BinarySearchFunc(current.Cues, tSec, func(entry Cue, t float64) int {
+		if entry.Start > t {
 			return 1
 		}
 		return -1
 	})
-	if i > 0 && c.cues[i-1].end > tSec {
-		return c.cues[i-1].text
+	if i > 0 && current.Cues[i-1].End > tSec {
+		return current.Cues[i-1].Text
 	}
 	return ""
 }
 
-func (c *Cues) closeCues(pending []Word, final bool) []Word {
+func closeCues(pending []Word, final bool) ([]Word, []Cue) {
+	var committed []Cue
 	for len(pending) > 0 {
 		cut := cueCut(pending)
 		if cut == 0 {
@@ -78,13 +177,13 @@ func (c *Cues) closeCues(pending []Word, final bool) []Word {
 			}
 			cut = len(pending)
 		}
-		c.appendCue(pending[:cut])
+		committed = append(committed, makeCue(pending[:cut]))
 		pending = pending[cut:]
 	}
-	return pending
+	return pending, committed
 }
 
-func (c *Cues) appendCue(words []Word) {
+func makeCue(words []Word) Cue {
 	var sb strings.Builder
 	for i, w := range words {
 		if i > 0 {
@@ -93,11 +192,7 @@ func (c *Cues) appendCue(words []Word) {
 		sb.WriteString(w.Text)
 	}
 	start, end := trimCueEdges(words[0].Start, words[len(words)-1].End)
-	cue := cue{start: start, end: end, text: sb.String()}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cues = append(c.cues, cue)
+	return Cue{Start: start, End: end, Text: sb.String()}
 }
 
 func cueCut(pending []Word) int {

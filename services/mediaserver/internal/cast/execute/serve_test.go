@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"errors"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -163,7 +164,7 @@ func TestARelayedCastIsOpenedOverItsRead(t *testing.T) {
 	buf.reader.spool.CloseWrite(nil)
 	close(buf.reader.done)
 	s.cast.Device = observedDevice{wait: blocking}
-	d, err := s.produce(t.TempDir(), feed{buffered: buf}, verbatim(), nil)
+	d, err := s.produce(t.TempDir(), feed{buffered: buf}, testEncoding(t, verbatim()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestARelayedCastFailsWithItsRead(t *testing.T) {
 	buf.reader.spool.CloseWrite(failed)
 	close(buf.reader.done)
 	s.cast.Device = observedDevice{wait: blocking}
-	if _, err := s.produce(t.TempDir(), feed{buffered: buf}, verbatim(), nil); err != nil {
+	if _, err := s.produce(t.TempDir(), feed{buffered: buf}, testEncoding(t, verbatim()), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.releases.release(); !errors.Is(err, failed) {
@@ -265,7 +266,7 @@ func TestTeardownStopsAnEncoderParkedOnAnInputThatWentQuiet(t *testing.T) {
 			s, work := servingPipeline(t, ffmpegPath), t.TempDir()
 			s.cast.Device = probingDevice{}
 			f, opts := tt.setup(t, s, work)
-			d, err := s.produce(work, f, opts, nil)
+			d, err := s.produce(work, f, testEncoding(t, opts), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -327,7 +328,7 @@ func programHead(t *testing.T, ffmpegPath string) []byte {
 func servingPipeline(t *testing.T, ffmpegPath string) *pipeline {
 	t.Helper()
 	s := &pipeline{
-		cast:     Cast{FFmpegPath: ffmpegPath, Encoders: ffmpeg.Encoders(ffmpegPath), Timelines: direct{}, InputArgs: formats.InputArgs, Listeners: loopback{}},
+		cast:     Cast{Machinery: Machinery{FFmpegPath: ffmpegPath, Encoders: ffmpeg.Encoders(ffmpegPath), Timelines: direct{}, InputArgs: formats.InputArgs, Outputs: adapters.Default()}, Listeners: loopback{}},
 		ctx:      t.Context(),
 		releases: &releases{},
 	}
@@ -341,10 +342,11 @@ func openFixture(t *testing.T, contentType, workDir string) delivery {
 	ffmpegPath, _ := requireFFmpegTools(t)
 	origin := serveFixture(t, ffmpegPath)
 	s := servingPipeline(t, ffmpegPath)
-	format, ok := container.For(contentType)
-	if !ok {
-		t.Fatalf("the format registry cannot produce %s", contentType)
+	selected, err := adapters.Default().Select(chromecastLike(contentType), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	format := selected.Plan.Format()
 	opts := transcode.EncodeOptions{
 		Format: format,
 		Input:  transcode.FromSource(programSourceWithin(t, origin.stream().URL, media.MP4, 30*time.Second)),
@@ -353,7 +355,7 @@ func openFixture(t *testing.T, contentType, workDir string) delivery {
 		Audio:  codec.Encode(codec.AudioEncode{Codec: media.CodecAAC}),
 	}
 	s.cast.Device = probingDevice{}
-	d, err := s.produce(workDir, feed{}, opts, nil)
+	d, err := s.produce(workDir, feed{}, testEncoding(t, opts), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,3 +412,12 @@ func (observedDevice) Resume(context.Context) error { return nil }
 
 func (probingDevice) Pause(context.Context) error  { return nil }
 func (probingDevice) Resume(context.Context) error { return nil }
+
+func testEncoding(t *testing.T, opts transcode.EncodeOptions) encoding {
+	t.Helper()
+	selected, err := adapters.Default().Select(chromecastLike(opts.Format.ContentType), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoding{EncodeOptions: opts, delivery: selected}
+}

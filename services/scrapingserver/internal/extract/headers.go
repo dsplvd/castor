@@ -63,7 +63,7 @@ func originOf(s string) string {
 // request returns bounded request bookkeeping. Captured resources can replace
 // irrelevant traffic when a page fills the budget. The caller holds c.mu.
 func (c *collector) request(id network.RequestID, captured bool) *requestState {
-	if id == "" || c.closed {
+	if id == "" || c.events.Err() != nil {
 		return nil
 	}
 	if req := c.requests[id]; req != nil {
@@ -124,7 +124,7 @@ func (c *collector) noteResponse(e *network.EventResponseReceived) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	req := c.requests[e.RequestID]
-	if req == nil || c.closed {
+	if req == nil || c.events.Err() != nil {
 		return
 	}
 	if len(e.Response.URL) <= 8192 && webPage(e.Response.URL) {

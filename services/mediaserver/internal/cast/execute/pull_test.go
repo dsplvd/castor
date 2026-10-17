@@ -1,6 +1,9 @@
 package execute
 
 import (
+	"errors"
+	"golang.org/x/sync/semaphore"
+	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -69,5 +72,59 @@ func TestAFailedSpoolWriteKillsTheReader(t *testing.T) {
 	}
 	if p.Err() == nil {
 		t.Error("the read reported success after its spool refused a write")
+	}
+}
+
+func TestSpoolExhaustionSurvivesKilledFFmpegPipe(t *testing.T) {
+	sp, err := deliver.NewSpoolWithLimit(filepath.Join(t.TempDir(), "limited.ts"), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proc, err := ffmpeg.Start(t.Context(), "yes", ffmpeg.Command{}, ffmpeg.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &pull{proc: proc, spool: sp, done: make(chan struct{})}
+	go p.run(t.Context())
+	select {
+	case <-p.Done():
+	case <-time.After(10 * time.Second):
+		proc.Kill()
+		t.Fatal("writer did not stop")
+	}
+	if !errors.Is(p.Err(), deliver.ErrSpoolLimit) {
+		t.Fatalf("lost budget error: %v", p.Err())
+	}
+	e := evidence(ran{reader: p}, p.Err(), false)
+	if !errors.Is(e.ResourceErr, deliver.ErrSpoolLimit) {
+		t.Fatalf("lost budget evidence: %+v", e)
+	}
+}
+
+func TestEncoderResultPreservesExpiredLiveInput(t *testing.T) {
+	sp, err := deliver.NewLiveSpoolWithBudget(filepath.Join(t.TempDir(), "live.ts"), 8, semaphore.NewWeighted(16))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sp.Close()
+	tail, err := sp.TailAt(t.Context(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tail.Close()
+	if _, err := sp.Write([]byte("0123456789abcdef")); err != nil {
+		t.Fatal(err)
+	}
+	proc, err := ffmpeg.Start(t.Context(), "sh", ffmpeg.Command{Args: []string{"-c", "cat >/dev/null; exit 7"}}, ffmpeg.Options{Stdin: tail})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, proc.Stdout)
+	err = encoderResult(t.Context(), proc)
+	if !errors.Is(err, deliver.ErrSpoolExpired) {
+		t.Fatalf("encoder erased expiry: %v", err)
+	}
+	if got := evidence(ran{}, err, false); !errors.Is(got.ResourceErr, deliver.ErrSpoolExpired) {
+		t.Fatalf("lost expiry evidence: %+v", got)
 	}
 }

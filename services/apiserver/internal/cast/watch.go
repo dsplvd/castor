@@ -2,6 +2,7 @@ package cast
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
@@ -11,6 +12,10 @@ import (
 
 // Watch sends the cast's status at once and on every change, and how it ended last.
 func (s *Service) Watch(ctx context.Context, req *castorv1.WatchRequest, out *connect.ServerStream[castorv1.WatchResponse]) error {
+	if !s.watchers.TryAcquire(1) {
+		return connect.NewError(connect.CodeResourceExhausted, errors.New("concurrent watchers capacity exhausted"))
+	}
+	defer s.watchers.Release(1)
 	c, err := s.find(req.GetCastId())
 	if err != nil {
 		return err

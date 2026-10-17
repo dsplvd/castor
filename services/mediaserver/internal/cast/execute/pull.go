@@ -33,6 +33,7 @@ var _ health.Producer = (*pull)(nil)
 
 // pullSpec is everything one upstream read starts with.
 type pullSpec struct {
+	live       bool
 	ffmpegPath string
 	source     transcode.ProgramSource
 	probe      media.ProbeInfo
@@ -43,7 +44,11 @@ type pullSpec struct {
 }
 
 func startPull(ctx context.Context, spec pullSpec) (*pull, error) {
-	sp, err := deliver.NewSpool(spec.spoolPath)
+	openSpool := deliver.NewSpool
+	if spec.live {
+		openSpool = deliver.NewLiveSpool
+	}
+	sp, err := openSpool(spec.spoolPath)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +63,7 @@ func startPull(ctx context.Context, spec pullSpec) (*pull, error) {
 	proc, err := startPuller(ctx, spec, pcmOut)
 	if err != nil {
 		sp.CloseWrite(err)
+		_ = sp.Close()
 		if pcmOut != nil {
 			_ = pcmOut.CloseWithError(err)
 		}
@@ -109,10 +115,11 @@ func (p *pull) run(ctx context.Context) {
 	// A clean exit is not a complete read: the demuxer skips or truncates media and still exits 0.
 	err = cmp.Or(err, p.proc.Wait(), p.proc.SilentFailure())
 
-	if err != nil && ctx.Err() == nil {
-		err = fmt.Errorf("upstream pull: %w", err)
-	} else if ctx.Err() != nil {
+	switch {
+	case ctx.Err() != nil:
 		err = ctx.Err()
+	case err != nil:
+		err = fmt.Errorf("upstream pull: %w", err)
 	}
 	p.err = err
 	p.spool.CloseWrite(err)

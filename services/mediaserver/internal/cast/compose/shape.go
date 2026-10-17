@@ -40,13 +40,18 @@ func (s Shape) handoff() bool {
 	probe, measured := s.Program.Measurement()
 	return s.Device.SelfFetch && s.Program.SelfFetchable() &&
 		s.Device.AcceptsContainer(primary.ContentType) && measured &&
-		canPlay(s.Device, probe) && s.MaxHeight.Admits(s.Height)
+		canPlay(s.Device, probe) && s.Device.CanPlayIn(primary.ContentType, probe) && s.MaxHeight.Admits(s.Height)
 }
 
 // canPlay reports whether the whole measured program is safe to hand over: HDR is never assumed to engage.
 func canPlay(r media.Capabilities, p media.ProbeInfo) bool {
-	if p.VideoCodec == "" || p.VideoHDR || !r.CanCopyVideo(p) {
+	if p.VideoCodec == "" || p.VideoHDR {
 		return false
 	}
-	return p.AudioCodec == "" || r.CanCopyAudio(p)
+	for _, f := range r.Formats {
+		if r.CanPlayIn(f.Transport.ContentType(), p) {
+			return true
+		}
+	}
+	return false
 }

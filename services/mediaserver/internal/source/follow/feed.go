@@ -36,6 +36,7 @@ type feed struct {
 	keysHeld  resources[string]
 
 	// life bounds every read ahead of the reader; reached is the furthest segment it asked for.
+	work     sync.WaitGroup
 	life     context.Context
 	reached  int64
 	slots    map[int64]*slot
@@ -45,8 +46,8 @@ type feed struct {
 }
 
 // newFeed follows source under name; repackage, when set, serves fMP4 as MPEG-TS.
-func newFeed(name string, source timeline.Source, repackage Repackage) *feed {
-	return &feed{name: name, source: source, repackage: repackage, carriage: map[timeline.Map]bool{}, slots: map[int64]*slot{}, reached: -1, life: context.Background()}
+func newFeed(ctx context.Context, name string, source timeline.Source, repackage Repackage) *feed {
+	return &feed{name: name, source: source, repackage: repackage, carriage: map[timeline.Map]bool{}, slots: map[int64]*slot{}, reached: -1, life: ctx}
 }
 
 // refresh reads the origin's window and merges it.
@@ -71,6 +72,7 @@ func (f *feed) refresh(ctx context.Context) error {
 	f.mu.Lock()
 	merged := f.ledger.Merge(w)
 	f.render = f.ledger.Render(f.view)
+	f.pruneResources()
 	f.mu.Unlock()
 	if merged.Restarts > 0 || merged.Gaps > 0 {
 		slog.WarnContext(ctx, "the origin's timeline broke; castor marked a seam and carried on",
@@ -83,8 +85,8 @@ func (f *feed) refresh(ctx context.Context) error {
 const startTries = 3
 
 // start reads the window a feed begins from, again after a passing failure, never after the origin's final no; ctx bounds its reads ahead.
-func (f *feed) start(ctx context.Context) error {
-	f.life = ctx
+func (f *feed) start() error {
+	ctx := f.life
 	var err error
 	for try := range startTries {
 		if err = f.refresh(ctx); err == nil || refusal(err) != 0 || try == startTries-1 {
@@ -193,4 +195,34 @@ func refusal(err error) int {
 		return f.Status
 	}
 	return 0
+}
+
+// pruneResources retains names only while their segments can be served. Readers
+// of expired playlists receive a missing resource, never another segment's key.
+// f.mu must be held.
+func (f *feed) pruneResources() {
+	inits := make(map[timeline.Map]bool)
+	keys := make(map[string]bool)
+	for _, e := range f.ledger.entries {
+		if e.Map != nil {
+			inits[*e.Map] = true
+		}
+		if e.Key.URI != "" {
+			keys[e.Key.URI] = true
+		}
+	}
+	f.inits.retain(inits)
+	f.keys.retain(keys)
+	for m := range f.carriage {
+		if !inits[m] {
+			delete(f.carriage, m)
+		}
+	}
+}
+
+// wait runs after callers and request handlers have stopped launching work.
+func (f *feed) wait() {
+	f.work.Wait()
+	f.initsHeld.reads.Wait()
+	f.keysHeld.reads.Wait()
 }

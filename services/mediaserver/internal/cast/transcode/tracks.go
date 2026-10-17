@@ -42,6 +42,12 @@ func audioAxis(probe media.ProbeInfo, audio codec.Track[codec.AudioEncode], refu
 
 func videoEncodeArgs(venc codec.VideoEncode) []string {
 	args := slices.Clone(venc.Encoder.Flags)
+	if venc.Profile != "" {
+		args = append(args, "-profile:v", venc.Profile)
+	}
+	if venc.Level != "" {
+		args = append(args, "-level:v", venc.Level)
+	}
 	if venc.ToneMap {
 		args = append(args, "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709")
 	}

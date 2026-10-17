@@ -1,9 +1,9 @@
 package execute
 
 import (
-	"context"
 	"errors"
 
+	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -20,9 +20,7 @@ func evidence(r ran, err error, cancelled bool) recovery.Evidence {
 
 	if p := r.reader; p != nil {
 		// A read the cast's own release cancelled did not fail on its own account.
-		if err := p.Err(); !errors.Is(err, context.Canceled) {
-			e.ReadErr = err
-		}
+		e.ReadErr = unlessTeardown(p.Err())
 		e.ReadExit = p.exitStatus()
 		e.ReadIncomplete = p.lostMedia()
 		e.Copied = p.copying()
@@ -47,6 +45,12 @@ func evidence(r ran, err error, cancelled bool) recovery.Evidence {
 		if len(e.Lines) == 0 {
 			e.Lines = verdict.Evidence
 		}
+	}
+	if errors.Is(err, deliver.ErrSpoolExpired) {
+		e.ResourceErr = deliver.ErrSpoolExpired
+	}
+	if errors.Is(err, deliver.ErrSpoolLimit) || errors.Is(e.ReadErr, deliver.ErrSpoolLimit) {
+		e.ResourceErr = deliver.ErrSpoolLimit
 	}
 	return e
 }

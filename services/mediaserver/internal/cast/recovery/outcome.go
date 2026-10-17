@@ -34,6 +34,9 @@ type Evidence struct {
 
 	Cancelled bool
 
+	// ResourceErr is local budget exhaustion; switching source or encoding cannot fix it.
+	ResourceErr error
+
 	Verdict health.Kind
 	Vitals  health.Vitals
 

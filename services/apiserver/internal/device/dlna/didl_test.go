@@ -29,8 +29,8 @@ func TestADeviceIsAnnouncedTheStreamAsItsOwnSinkEntryDescribesIt(t *testing.T) {
 }
 
 func TestTheServedHeadersCarryTheSinkEntryNotAGuess(t *testing.T) {
-	caps, sinks := parseSinkProtocolInfo("http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO;DLNA.ORG_OP=01,http-get:*:video/mp4:*")
-	if got := servedHeaders(sinks[caps.ServedContainer])["contentFeatures.dlna.org"]; got != "DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO;DLNA.ORG_OP=01" {
+	_, sinks := parseSinkProtocolInfo("http-get:*:video/mp2t:DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO;DLNA.ORG_OP=01,http-get:*:video/mp4:*")
+	if got := servedHeaders(sinks[mediav1.Container_CONTAINER_MPEGTS])["contentFeatures.dlna.org"]; got != "DLNA.ORG_PN=AVC_TS_HD_50_AC3_ISO;DLNA.ORG_OP=01" {
 		t.Errorf("contentFeatures.dlna.org = %q, want the device's own", got)
 	}
 	if _, ok := servedHeaders(sinks[mediav1.Container_CONTAINER_MP4])["contentFeatures.dlna.org"]; ok {

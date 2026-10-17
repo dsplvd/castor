@@ -338,3 +338,27 @@ func TestCaptionsAreLoadedAsTextTracksWithTheDefaultActive(t *testing.T) {
 		t.Errorf("LOAD = %s, %v", body, err)
 	}
 }
+
+func TestDefaultReceiverSupportsProgressiveWebVTT(t *testing.T) {
+	for _, f := range (&session{}).Capabilities().Formats {
+		if f.GetHls() != nil && f.GetHls().GetSubtitles() == mediav1.HLSSupport_SUBTITLES_WEBVTT {
+			return
+		}
+	}
+	t.Fatal("default receiver lacks explicit HLS subtitle rendition envelope")
+}
+
+func TestRequestTimeoutRetainsDeadlineIdentity(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		local, remote := net.Pipe()
+		defer local.Close()
+		defer remote.Close()
+		// Drain outgoing frames but never answer. No heartbeat participates in this request.
+		go func() { _, _ = io.Copy(io.Discard, remote) }()
+		ch := &channel{conn: local, writing: make(chan struct{}, 1), waiting: map[int]chan []byte{}, gone: make(chan struct{}), closeConn: local.Close}
+		_, err := ch.request(t.Context(), receiverID, nsReceiver, &castmedia.PayloadHeader{Type: msgGetStatus})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("request timeout lost deadline identity: %v", err)
+		}
+	})
+}

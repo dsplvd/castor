@@ -72,7 +72,7 @@ func (Family) Discover(ctx context.Context) []device.Info {
 	ids := slices.Sorted(maps.Keys(found))
 
 	// ONE window for every name, and the lookups run over it together.
-	nctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpTimeout)
+	nctx, cancel := context.WithTimeout(ctx, httpTimeout)
 	defer cancel()
 
 	client := &http.Client{Timeout: httpTimeout}

@@ -23,7 +23,7 @@ func TestSelectVideoEncoder(t *testing.T) {
 	decodes := func(codecs ...media.Codec) media.Capabilities {
 		var r media.Capabilities
 		for _, c := range codecs {
-			r.Video = append(r.Video, media.VideoSupport{Codec: c})
+			r.Formats = append(r.Formats, media.FormatSupport{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: c}})
 		}
 		return r
 	}
@@ -53,8 +53,8 @@ func TestSelectVideoEncoder(t *testing.T) {
 }
 
 func TestWhatForcesAVideoReEncode(t *testing.T) {
-	h264 := media.Capabilities{Video: []media.VideoSupport{{Codec: media.CodecH264}}}
-	hdrCapable := media.Capabilities{Video: []media.VideoSupport{{Codec: media.CodecHEVC, Profiles: []media.Profile{"Main 10"}, BitDepths: []int{8, 10}}, {Codec: media.CodecH264}}}
+	h264 := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
+	hdrCapable := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecHEVC, Profiles: []media.Profile{"Main 10"}, BitDepths: []int{8, 10}}}, {Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
 	sdr := media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 720, VideoBitDepth: 8}
 	tall := media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 2160, VideoBitDepth: 8}
 	hdr := media.ProbeInfo{VideoCodec: media.CodecHEVC, VideoProfile: "Main 10", VideoHeight: 720, VideoBitDepth: 10, VideoHDR: true}

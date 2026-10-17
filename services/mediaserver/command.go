@@ -10,7 +10,6 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stupside/castor/internal/settings"
-	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/internal/transport"
 	"github.com/stupside/castor/services/mediaserver/internal/mediaroute"
 )
@@ -25,11 +24,6 @@ func Command() *cli.Command {
 			if err != nil {
 				return err
 			}
-			flush, err := telemetry.Setup(ctx, cfg.Telemetry, "castor-media")
-			if err != nil {
-				return err
-			}
-			defer func() { _ = flush(context.WithoutCancel(ctx)) }()
 			l, err := transport.Listen(ctx, cfg.Server.Listen, cfg.Server.Token, "server.token")
 			if err != nil {
 				return err

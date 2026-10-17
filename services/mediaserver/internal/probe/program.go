@@ -70,6 +70,7 @@ func (p sourceProber) Probe(ctx context.Context) (media.ProbeInfo, media.Reach, 
 		info.InputStarts[input.ID] = measured.Start
 		if clock {
 			info.Start = measured.Start
+			info.StartKnown = measured.StartKnown
 			info.ContentType = measured.ContentType
 			info.BitRate = measured.BitRate
 			info.Duration = measured.Duration

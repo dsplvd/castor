@@ -3,9 +3,12 @@ package follow
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
@@ -57,4 +60,111 @@ func TestATimelineCastorCannotStartStaysFfmpegsToRead(t *testing.T) {
 	if got := republished(t, shape{timeline: refused}).String(); got != "https://cdn.example/live/index.m3u8" {
 		t.Errorf("an unreadable timeline reads %s, want the origin's own", got)
 	}
+}
+
+type closingOrigin struct {
+	started   chan struct{}
+	cancelled chan struct{}
+	release   chan struct{}
+}
+
+func (o *closingOrigin) Window(context.Context) (timeline.Window, error) {
+	return timeline.Window{Segments: []timeline.Segment{{URI: "https://origin.example/0.ts", Duration: time.Second}}, Closed: true}, nil
+}
+func (o *closingOrigin) Read(ctx context.Context, _ string, _ timeline.Range) (io.ReadCloser, error) {
+	close(o.started)
+	<-ctx.Done()
+	close(o.cancelled)
+	<-o.release
+	return nil, context.Cause(ctx)
+}
+
+func TestRepublisherStopJoinsOriginCleanup(t *testing.T) {
+	origin := &closingOrigin{started: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}
+	program, err := media.NewProgram(media.Program{
+		Inputs:     []media.Input{{ID: media.PrimaryInputID, URL: sourcetest.URL(t, "https://origin.example/index.m3u8"), ContentType: media.HLS}},
+		Tracks:     []media.TrackRef{{Input: media.PrimaryInputID, Kind: media.TrackVideo}},
+		ClockInput: media.PrimaryInputID, EndPolicy: media.EndAtLongest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	followed, stop, err := New(&sourcetest.Document{}, source.Formats{shape{timeline: origin}}, nil).Republish(t.Context(), program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := sync.OnceFunc(func() { close(origin.release) })
+	t.Cleanup(func() { release(); _ = stop() })
+	input, _ := followed.PrimaryInput()
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		response, err := http.Get(input.URL.ResolveReference(&url.URL{Path: "/primary/0"}).String())
+		if err == nil {
+			_, _ = io.Copy(io.Discard, response.Body)
+			_ = response.Body.Close()
+		}
+	}()
+	<-origin.started
+	stopped := make(chan error, 1)
+	go func() { stopped <- stop() }()
+	<-origin.cancelled
+	select {
+	case err := <-stopped:
+		t.Fatalf("stop returned before origin cleanup: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	release()
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stop did not join completed origin cleanup")
+	}
+	<-requestDone
+}
+
+type closingWindow struct{ closingOrigin }
+
+func (o *closingWindow) Window(ctx context.Context) (timeline.Window, error) {
+	close(o.started)
+	<-ctx.Done()
+	close(o.cancelled)
+	<-o.release
+	return timeline.Window{}, context.Cause(ctx)
+}
+func TestServerCloseJoinsPlaylistHandler(t *testing.T) {
+	origin := &closingWindow{closingOrigin{started: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}}
+	server := serving(t, origin, nil)
+	release := sync.OnceFunc(func() { close(origin.release) })
+	t.Cleanup(release)
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		response, err := http.Get(server.URL("primary").String())
+		if err == nil {
+			_ = response.Body.Close()
+		}
+	}()
+	<-origin.started
+	stopped := make(chan error, 1)
+	go func() { stopped <- server.Close() }()
+	<-origin.cancelled
+	select {
+	case err := <-stopped:
+		t.Fatalf("server returned before handler cleanup: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	release()
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("server did not join completed handler")
+	}
+	<-requestDone
 }

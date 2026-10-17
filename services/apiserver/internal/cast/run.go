@@ -12,6 +12,7 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
+	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
@@ -25,7 +26,18 @@ const (
 )
 
 // play casts c's source on target and returns how it ended: the media server's word, unless this server ended it first.
-func (s *Service) play(ctx context.Context, c *cast, target device.Info, asked *mediav1.PlaybackSettings) *castorv1.Ended {
+func (s *Service) play(ctx context.Context, c *cast, target device.Info, asked *mediav1.PlaybackSettings) (result *castorv1.Ended) {
+	ctx, finish := telemetry.Start(ctx, telemetry.Playback)
+	defer func() {
+		switch {
+		case result.GetFailed() != nil:
+			finish(errors.New("playback failed"))
+		case result.GetStopped() != nil:
+			finish(context.Canceled)
+		default:
+			finish(nil)
+		}
+	}()
 	ended, err := s.run(ctx, c, target, asked)
 	cause := context.Cause(ctx)
 	switch {
@@ -66,7 +78,11 @@ func (s *Service) run(ctx context.Context, c *cast, target device.Info, asked *m
 	// Connected first, so an unreachable device costs no media cast and a slow one never outlasts the media server's wait for it.
 	lent, err := s.devices.Connect(ctx, target)
 	if err != nil {
-		return nil, &castFailure{code: castorv1.FailureCode_FAILURE_CODE_DEVICE_UNREACHABLE, err: fmt.Errorf("connecting to the device: %w", err)}
+		code := castorv1.FailureCode_FAILURE_CODE_DEVICE_UNREACHABLE
+		if _, busy := errors.AsType[*device.Busy](err); busy {
+			code = castorv1.FailureCode_FAILURE_CODE_PLAYBACK_FAILED
+		}
+		return nil, &castFailure{code: code, err: fmt.Errorf("connecting to the device: %w", err)}
 	}
 	defer func() { _ = lent.Close() }()
 	if c.source.GetPages() != nil {
@@ -112,7 +128,7 @@ func (s *Service) run(ctx context.Context, c *cast, target device.Info, asked *m
 	if ctx.Err() == nil {
 		wg.Go(func() {
 			// A lost drive ends the cast: the device is no longer lent, and a device's own failures reach the media server as answers.
-			if err := s.media.Drive(driving, c.id, lent, c.device); err != nil && driving.Err() == nil {
+			if err := s.media.Drive(driving, c.id, lent); err != nil && driving.Err() == nil {
 				c.stop(&castFailure{code: castorv1.FailureCode_FAILURE_CODE_INTERNAL, err: fmt.Errorf("driving the device: %w", err)})
 			}
 		})

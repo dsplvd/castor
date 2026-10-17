@@ -19,6 +19,9 @@ func Watch(ctx context.Context, m Monitor) error {
 	defer tick.Stop()
 
 	for {
+		if err := context.Cause(ctx); err != nil {
+			return err
+		}
 		h := t.read()
 		r, act, err := judge(m.Phase, h)
 		if err != nil {

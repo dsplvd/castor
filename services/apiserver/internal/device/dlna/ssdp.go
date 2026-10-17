@@ -19,7 +19,7 @@ func searchDescription(ctx context.Context, host string) (string, error) {
 	target := device.WithPort(host, ssdpPort)
 
 	var dialer net.Dialer
-	conn, err := dialer.DialContext(ctx, "udp4", target)
+	conn, err := dialer.DialContext(ctx, "udp", target)
 	if err != nil {
 		return "", fmt.Errorf("dialing %s: %w", target, err)
 	}

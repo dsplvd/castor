@@ -9,26 +9,30 @@ import (
 
 func TestBearerDoesNotFollowRedirectsToAnotherServer(t *testing.T) {
 	var leaked atomic.Bool
-	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		leaked.Store(r.Header.Get("Authorization") != "")
-	}))
-	defer other.Close()
-	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer secret" {
-			t.Error("the configured server did not receive its bearer token")
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == "other.example" {
+			leaked.Store(r.Header.Get("Authorization") != "")
+			return
 		}
-		http.Redirect(w, r, other.URL, http.StatusTemporaryRedirect)
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			t.Error("configured server did not receive its bearer token")
+		}
+		http.Redirect(w, r, "http://other.example/", http.StatusTemporaryRedirect)
 	}))
-	defer first.Close()
-	resp, err := Bearer("secret").Get(first.URL)
+	// One in-memory HTTP server models two origins; the real HTTP client still
+	// owns redirect handling and the production transport adds credentials.
+	previous := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+	response, err := Bearer("secret").Get("http://first.example/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = resp.Body.Close()
+	defer response.Body.Close()
 	if leaked.Load() {
-		t.Fatal("a redirect forwarded the bearer token to another server")
+		t.Fatal("redirect forwarded bearer credentials")
 	}
-	if resp.StatusCode != http.StatusTemporaryRedirect {
-		t.Fatalf("redirect response = %d, want the original redirect", resp.StatusCode)
+	if response.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("redirect status = %d", response.StatusCode)
 	}
 }

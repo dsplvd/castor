@@ -12,7 +12,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// iframeSrcJS finds largest visible iframe (100x100+) and returns src.
+// iframeSrcJS finds largest displayed iframe, including offscreen lazy players (100x100+) and returns src.
 //
 //go:embed js/iframe_src.js
 var iframeSrcJS string

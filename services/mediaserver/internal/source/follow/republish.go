@@ -27,6 +27,13 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 	// Reads ahead of the reader outlive no read: stopping the republish ends them.
 	ctx, cancel := context.WithCancel(parent)
 	var feeds []*feed
+	var owned []*feed
+	stop := func() {
+		cancel()
+		for _, feed := range owned {
+			feed.wait()
+		}
+	}
 	followed := map[media.InputID]bool{}
 	for _, in := range program.Inputs {
 		src := r.formats.Claiming(in.ContentType).Timeline(r.client, in, reads(program, in.ID))
@@ -38,11 +45,12 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 		if fetch := in.Fetching(); !fetch.Live && !fetch.Spliced {
 			repackage = nil
 		}
-		feed := newFeed(string(in.ID), src, repackage)
-		if err := feed.start(ctx); err != nil {
+		feed := newFeed(ctx, string(in.ID), src, repackage)
+		owned = append(owned, feed)
+		if err := feed.start(); err != nil {
 			// A representation has no reading but castor's; a playlist castor cannot follow stays ffmpeg's to read.
 			if in.Representation != "" {
-				cancel()
+				stop()
 				return media.Program{}, nil, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
 			}
 			slog.WarnContext(ctx, "castor could not read this input's timeline, so ffmpeg reads the origin directly",
@@ -52,12 +60,12 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 		feeds, followed[in.ID] = append(feeds, feed), true
 	}
 	if len(feeds) == 0 {
-		cancel()
+		stop()
 		return program, func() error { return nil }, nil
 	}
 	server, err := serve(feeds...)
 	if err != nil {
-		cancel()
+		stop()
 		return media.Program{}, nil, err
 	}
 	out := program.Clone()
@@ -68,7 +76,12 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 			slog.InfoContext(ctx, "castor follows this input's timeline", "input", in.ID, "origin", in.URL.Redacted(), "republished", out.Inputs[i].URL)
 		}
 	}
-	return out, func() error { cancel(); return server.Close() }, nil
+	return out, func() error {
+		cancel()
+		err := server.Close()
+		stop()
+		return err
+	}, nil
 }
 
 // reads is the kind of track a program reads from input: the one it requires, the first it names otherwise.

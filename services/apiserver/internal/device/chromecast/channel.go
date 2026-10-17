@@ -170,7 +170,7 @@ func (ch *channel) answer(requestID int, payload []byte) {
 
 // request sends payload under a fresh request id and returns the receiver's answer to it.
 func (ch *channel) request(ctx context.Context, destination, namespace string, payload castmedia.Payload) ([]byte, error) {
-	ctx, cancel := context.WithTimeoutCause(ctx, answerWithin, fmt.Errorf("the chromecast did not answer within %s", answerWithin))
+	ctx, cancel := context.WithTimeoutCause(ctx, answerWithin, fmt.Errorf("the chromecast did not answer within %s: %w", answerWithin, context.DeadlineExceeded))
 	defer cancel()
 	reply := make(chan []byte, 1)
 	ch.mu.Lock()

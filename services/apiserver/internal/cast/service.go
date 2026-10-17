@@ -17,8 +17,10 @@ import (
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/internal/castid"
 	"github.com/stupside/castor/internal/registry"
+	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 	"github.com/stupside/castor/services/apiserver/internal/mediaclient"
+	"golang.org/x/sync/semaphore"
 )
 
 // linger keeps an ended cast findable, so a watcher that arrives late still learns how it ended.
@@ -41,20 +43,22 @@ type Resolver interface {
 
 // Service runs every cast on the device it targets, each played through the media server.
 type Service struct {
-	ctx      context.Context
-	shut     context.CancelCauseFunc
-	media    *mediaclient.Client
-	scraping Resolver
-	defaults *mediav1.PlaybackSettings
-	devices  Devices
-	casts    *registry.Registry[*cast]
+	watchers    *semaphore.Weighted
+	resolutions *semaphore.Weighted
+	ctx         context.Context
+	shut        context.CancelCauseFunc
+	media       *mediaclient.Client
+	scraping    Resolver
+	defaults    *mediav1.PlaybackSettings
+	devices     Devices
+	casts       *registry.Registry[*cast]
 }
 
 // New casts on devices through media, every cast asking defaults unless its request says otherwise.
 func New(defaults *mediav1.PlaybackSettings, devices Devices, media *mediaclient.Client, scraping Resolver) *Service {
 	// Casts outlive the request that started them, and end only once the server shuts down.
 	running, shut := context.WithCancelCause(context.Background())
-	return &Service{ctx: running, shut: shut, media: media, scraping: scraping, defaults: proto.CloneOf(defaults), devices: devices, casts: registry.New[*cast](linger)}
+	return &Service{watchers: semaphore.NewWeighted(256), resolutions: semaphore.NewWeighted(16), ctx: running, shut: shut, media: media, scraping: scraping, defaults: proto.CloneOf(defaults), devices: devices, casts: registry.New[*cast](linger)}
 }
 
 func (s *Service) Cast(ctx context.Context, req *castorv1.CastRequest) (*castorv1.CastResponse, error) {
@@ -77,18 +81,26 @@ func (s *Service) Cast(ctx context.Context, req *castorv1.CastRequest) (*castorv
 	}
 	asked := s.asked(req.GetPreferences())
 	id := castid.New()
-	run, stop := context.WithCancelCause(castid.With(s.ctx, id))
+	run, stop := context.WithCancelCause(castid.With(telemetry.WithTrace(s.ctx, ctx), id))
 	c := newCast(id, target.Public(), proto.CloneOf(req.GetSource()), stop)
 	done := make(chan struct{})
-	if s.casts.Add(c.id, c, done) != nil {
+	if err := s.casts.Add(c.id, c, done); err != nil {
 		stop(nil)
+		if errors.Is(err, registry.ErrCapacity) {
+			return nil, connect.NewError(connect.CodeResourceExhausted, err)
+		}
 		return nil, connect.NewError(connect.CodeUnavailable, errShutdown)
 	}
 	go func() {
 		defer close(done)
 		defer stop(nil)
 		ended := s.play(run, c, target, asked)
-		c.update(func(v *view) { v.ended = ended })
+		c.now.Update(func(v view) (view, bool) {
+			if v.ended != nil {
+				return v, false
+			}
+			return view{status: v.status, ended: ended}, true
+		})
 		slog.InfoContext(run, "cast ended", "device", cmp.Or(c.device.GetName(), c.device.GetAddress()), "result", result(ended))
 	}()
 	return &castorv1.CastResponse{CastId: c.id}, nil
@@ -132,6 +144,10 @@ func (s *Service) asked(p *castorv1.Preferences) *mediav1.PlaybackSettings {
 }
 
 func (s *Service) Resolve(ctx context.Context, req *castorv1.ResolveRequest) (*castorv1.ResolveResponse, error) {
+	if !s.resolutions.TryAcquire(1) {
+		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("concurrent resolutions capacity exhausted"))
+	}
+	defer s.resolutions.Release(1)
 	source, err := s.resolve(ctx, req.GetSource())
 	if err != nil {
 		return nil, err

@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/stupside/castor/internal/castid"
+	"github.com/stupside/castor/internal/telemetry"
 )
 
 // Endpoint is where a server answers, and the token it asks for.
@@ -23,7 +24,7 @@ func (e Endpoint) Client() *http.Client { return Bearer(e.Token) }
 
 // Options hold every message a handler or client takes and sends to the rules its contract states, and carry the id of the cast a call belongs to.
 func Options() connect.Option {
-	return connect.WithInterceptors(validate.NewInterceptor(validate.WithValidateResponses()), castid.Interceptor())
+	return connect.WithInterceptors(castid.Interceptor(), telemetry.RPC(), validate.NewInterceptor(validate.WithValidateResponses()))
 }
 
 // Introspect serves health checks and reflection for services on mux.

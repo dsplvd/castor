@@ -11,6 +11,7 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/execute"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -39,26 +40,28 @@ const (
 
 // backend is the machinery the media server casts with, bound to c.
 func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
-	// One origin session for the engine, so every cast and identification share its cookies.
-	client := web.New(fetchTimeout)
-	e := &engine{
-		cfg:    *c,
-		client: client,
+	shared := engine{
+		cfg: *c,
 		machinery: execute.Machinery{
+			Outputs:    adapters.Default(),
 			FFmpegPath: ffmpegBinary,
 			Binary:     ffmpeg.Inspect(ffmpegBinary),
 			Encoders:   ffmpeg.Encoders(ffmpegBinary),
 			Probes:     probe.FFprobe(ffprobeBinary),
-			Timelines:  follow.New(client, formats, follow.Repackager(ffmpegBinary)),
 			InputArgs:  formats.InputArgs,
 		},
 	}
 	return func(asked *mediav1.PlaybackSettings) cast.Caster {
+		// Host capabilities are immutable and shared; origin credentials and
+		// timeline readers belong to this cast, including its recovery attempts.
+		e := shared
+		e.client = web.New(fetchTimeout)
+		e.machinery.Timelines = follow.New(e.client, formats, follow.Repackager(ffmpegBinary))
 		return caster{
 			Ranker: rank.New(e.cfg.Resolver.Config, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
 				return e.machinery.Probes.Link(probe.Link{URL: s.URL, Headers: s.Headers, InputArgs: formats.InputArgs(s.ContentType, 0)}, fetchTimeout)
 			}),
-			engine: e,
+			engine: &e,
 			asked:  asked,
 			subs:   e.subtitles(asked.GetSubtitles()),
 		}
@@ -71,7 +74,7 @@ type engine struct {
 	machinery execute.Machinery
 }
 
-// subtitles burns in the selected language with the configured whisper model, none when the selection disables them.
+// subtitles transcribes the selected language with Whisper; delivery chooses a native track or burn-in.
 func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtitles {
 	if selection.GetDisabled() != nil {
 		return nil
@@ -80,8 +83,8 @@ func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtit
 	if selection.GetAutoDetect() != nil {
 		language = "auto"
 	}
-	return func(ctx context.Context, workDir string) execute.Burn {
-		b, err := whisper.New(ctx, e.cfg.Whisper, language, workDir)
+	return func(ctx context.Context) execute.Transcript {
+		b, err := whisper.New(ctx, e.cfg.Whisper, language)
 		if err != nil {
 			slog.WarnContext(ctx, "whisper init failed; casting without subtitles", "error", err)
 			return nil

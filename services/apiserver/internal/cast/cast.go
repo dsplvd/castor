@@ -32,18 +32,12 @@ func newCast(id string, device *castorv1.Device, source *castorv1.Source, stop c
 	return &cast{id: id, device: device, source: source, started: time.Now(), stop: stop, now: latest.New(view{status: &castorv1.CastStatus{State: &castorv1.CastStatus_Connecting{Connecting: &emptypb.Empty{}}}})}
 }
 
-// update publishes what change makes of the cast, unless it has ended.
-func (c *cast) update(change func(*view)) {
+// show publishes a new status snapshot until the owner publishes completion.
+func (c *cast) show(status *castorv1.CastStatus) {
 	c.now.Update(func(v view) (view, bool) {
 		if v.ended != nil {
 			return v, false
 		}
-		change(&v)
-		return v, true
+		return view{status: proto.CloneOf(status)}, true
 	})
-}
-
-// show is the media server's status, as the cast's.
-func (c *cast) show(status *castorv1.CastStatus) {
-	c.update(func(v *view) { v.status = proto.CloneOf(status) })
 }

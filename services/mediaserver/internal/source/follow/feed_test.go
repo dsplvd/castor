@@ -50,7 +50,7 @@ func (s *scripted) Window(context.Context) (timeline.Window, error) {
 
 func serving(t *testing.T, s timeline.Source, repackage Repackage) *server {
 	t.Helper()
-	server, err := serve(newFeed("primary", s, repackage))
+	server, err := serve(newFeed(t.Context(), "primary", s, repackage))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,12 +116,12 @@ func TestAFeedStartsThroughAPassingFailureButNotARefusal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		busy := &timeline.Failure{Status: http.StatusServiceUnavailable, Err: errors.New("busy")}
 		passing := &scripted{replies: []reply{{err: busy}, {err: errors.New("connection reset")}, {window: listed("a", 0, 3)}}}
-		if err := newFeed("primary", passing, nil).start(t.Context()); err != nil {
+		if err := newFeed(t.Context(), "primary", passing, nil).start(); err != nil {
 			t.Errorf("start = %v after a 503 and a reset, want the window the origin answered next", err)
 		}
 
 		gone := &scripted{replies: []reply{{err: &timeline.Failure{Status: http.StatusGone, Err: errors.New("expired")}}, {window: listed("a", 0, 3)}}}
-		if err := newFeed("primary", gone, nil).start(t.Context()); err == nil || gone.asked != 1 {
+		if err := newFeed(t.Context(), "primary", gone, nil).start(); err == nil || gone.asked != 1 {
 			t.Errorf("start = %v after %d reads, want the origin's 410 at once", err, gone.asked)
 		}
 	})

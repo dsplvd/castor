@@ -9,12 +9,7 @@ import (
 )
 
 func TestTheCompositionADeviceGets(t *testing.T) {
-	selfFetching := media.Capabilities{
-		SelfFetch:  true,
-		Containers: []string{media.MP4},
-		Video:      []media.VideoSupport{{Codec: media.CodecH264}},
-		Audio:      []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
-	}
+	selfFetching := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	for _, tt := range []struct {
 		name       string
 		device     media.Capabilities

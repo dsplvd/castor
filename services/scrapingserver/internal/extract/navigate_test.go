@@ -108,3 +108,29 @@ func TestVisibleIframeNavigationWaitsForItsDocumentAndPreservesReferrer(t *testi
 		}
 	}
 }
+
+func TestOffscreenLazyIframeIsDiscovered(t *testing.T) {
+	chrome := os.Getenv("CASTOR_TEST_CHROME")
+	if chrome == "" {
+		t.Skip("set CASTOR_TEST_CHROME to exercise real browser navigation")
+	}
+	ts := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<iframe loading="lazy" src="/child" style="position:absolute;top:10000px;width:640px;height:360px"></iframe>`)
+	}))
+	ts.Start()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	s, err := newSession(ctx, BrowserConfig{ChromePath: chrome, Headless: true, Timeout: 10 * time.Second}, ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var src string
+	if err := chromedp.Run(s.ctx, chromedp.Evaluate(iframeSrcJS, &src)); err != nil {
+		t.Fatal(err)
+	}
+	if src != ts.URL+"/child" {
+		t.Fatalf("offscreen frame=%q", src)
+	}
+}

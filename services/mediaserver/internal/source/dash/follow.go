@@ -82,13 +82,16 @@ func (f *follower) Window(ctx context.Context) (timeline.Window, error) {
 		defer func() { _ = body.Close() }()
 		return source.ReadDocument(body)
 	}
+	budget := newExpansionBudget(ctx)
 	var w timeline.Window
 	for _, p := range periods {
 		o, offers := f.want.in(p.Period)
 		if !offers {
 			continue
 		}
-		segments, err := m.addressed(from, p, o).segments(e, fetch)
+		a := m.addressed(from, p, o)
+		a.budget = budget
+		segments, err := a.segments(e, fetch)
 		if err != nil {
 			return timeline.Window{}, err
 		}

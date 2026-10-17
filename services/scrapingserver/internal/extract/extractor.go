@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stupside/castor/internal/telemetry"
 	"log/slog"
 	"slices"
 	"sync"
@@ -58,7 +59,9 @@ func (e *Extractor) extract(ctx context.Context, targetURL string) ([]*castorv1.
 }
 
 // Resolve captures unranked candidates from pages within the browser concurrency budget.
-func (e *Extractor) Resolve(ctx context.Context, urls []string) ([]*castorv1.StreamCandidate, error) {
+func (e *Extractor) Resolve(ctx context.Context, urls []string) (streams []*castorv1.StreamCandidate, err error) {
+	ctx, finish := telemetry.Start(ctx, telemetry.Extract)
+	defer func() { finish(err) }()
 	slog.InfoContext(ctx, "extracting streams", "urls", len(urls))
 
 	results := make([][]*castorv1.StreamCandidate, len(urls))

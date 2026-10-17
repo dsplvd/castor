@@ -1,7 +1,9 @@
 package registry
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -10,6 +12,7 @@ import (
 func TestAValueLingersAfterItIsDoneThenIsForgotten(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := New[int](time.Minute)
+		defer r.Drain(context.Background())
 		done := make(chan struct{})
 		if err := r.Add("a", 1, done); err != nil {
 			t.Fatalf("an open registry refused a value: %v", err)
@@ -29,6 +32,7 @@ func TestAValueLingersAfterItIsDoneThenIsForgotten(t *testing.T) {
 func TestADrainingRegistryRefusesValuesAndWaitsForThoseRunning(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := New[int](time.Minute)
+		defer r.Drain(context.Background())
 		done := make(chan struct{})
 		r.Add("a", 1, done)
 		drained := make(chan struct{})
@@ -58,6 +62,7 @@ func TestADrainingRegistryRefusesValuesAndWaitsForThoseRunning(t *testing.T) {
 func TestAnIDInUseIsRefusedAndTheFirstValueKeepsIt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r := New[int](time.Minute)
+		defer r.Drain(context.Background())
 		first := make(chan struct{})
 		if err := r.Add("a", 1, first); err != nil {
 			t.Fatal(err)
@@ -75,5 +80,82 @@ func TestAnIDInUseIsRefusedAndTheFirstValueKeepsIt(t *testing.T) {
 			t.Fatalf("an id released after its linger: %v", err)
 		}
 		close(again)
+	})
+}
+
+func TestCapacityBoundsRunningAndRetainedWork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := newWithLimits[int](time.Minute, limits{Active: 1, Retained: 2})
+		defer r.Drain(context.Background())
+		first := make(chan struct{})
+		if err := r.Add("a", 1, first); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Add("b", 2, make(chan struct{})); !errors.Is(err, ErrCapacity) {
+			t.Fatalf("active capacity = %v", err)
+		}
+		close(first)
+		synctest.Wait()
+		second := make(chan struct{})
+		if err := r.Add("b", 2, second); err != nil {
+			t.Fatal(err)
+		}
+		close(second)
+		synctest.Wait()
+		if err := r.Add("c", 3, make(chan struct{})); !errors.Is(err, ErrCapacity) {
+			t.Fatalf("retained capacity = %v", err)
+		}
+		synctest.Sleep(2 * time.Minute)
+		done := make(chan struct{})
+		close(done)
+		if err := r.Add("c", 3, done); err != nil {
+			t.Fatalf("expired capacity not released: %v", err)
+		}
+	})
+}
+
+func TestCanceledDrainCanBeRetriedWithoutReopeningAdmission(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := New[int](time.Minute)
+		defer r.Drain(context.Background())
+		done := make(chan struct{})
+		if err := r.Add("running", 1, done); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		r.Drain(ctx)
+		if err := r.Add("late", 2, done); !errors.Is(err, ErrDraining) {
+			t.Fatal(err)
+		}
+		var drains sync.WaitGroup
+		for range 3 {
+			drains.Go(func() { r.Drain(t.Context()) })
+		}
+		synctest.Wait()
+		close(done)
+		drains.Wait()
+		r.Drain(t.Context())
+	})
+}
+
+func TestDrainEndsRetentionWorkersWithoutWaitingForLinger(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := New[int](24 * time.Hour)
+		defer r.Drain(context.Background())
+		done := make(chan struct{})
+		if err := r.Add("finished", 1, done); err != nil {
+			t.Fatal(err)
+		}
+		close(done)
+		synctest.Wait()
+		before := time.Now()
+		r.Drain(t.Context())
+		if time.Since(before) != 0 {
+			t.Fatal("drain waited for retention timer")
+		}
+		if value, ok := r.Find("finished"); !ok || value != 1 {
+			t.Fatal("shutdown hid completed work from remaining watchers")
+		}
 	})
 }

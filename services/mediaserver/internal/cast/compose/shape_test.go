@@ -9,11 +9,7 @@ import (
 )
 
 func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
-	caps := media.Capabilities{
-		SelfFetch: true, Containers: []string{media.HLS},
-		Video: []media.VideoSupport{{Codec: media.CodecH264}},
-		Audio: []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
-	}
+	caps := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{Transport: media.TransportHLS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	for _, tt := range []struct {
 		name       string
 		headers    http.Header
@@ -55,10 +51,7 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 }
 
 func TestAHandedOverProgramIsOneTheDevicePlaysWhole(t *testing.T) {
-	r := media.Capabilities{
-		Video: []media.VideoSupport{{Codec: media.CodecH264}},
-		Audio: []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
-	}
+	r := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	for _, tt := range []struct {
 		name string
 		info media.ProbeInfo

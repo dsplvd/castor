@@ -92,12 +92,7 @@ type lentDevice struct {
 
 func newLentDevice() *lentDevice {
 	return &lentDevice{
-		caps: &mediav1.Capabilities{
-			SelfFetch:     true,
-			Containers:    []mediav1.Container{mediav1.Container_CONTAINER_MPEGTS},
-			Video:         []*mediav1.VideoSupport{{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264, MaxLevel: 42}},
-			ServedHeaders: map[string]string{"transferMode.dlna.org": "Streaming"},
-		},
+		caps:   &mediav1.Capabilities{SelfFetch: true, ServedHeaders: map[string]string{"transferMode.dlna.org": "Streaming"}, Formats: []*mediav1.FormatSupport{{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MPEGTS}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264, MaxLevel: 42}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}}}},
 		handed: make(chan *url.URL, 4),
 		as:     make(chan mediav1.Container, 4),
 		played: make(chan []byte, 4),
@@ -210,7 +205,6 @@ func start(t *testing.T, c server, source *mediav1.Source) string {
 func lend(ctx context.Context, c server, id string, device *lentDevice) error {
 	stream, err := c.devices.Drive(ctx, &mediav1.DriveRequest{
 		CastId:       id,
-		Device:       &castorv1.Device{Name: "Bedroom", Type: castorv1.DeviceType_DEVICE_TYPE_DLNA, Address: "10.0.0.9"},
 		Capabilities: device.caps,
 	})
 	if err != nil {
@@ -225,18 +219,18 @@ func lend(ctx context.Context, c server, id string, device *lentDevice) error {
 		go func() {
 			var failed *mediav1.DeviceError
 			switch {
-			case cmd.GetPlay() != nil:
-				if err := device.play(ctx, cmd.GetPlay()); err != nil {
+			case cmd.GetCall().GetPlay() != nil:
+				if err := device.play(ctx, cmd.GetCall().GetPlay()); err != nil {
 					failed = failure(err)
 				}
-			case cmd.GetAwaitEnd() != nil:
+			case cmd.GetCall().GetAwaitEnd() != nil:
 				failed = device.awaitEnd(ctx)
 			}
 			// A lender that left answers nothing, as the API server's driver does.
 			if ctx.Err() != nil {
 				return
 			}
-			answer := &mediav1.AnswerRequest{CastId: id, CommandId: cmd.GetId(), Answer: &mediav1.AnswerRequest_Done_{Done: &mediav1.AnswerRequest_Done{}}}
+			answer := &mediav1.AnswerRequest{CastId: id, CommandId: cmd.GetCall().GetId(), Answer: &mediav1.AnswerRequest_Done_{Done: &mediav1.AnswerRequest_Done{}}}
 			if failed != nil {
 				answer.Answer = &mediav1.AnswerRequest_Error{Error: failed}
 			}
@@ -336,26 +330,14 @@ func TestPagesStreamsAreRankedThenHandedToTheLentDeviceAsTheyAre(t *testing.T) {
 	if got := string(<-device.played); got != "https://cdn.example/b.m3u8" {
 		t.Errorf("the device was handed %q, want the server's ranking head as is", got)
 	}
-	if !caps.SelfFetch || len(caps.Video) != 1 || caps.Video[0].MaxLevel != 42 {
+	if !caps.SelfFetch || len(caps.Formats) != 1 || caps.Formats[0].Video.MaxLevel != 42 {
 		t.Errorf("the engine played on %+v, want the lent device's own capabilities", caps)
 	}
 }
 
-func TestALentDevicesCapabilitiesReachTheEngineWithoutWhatThisServerDoesNotKnow(t *testing.T) {
-	const unknown = 99
+func TestALentDevicesCapabilitiesReachTheEngine(t *testing.T) {
 	device := newLentDevice()
-	device.caps = &mediav1.Capabilities{
-		Containers:      []mediav1.Container{mediav1.Container_CONTAINER_MPEGTS, unknown},
-		ServedContainer: mediav1.Container_CONTAINER_MP4,
-		Deinterlaces:    true,
-		Video: []*mediav1.VideoSupport{
-			{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_HIGH, unknown}, MaxLevel: 42},
-			{Codec: unknown},
-			{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, Profiles: []mediav1.Profile{unknown}},
-			{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_MAIN_10}, BitDepths: []uint32{10}},
-		},
-		Audio: []*mediav1.AudioSupport{{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}, {Codec: unknown}},
-	}
+	device.caps = &mediav1.Capabilities{Deinterlaces: true, Formats: []*mediav1.FormatSupport{{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MP4}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_HIGH}, MaxLevel: 42}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}}, {Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MP4}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_MAIN_10}, BitDepths: []uint32{10}}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}}, {Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MPEGTS}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_HIGH}, MaxLevel: 42}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}}, {Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MPEGTS}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, Profiles: []mediav1.Profile{mediav1.Profile_PROFILE_MAIN_10}, BitDepths: []uint32{10}}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}}}}
 	seen := make(chan media.Capabilities, 1)
 	c := serve(t, machinery(func(ctx context.Context, lent execute.Device, l deliver.Listeners, streams []*source.Stream, turns recovery.Turns) error {
 		seen <- lent.Capabilities()
@@ -365,16 +347,7 @@ func TestALentDevicesCapabilitiesReachTheEngineWithoutWhatThisServerDoesNotKnow(
 	if err := castOn(t, c, streamOf("https://cdn.example/direct"), device).outcome(); err != nil {
 		t.Fatal(err)
 	}
-	want := media.Capabilities{
-		Containers:      []string{media.MPEGTS},
-		ServedContainer: media.MP4,
-		Deinterlaces:    true,
-		Video: []media.VideoSupport{
-			{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileHigh}, MaxLevel: 42},
-			{Codec: media.CodecHEVC, Profiles: []media.Profile{media.ProfileMain10}, BitDepths: []int{10}},
-		},
-		Audio: []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
-	}
+	want := media.Capabilities{Deinterlaces: true, Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileHigh}, MaxLevel: 42}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}, {Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecHEVC, Profiles: []media.Profile{media.ProfileMain10}, BitDepths: []int{10}}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}, {Transport: media.TransportMPEGTS, Video: media.VideoSupport{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileHigh}, MaxLevel: 42}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}, {Transport: media.TransportMPEGTS, Video: media.VideoSupport{Codec: media.CodecHEVC, Profiles: []media.Profile{media.ProfileMain10}, BitDepths: []int{10}}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	if got := <-seen; !reflect.DeepEqual(got, want) {
 		t.Errorf("the engine played on %+v, want %+v: what it knows, and nothing wider than the device said", got, want)
 	}

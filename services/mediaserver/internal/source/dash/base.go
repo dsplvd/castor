@@ -55,6 +55,9 @@ func (a addressed) indexed(b *mpd.SegmentBaseType, fetch indexer) ([]timeline.Se
 	} else if references, timescale, err = index.Sidx(sidx, at.Offset); err != nil {
 		return nil, err
 	}
+	if err := a.budget.take(int64(len(references))); err != nil {
+		return nil, err
+	}
 	out := make([]timeline.Segment, len(references))
 	var before time.Duration
 	for i, r := range references {

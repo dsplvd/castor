@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -133,9 +134,9 @@ func TestAHungClientIsFreedAndTheCastEnds(t *testing.T) {
 		srv := spooled(t, Opening{WriteDeadline: 300 * time.Millisecond, IdleGrace: 50 * time.Millisecond}, payload(8<<20))
 		read(t, get(t, srv, ""), 1)
 		settled(t, srv)
-		srv.mu.Lock()
-		defer srv.mu.Unlock()
-		if srv.completed {
+		srv.audience.mu.Lock()
+		defer srv.audience.mu.Unlock()
+		if srv.audience.completed {
 			t.Error("a client read to EOF, so the grace this test exists to reach was never consulted")
 		}
 	})
@@ -334,4 +335,73 @@ func TestAMissingWriteDeadlineIsWarnedOnce(t *testing.T) {
 	if got := strings.Count(logs.String(), "write deadline unavailable"); got != 1 {
 		t.Errorf("warned %d times over 3 chunks, want once", got)
 	}
+}
+
+func TestStreamCloseInterruptsBlockedProducer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		reader, writer := io.Pipe()
+		defer writer.Close()
+		srv, err := OpenStream(t.Context(), Opening{Listeners: newLAN(t)}, t.TempDir(), reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-srv.Drained():
+		default:
+			t.Fatal("producer remains blocked after close")
+		}
+	})
+}
+
+type cleanupReader struct {
+	io.Reader
+	close func() error
+}
+
+func (r cleanupReader) Close() error { return r.close() }
+
+func TestStreamCloseJoinsProducerCleanup(t *testing.T) {
+	closing, release := make(chan struct{}), make(chan struct{})
+	producer := cleanupReader{Reader: strings.NewReader(""), close: func() error {
+		close(closing)
+		<-release
+		return nil
+	}}
+	srv, err := OpenStream(t.Context(), Opening{Listeners: newLAN(t)}, t.TempDir(), producer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-closing
+	done := make(chan error, 1)
+	go func() { done <- srv.Close() }()
+	select {
+	case <-done:
+		t.Fatal("Close returned before producer cleanup")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStreamCancellationPreservesUnrelatedProducerFailure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		reader, writer := io.Pipe()
+		// Expose only Read: cancel cannot manufacture the error being asserted.
+		srv, err := OpenStream(ctx, Opening{Listeners: newLAN(t)}, t.TempDir(), struct{ io.Reader }{reader})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := errors.New("producer data corrupted")
+		cancel()
+		writer.CloseWithError(want)
+		if err := srv.Close(); !errors.Is(err, want) {
+			t.Fatalf("Close() = %v, want producer failure", err)
+		}
+	})
 }

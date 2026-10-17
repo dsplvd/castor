@@ -3,12 +3,14 @@ package ffmpeg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"syscall"
 
@@ -25,7 +27,8 @@ type Process struct {
 	// Stdout is the primary output (pipe:1).
 	Stdout io.ReadCloser
 
-	cmd *exec.Cmd
+	cmd   *exec.Cmd
+	input *observedInput
 
 	// extra are the side outputs in pipe order, starting at firstExtraFD.
 	extra []*loopback
@@ -103,8 +106,12 @@ func Start(ctx context.Context, path string, command Command, opts Options) (*Pr
 
 	cmd := exec.CommandContext(ctx, path, args...)
 	stopped, scanned := new(atomic.Bool), make(chan struct{})
-	cmd.Cancel = func() error { return kill(cmd.Process, scanned, stopped) }
-	cmd.Stdin = opts.Stdin
+	cmd.Cancel = sync.OnceValue(func() error { return kill(cmd.Process, scanned, stopped) })
+	var input *observedInput
+	if opts.Stdin != nil {
+		input = &observedInput{Reader: opts.Stdin}
+		cmd.Stdin = input
+	}
 	cmd.Dir = opts.WorkDir
 
 	stdout, err := cmd.StdoutPipe()
@@ -128,6 +135,7 @@ func Start(ctx context.Context, path string, command Command, opts Options) (*Pr
 	p := &Process{
 		Stdout:  stdout,
 		cmd:     cmd,
+		input:   input,
 		extra:   extra,
 		tail:    newRingTail(),
 		markers: &markerWatch{},
@@ -211,14 +219,17 @@ func (p *Process) Wait() error {
 	// And join stderr drain (ffmpeg's error path is still in the pipe).
 	<-p.scanned
 	<-p.teed
+	if p.input != nil {
+		if failure := p.input.failure.Load(); failure != nil {
+			err = errors.Join(err, *failure)
+		}
+	}
 	return err
 }
 
 // Kill signals the process to stop. It is idempotent and safe after exit.
 func (p *Process) Kill() {
-	if p.cmd.Process != nil {
-		_ = kill(p.cmd.Process, p.scanned, p.stopped)
-	}
+	_ = p.cmd.Cancel()
 }
 
 // kill marks castor's own kill only while stderr is open: an exited, unreaped process still accepts one.
@@ -253,4 +264,20 @@ func (p *Process) exitStatus() int {
 		return noExitStatus
 	}
 	return signalExitBase + int(ws.Signal())
+}
+
+// observedInput preserves source errors that os/exec otherwise replaces with a
+// nonzero process exit. EOF is ordinary completion, never a failure.
+type observedInput struct {
+	io.Reader
+	failure atomic.Pointer[error]
+}
+
+func (r *observedInput) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		saved := err
+		r.failure.Store(&saved)
+	}
+	return n, err
 }

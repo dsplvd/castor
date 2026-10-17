@@ -31,7 +31,7 @@ func (f *feed) read(ctx context.Context, s timeline.Segment) ([]byte, error) {
 }
 
 func (f *feed) initBytes(ctx context.Context, m timeline.Map) ([]byte, error) {
-	return f.initsHeld.get(ctx, m, func(ctx context.Context) ([]byte, error) {
+	return f.initsHeld.get(ctx, f.life, m, func(ctx context.Context) ([]byte, error) {
 		b, err := f.pull(ctx, m.URI, m.Range, source.DocumentLimit)
 		if err != nil || !decryptable(m.Key) {
 			return b, err
@@ -42,7 +42,7 @@ func (f *feed) initBytes(ctx context.Context, m timeline.Map) ([]byte, error) {
 
 // keyBytes relays a key that the downstream reader handles itself.
 func (f *feed) keyBytes(ctx context.Context, uri string) ([]byte, error) {
-	return f.keysHeld.get(ctx, uri, func(ctx context.Context) ([]byte, error) {
+	return f.keysHeld.get(ctx, f.life, uri, func(ctx context.Context) ([]byte, error) {
 		return f.pull(ctx, uri, timeline.Range{}, source.DocumentLimit)
 	})
 }

@@ -21,14 +21,15 @@ func (s *Service) Drive(ctx context.Context, req *mediav1.DriveRequest, out *con
 		return err
 	}
 	defer c.line.Leave()
-	lent := req.GetDevice()
-	slog.InfoContext(c.ctx, "device lent", "id", lent.GetId(), "name", lent.GetName(), "type", lent.GetType(), "address", lent.GetAddress())
+	slog.InfoContext(c.ctx, "playback consumer connected")
 	for {
 		select {
 		case cmd := <-c.line.Outbox():
 			if err := out.Send(&mediav1.DriveResponse{Command: cmd}); err != nil {
 				return err
 			}
+		case <-c.line.Done():
+			return c.line.Err()
 		case <-c.done:
 			return nil
 		case <-ctx.Done():

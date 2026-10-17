@@ -3,6 +3,7 @@ package deliver
 import (
 	"context"
 	"fmt"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver/httpserve"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,11 +17,11 @@ func Static(ctx context.Context, listeners Listeners, name, contentType, body st
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening the %s listener: %w", name, err)
 	}
-	server := serve(ctx, ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httpserve.Start(ctx, ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeContent(w, r, name, time.Time{}, strings.NewReader(body))
 	}))
 	u := &url.URL{Scheme: "http", Host: ln.Addr().String(), Path: "/" + name}
-	return u, func() error { return stop(server) }, nil
+	return u, func() error { return httpserve.Stop(server) }, nil
 }

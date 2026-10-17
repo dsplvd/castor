@@ -30,6 +30,5 @@ const (
 	navigateIframeMaxDepth = 5
 	turnstileRetryTimeout  = 10 * time.Second
 	bypassTurnstileTimeout = 20 * time.Second
-	snapshotTimeout        = 5 * time.Second
 	pageBudget             = 2 * time.Minute
 )

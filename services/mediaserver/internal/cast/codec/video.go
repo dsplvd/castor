@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
@@ -65,13 +66,16 @@ func decideVideo(ctx context.Context, in Inputs) (Track[VideoEncode], []Reason, 
 	}
 	return Encode(VideoEncode{
 		Encoder:             enc,
+		Profile:             t.profile,
+		Level:               t.level,
+		MaxWidth:            t.width,
 		Deinterlace:         in.Probe.VideoInterlaced && !in.Caps.Deinterlaces,
 		ToneMap:             in.Probe.VideoHDR,
-		MaxFrameRate:        playbackFrameRate,
+		MaxFrameRate:        min(playbackFrameRate, t.frameRate),
 		Bitrate:             t.bitrate,
 		Maxrate:             t.maxrate,
 		Bufsize:             t.bufsize,
-		MaxHeight:           in.MaxHeight,
+		MaxHeight:           boundedHeight(in.MaxHeight, t.height),
 		KeyframeIntervalSec: keyframeSeconds,
 		SubtitleTextFile:    in.BurnIn,
 	}), refused, nil
@@ -82,11 +86,18 @@ const playbackFrameRate = 60
 
 func selectVideoEncoder(caps media.Capabilities, selectEncoder func(media.Codec) (ffmpeg.Encoder, bool)) (ffmpeg.Encoder, videoTarget, bool) {
 	for _, t := range videoTargets {
-		if !caps.SupportsVideoCodec(t.codec) {
-			continue
-		}
-		if enc, ok := selectEncoder(t.codec); ok && holdsRealtime(enc, t.codec) {
-			return enc, t, true
+		for _, format := range caps.Formats {
+			support := format.Video
+			if support.Codec != t.codec {
+				continue
+			}
+			bounded, ok := targetEnvelope(t, support)
+			if !ok {
+				continue
+			}
+			if enc, ok := selectEncoder(t.codec); ok && holdsRealtime(enc, t.codec) {
+				return enc, bounded, true
+			}
 		}
 	}
 	// No common strategy is safer than inventing support the device never advertised.
@@ -98,8 +109,9 @@ func holdsRealtime(enc ffmpeg.Encoder, codec media.Codec) bool {
 }
 
 func noVideoEncoder(caps media.Capabilities) error {
-	advertised := make([]string, 0, len(caps.Video))
-	for _, s := range caps.Video {
+	advertised := make([]string, 0, len(caps.Formats))
+	for _, format := range caps.Formats {
+		s := format.Video
 		if !slices.Contains(advertised, string(s.Codec)) {
 			advertised = append(advertised, string(s.Codec))
 		}
@@ -109,6 +121,9 @@ func noVideoEncoder(caps media.Capabilities) error {
 
 type videoTarget struct {
 	codec                     media.Codec
+	profile, level            string
+	width, height             int
+	frameRate                 float64
 	bitrate, maxrate, bufsize string
 }
 
@@ -124,3 +139,63 @@ var videoTargets = []videoTarget{
 const keyframeSeconds = 2
 
 const floorVideoQuality = 23
+
+// targetEnvelope only selects encodes the host's 8-bit pipeline can honor.
+// Unknown or smaller levels are refused rather than setting a misleading flag.
+func targetEnvelope(t videoTarget, s media.VideoSupport) (videoTarget, bool) {
+	if len(s.BitDepths) > 0 && !slices.Contains(s.BitDepths, 8) {
+		return t, false
+	}
+	t.width, t.height, t.frameRate = 1920, 1080, 60
+	var candidates []media.Profile
+	if t.codec == media.CodecH264 {
+		candidates = []media.Profile{media.ProfileHigh, media.ProfileMain, media.ProfileConstrainedBaseline, media.ProfileBaseline}
+	} else {
+		candidates = []media.Profile{media.ProfileMain}
+	}
+	selected := false
+	for _, p := range candidates {
+		if len(s.Profiles) == 0 || slices.Contains(s.Profiles, p) {
+			t.profile = strings.ToLower(string(p))
+			if p == media.ProfileConstrainedBaseline {
+				t.profile = "baseline"
+			}
+			selected = true
+			break
+		}
+	}
+	if !selected {
+		return t, false
+	}
+	if s.MaxLevel > 0 {
+		divisor := 10.0
+		if t.codec == media.CodecH264 {
+			if s.MaxLevel < 31 {
+				return t, false
+			}
+			if s.MaxLevel < 40 {
+				t.width, t.height = 1280, 720
+			}
+			if s.MaxLevel < 42 {
+				t.frameRate = 30
+			}
+		} else {
+			divisor = 30
+			if s.MaxLevel < 120 {
+				return t, false
+			}
+			if s.MaxLevel < 123 {
+				t.frameRate = 30
+			}
+		}
+		t.level = strconv.FormatFloat(float64(s.MaxLevel)/divisor, 'f', 1, 64)
+	}
+	return t, true
+}
+
+func boundedHeight(requested media.HeightCap, envelope int) media.HeightCap {
+	if requested <= 0 {
+		return media.HeightCap(envelope)
+	}
+	return media.HeightCap(min(int(requested), envelope))
+}

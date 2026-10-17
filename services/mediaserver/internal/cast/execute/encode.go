@@ -3,6 +3,7 @@ package execute
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,50 +11,62 @@ import (
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/codec"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/fetch"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
 
-// encode decides what the served encode does with what f reads, for the device and any burn-in.
-func (s *pipeline) encode(f feed, burn Burn) (transcode.EncodeOptions, error) {
-	caps := s.cast.Device.Capabilities()
-	into, ok := container.For(caps.ServedContainer)
-	if !ok {
-		return transcode.EncodeOptions{}, fmt.Errorf("the device asks to be served %q, which castor cannot produce", caps.ServedContainer)
+// encoding keeps the producer instructions bound to the selected publisher.
+type encoding struct {
+	transcode.EncodeOptions
+	delivery output.Selection
+}
+
+// encode decides codecs within the envelope accepted by the output adapter.
+func (s *pipeline) encode(f feed, burn burnRenderer) (encoding, error) {
+	selected, native := s.nativeOutput(f)
+	if !native || burn != nil {
+		var err error
+		selected, err = s.cast.Outputs.Select(s.playbackCapabilities(), nil)
+		if err != nil {
+			return encoding{}, err
+		}
 	}
+	into := selected.Plan.Format()
 
 	var burnIn string
 	if burn != nil {
 		var err error
-		if burnIn, err = burn.Inputs(); err != nil {
-			return transcode.EncodeOptions{}, err
+		if burnIn, err = burn.Create(); err != nil {
+			return encoding{}, err
 		}
 	}
 
-	facts, input, err := s.input(f, fetch.Ceiling(into.Delivery, burnIn != ""))
+	pace := selected.Plan.Pace(burnIn != "")
+	facts, input, err := s.input(f, pace)
 	if err != nil {
-		return transcode.EncodeOptions{}, err
+		return encoding{}, err
 	}
 
-	decided, err := s.decide(caps, into, facts, burnIn, f.spliced())
+	decided, err := s.decide(selected.Capabilities, into, facts, burnIn, f.spliced())
 	if err != nil {
-		return transcode.EncodeOptions{}, err
+		return encoding{}, err
 	}
-	return transcode.EncodeOptions{
+	return encoding{delivery: selected,
 		Input:  input,
 		Format: into,
 		Probe:  facts.probe,
 		Video:  decided.Video,
-		Audio:  decided.Audio,
-	}, nil
+		Audio:  decided.Audio}, nil
 }
 
 // input is what the encoder reads from f, measured where it reads it: the spool as it grows, or the source itself.
 func (s *pipeline) input(f feed, ceiling fetch.Pace) (facts, transcode.EncodeInput, error) {
 	if f.buffered != nil {
-		measured := measure(s.ctx, "the local buffer this encode reads", s.cast.Probes.File(f.buffered.reader.spool.Path()))
+		measured := measure(s.ctx, "the local buffer this encode reads", s.cast.Probes.File(f.buffered.reader.spool.ProbePath()))
 		return measured, transcode.FromPipe(ceiling), nil
 	}
 	policies := s.attempt.Fetch.Encoding(f.program, ceiling)
@@ -116,6 +129,9 @@ func (s *pipeline) startEncoder(opts transcode.EncodeOptions, tail io.Reader, st
 
 func encoderResult(ctx context.Context, proc *ffmpeg.Process) error {
 	err := cmp.Or(proc.Wait(), proc.SilentFailure())
+	if ctx.Err() == nil && errors.Is(err, deliver.ErrSpoolExpired) {
+		return fmt.Errorf("encoder input expired: %w", err)
+	}
 	if err == nil || ctx.Err() != nil || proc.Evidence().ExitStatus < 0 {
 		return nil
 	}

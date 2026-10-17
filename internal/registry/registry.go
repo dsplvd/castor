@@ -9,48 +9,85 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/semaphore"
 )
 
 var (
 	// ErrDraining refuses a value once the registry takes no more.
 	ErrDraining = errors.New("the registry is draining")
 	// ErrTaken refuses a value under an id another still holds, or lingers under.
-	ErrTaken = errors.New("the id is taken")
+	ErrTaken    = errors.New("the id is taken")
+	ErrCapacity = errors.New("the registry capacity is exhausted")
 )
 
 // Registry holds values by id, each findable until linger after it is done.
 type Registry[V any] struct {
 	linger time.Duration
+	limits limits
+	slots  *semaphore.Weighted
 
-	mu     sync.Mutex
-	byID   map[string]V
-	closed bool
-	live   sync.WaitGroup
+	mu       sync.Mutex
+	byID     map[string]V
+	lifetime context.Context
+	stop     context.CancelFunc
+	workers  sync.WaitGroup
 }
+
+// limits bounds running work and retained terminal records independently.
+type limits struct{ Active, Retained int }
+
+const defaultActiveLimit = 128
+const defaultRetainedLimit = 1024
 
 // New is an empty Registry whose values linger after they are done.
 func New[V any](linger time.Duration) *Registry[V] {
-	return &Registry[V]{linger: linger, byID: map[string]V{}}
+	return newWithLimits[V](linger, limits{Active: defaultActiveLimit, Retained: defaultRetainedLimit})
+}
+
+// newWithLimits constructs a registry with explicit admission budgets.
+func newWithLimits[V any](linger time.Duration, limits limits) *Registry[V] {
+	if limits.Active <= 0 || limits.Retained < limits.Active {
+		panic("invalid registry capacity limits")
+	}
+	lifetime, stop := context.WithCancel(context.Background())
+	return &Registry[V]{linger: linger, limits: limits, slots: semaphore.NewWeighted(int64(limits.Active)), byID: map[string]V{}, lifetime: lifetime, stop: stop}
 }
 
 // Add keeps v under id until linger after done closes, unless the registry is draining or the id is taken.
 func (r *Registry[V]) Add(id string, v V, done <-chan struct{}) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.closed {
+	if r.lifetime.Err() != nil {
 		return ErrDraining
 	}
 	if _, taken := r.byID[id]; taken {
 		return ErrTaken
 	}
+	if len(r.byID) >= r.limits.Retained {
+		return ErrCapacity
+	}
+	if !r.slots.TryAcquire(1) {
+		return ErrCapacity
+	}
 	r.byID[id] = v
-	r.live.Go(func() {
+	r.workers.Go(func() {
 		<-done
-		time.AfterFunc(r.linger, func() {
-			r.mu.Lock()
-			defer r.mu.Unlock()
+		r.slots.Release(1)
+		timer := time.NewTimer(r.linger)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-r.lifetime.Done():
+			return
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		// Shutdown stops retention work, but watchers still need the final
+		// snapshots while the server drains its HTTP streams.
+		if r.lifetime.Err() == nil {
 			delete(r.byID, id)
-		})
+		}
 	})
 	return nil
 }
@@ -73,15 +110,12 @@ func (r *Registry[V]) All() iter.Seq[V] {
 // Drain takes no more values and waits until every one is done, or ctx ends.
 func (r *Registry[V]) Drain(ctx context.Context) {
 	r.mu.Lock()
-	r.closed = true
+	r.stop()
 	r.mu.Unlock()
-	ended := make(chan struct{})
-	go func() {
-		r.live.Wait()
-		close(ended)
-	}()
-	select {
-	case <-ended:
-	case <-ctx.Done():
+	// The same slots bound admission and join completion. A canceled drain
+	// leaves no extra goroutine waiting for work that may never finish.
+	if r.slots.Acquire(ctx, int64(r.limits.Active)) == nil {
+		r.slots.Release(int64(r.limits.Active))
+		r.workers.Wait()
 	}
 }

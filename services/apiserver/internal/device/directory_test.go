@@ -3,8 +3,10 @@ package device
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"connectrpc.com/connect"
@@ -74,3 +76,36 @@ func TestADeviceThatMovedSinceItWasListedIsFoundAgainToConnect(t *testing.T) {
 func (idle) Stop(context.Context) error   { return nil }
 func (idle) Pause(context.Context) error  { return nil }
 func (idle) Resume(context.Context) error { return nil }
+
+type manyDevices struct{ stub }
+
+func (manyDevices) Discover(context.Context) []Info {
+	var found []Info
+	for i := range maxSeenDevices + 10 {
+		found = append(found, Info{ID: fmt.Sprint(i), Type: "push", Address: fmt.Sprint(i)})
+	}
+	return found
+}
+func TestDiscoveryCacheExpiresWithoutReleasingActiveOwnership(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := NewDirectory(Registry{Families: []Family{manyDevices{}}, Timeout: time.Second})
+		d.discover(t.Context())
+		if len(d.seen) != maxSeenDevices {
+			t.Fatalf("cache grew to %d", len(d.seen))
+		}
+		target := Info{Type: "push", ID: "owned", Address: "192.0.2.1"}
+		l := newLease(d)
+		if err := l.claimKeys(target, []string{endpoint(target)}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(seenDeviceTTL)
+		_, _ = d.lookup("missing")
+		if len(d.seen) != 0 {
+			t.Fatal("discovery cache did not expire")
+		}
+		if err := newLease(d).claimKeys(target, []string{endpoint(target)}); err == nil {
+			t.Fatal("cache expiration released active lease")
+		}
+		l.release()
+	})
+}

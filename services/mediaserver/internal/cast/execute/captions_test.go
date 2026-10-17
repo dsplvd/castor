@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"io"
 	"net/http"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stupside/castor/services/mediaserver/internal/captions"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/compose"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
@@ -32,7 +34,7 @@ func captionedPipeline(t *testing.T, caps media.Capabilities, want captions.Want
 	return &pipeline{
 		ctx:      t.Context(),
 		releases: &releases{},
-		cast:     Cast{Device: &fakeDevice{caps: caps}, Listeners: loopback{}, Captions: &Captions{Want: want, Client: client}},
+		cast:     Cast{Machinery: Machinery{Outputs: adapters.Default()}, Device: &fakeDevice{caps: caps}, Listeners: loopback{}, Captions: &Captions{Want: want, Client: client}},
 		attempt: recovery.Attempt{
 			Program:   media.Program{Inputs: []media.Input{{ID: media.PrimaryInputID, URL: &url.URL{Scheme: "http", Host: "origin.test", Path: "/v.m3u8"}}}},
 			Rendition: source.Rendition{Captions: published},
@@ -41,7 +43,7 @@ func captionedPipeline(t *testing.T, caps media.Capabilities, want captions.Want
 }
 
 func TestTheSourcesCaptionIsServedToADeviceThatShowsThem(t *testing.T) {
-	s := captionedPipeline(t, media.Capabilities{Captions: []media.CaptionFormat{media.CaptionSRT}}, captions.Want{Language: "en"})
+	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionSRT}}}}, captions.Want{Language: "en"})
 	t.Cleanup(func() { _ = s.releases.release() })
 	shown := s.shownCaptions()
 	if len(shown) != 1 || shown[0].Format != media.CaptionSRT || !shown[0].Default {
@@ -61,7 +63,7 @@ func TestTheSourcesCaptionIsServedToADeviceThatShowsThem(t *testing.T) {
 func TestNoCaptionIsShownWhenTheDeviceTakesNoneOrTheLanguageIsAbsent(t *testing.T) {
 	for name, s := range map[string]*pipeline{
 		"a device with no caption format": captionedPipeline(t, media.Capabilities{}, captions.Want{Language: "en"}),
-		"a language the source lacks":     captionedPipeline(t, media.Capabilities{Captions: []media.CaptionFormat{media.CaptionVTT}}, captions.Want{Language: "fr"}),
+		"a language the source lacks":     captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, captions.Want{Language: "fr"}),
 	} {
 		if shown := s.shownCaptions(); len(shown) != 0 {
 			t.Errorf("%s: shown = %+v, want none", name, shown)
@@ -70,14 +72,74 @@ func TestNoCaptionIsShownWhenTheDeviceTakesNoneOrTheLanguageIsAbsent(t *testing.
 }
 
 func TestTheSourcesCaptionsReplaceTheTranscription(t *testing.T) {
-	s := captionedPipeline(t, media.Capabilities{Captions: []media.CaptionFormat{media.CaptionVTT}}, captions.Want{Language: "en"})
+	s := captionedPipeline(t, media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Captions: []media.CaptionFormat{media.CaptionVTT}}}}, captions.Want{Language: "en"})
 	t.Cleanup(func() { _ = s.releases.release() })
-	s.cast.Subtitles = func(context.Context, string) Burn {
+	s.cast.Subtitles = func(context.Context) Transcript {
 		t.Error("transcription started beside the source's own captions")
 		return nil
 	}
 	s.shown = s.shownCaptions()
-	if burn := s.transcription(t.Context(), t.TempDir(), facts{}, media.Program{}); burn != nil {
+	if burn := s.transcription(t.Context(), facts{}, media.Program{}); burn != nil {
 		t.Errorf("burn = %v, want none", burn)
+	}
+}
+
+func TestUnusableSourceCaptionsSelectTheTranscriptionPipeline(t *testing.T) {
+	s := captionedPipeline(t, chromecastLike(media.MP4), captions.Want{Language: "en"})
+	s.attempt.Program = programFromStream(t, handoffStream())
+	s.cast.Subtitles = func(context.Context) Transcript { return nil }
+	if got := s.compose(); got != compose.ReadOnce {
+		t.Fatalf("missing source captions selected %s", got)
+	}
+	s.cast.Device.(*fakeDevice).caps.Formats[0].Captions = []media.CaptionFormat{media.CaptionVTT}
+	s.shown = []media.Caption{{Language: "en", Format: media.CaptionVTT}}
+	if got := s.compose(); got != compose.Handoff {
+		t.Fatalf("usable source captions selected %s", got)
+	}
+}
+
+func TestRequestedSubtitlesWithoutPublishedTracksNeedPCM(t *testing.T) {
+	s := captionedPipeline(t, chromecastLike(media.MP4), captions.Want{Language: "en"})
+	s.attempt.Program = programFromStream(t, handoffStream())
+	s.attempt.Rendition.Captions = nil
+	s.cast.Subtitles = func(context.Context) Transcript { return nil }
+	if got := s.compose(); got != compose.ReadOnce {
+		t.Fatalf("requested transcription selected %s without PCM", got)
+	}
+	// The same source can be handed off when subtitles were disabled.
+	s.cast.Captions = nil
+	s.cast.Subtitles = nil
+	if got := s.compose(); got != compose.Handoff {
+		t.Fatalf("disabled subtitles selected %s", got)
+	}
+}
+
+func TestSourceSidecarPinsCompatiblePlaybackEnvelopes(t *testing.T) {
+	caps := chromecastLike(media.MP4)
+	// The direct source uses MP4, but only the HLS envelope accepts WebVTT.
+	caps.Formats[0].Captions = nil
+	hls := caps.Formats[0]
+	hls.Transport = media.TransportHLS
+	hls.Captions = []media.CaptionFormat{media.CaptionVTT}
+	caps.Formats = append(caps.Formats, hls)
+	s := captionedPipeline(t, caps, captions.Want{Language: "en"})
+	s.attempt.Program = programFromStream(t, handoffStream())
+	t.Cleanup(func() { _ = s.releases.release() })
+	if got := s.compose(); got != compose.Handoff {
+		t.Fatalf("uncaptioned control = %s, want handoff", got)
+	}
+	s.shown = s.shownCaptions()
+	if len(s.shown) != 1 {
+		t.Fatal("source caption not selected")
+	}
+	selected := s.playbackCapabilities()
+	if len(selected.Formats) != 1 || selected.Formats[0].Transport != media.TransportHLS {
+		t.Fatalf("caption support crossed envelopes: %+v", selected.Formats)
+	}
+	if got := s.compose(); got == compose.Handoff {
+		t.Fatal("MP4 handed off with captions advertised only for HLS")
+	}
+	if len(s.cast.Device.Capabilities().Formats) != 2 {
+		t.Fatal("selection mutated receiver capability snapshot")
 	}
 }

@@ -24,6 +24,9 @@ func (a addressed) list() *mpd.SegmentListType {
 }
 
 func (a addressed) listed(l *mpd.SegmentListType) ([]timeline.Segment, error) {
+	if err := a.budget.take(int64(len(l.SegmentURL))); err != nil {
+		return nil, err
+	}
 	timescale, first := value(l.Timescale, 1), value(l.StartNumber, 1)
 	if timescale <= 0 {
 		return nil, fmt.Errorf("representation %q states timescale %d", a.rep.Id, timescale)
@@ -40,6 +43,9 @@ func (a addressed) listed(l *mpd.SegmentListType) ([]timeline.Segment, error) {
 			if repeats < 0 {
 				repeats = len(l.SegmentURL) - len(durations) - 1
 			}
+			if repeats >= len(l.SegmentURL)-len(durations) {
+				return nil, fmt.Errorf("DASH timeline exceeds its segment URL count")
+			}
 			for range repeats + 1 {
 				durations = append(durations, int64(s.D))
 			}
@@ -47,6 +53,9 @@ func (a addressed) listed(l *mpd.SegmentListType) ([]timeline.Segment, error) {
 	}
 	out := make([]timeline.Segment, 0, len(l.SegmentURL))
 	for i, s := range l.SegmentURL {
+		if err := a.budget.check(0); err != nil {
+			return nil, err
+		}
 		u, err := a.base.Parse(string(s.Media))
 		if err != nil {
 			return nil, err

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"sync"
 
 	castmedia "github.com/vishen/go-chromecast/cast"
 	castdns "github.com/vishen/go-chromecast/dns"
@@ -58,29 +59,50 @@ func (Family) Locate(_ context.Context, address string) (string, error) {
 
 // Discover browses mDNS (_googlecast._tcp) until ctx expires.
 func (Family) Discover(ctx context.Context) []device.Info {
-	entries, err := castdns.DiscoverCastDNSEntries(ctx, nil)
+	interfaces, err := net.Interfaces()
 	if err != nil {
-		slog.WarnContext(ctx, "chromecast discovery error", "error", err)
+		slog.WarnContext(ctx, "chromecast interfaces", "error", err)
 		return nil
 	}
-
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	var devices []device.Info
-	for entry := range entries {
-		if info, ok := info(entry); ok {
-			devices = append(devices, info)
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
 		}
+		wg.Go(func() {
+			entries, err := castdns.DiscoverCastDNSEntries(ctx, &iface)
+			if err != nil {
+				slog.DebugContext(ctx, "chromecast discovery", "interface", iface.Name, "error", err)
+				return
+			}
+			for entry := range entries {
+				if found, ok := infoOnInterface(entry, iface.Name); ok {
+					mu.Lock()
+					devices = append(devices, found)
+					mu.Unlock()
+				}
+			}
+		})
 	}
+	wg.Wait()
 	return devices
 }
 
-// info reports false when the entry advertises no usable IP address.
-func info(entry castdns.CastEntry) (device.Info, bool) {
+func infoOnInterface(entry castdns.CastEntry, zone string) (device.Info, bool) {
 	var host string
 	switch {
 	case entry.AddrV4 != nil:
 		host = entry.AddrV4.String()
 	case entry.AddrV6 != nil:
 		host = entry.AddrV6.String()
+		if entry.AddrV6.IsLinkLocalUnicast() {
+			if zone == "" {
+				return device.Info{}, false
+			}
+			host += "%" + zone
+		}
 	default:
 		return device.Info{}, false
 	}

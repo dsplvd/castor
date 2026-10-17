@@ -24,7 +24,7 @@ func TestWaitForPlayableHoldsUntilTheTranscriptionLeads(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Pace omitted: starving verdict would confuse the assertion.
 		buf := gateFixture(t)
-		buf.burn = &fakeBurn{lead: &fakeLead{latest: 1}}
+		buf.transcript = &fakeTranscript{lead: &fakeLead{latest: 1}}
 		if _, err := buf.reader.spool.Write(make([]byte, 4<<20)); err != nil {
 			t.Fatal(err)
 		}
@@ -72,4 +72,47 @@ func gateFixture(t *testing.T) *buffered {
 		spool: sp,
 		done:  make(chan struct{}),
 	}}
+}
+
+// An audience read holds the supervisor inside its resource until released.
+type heldAudience struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (a heldAudience) Handed() (int64, time.Time) {
+	close(a.entered)
+	<-a.release
+	return 0, time.Now()
+}
+
+func TestPlaybackJoinsTheHealthWorkerBeforeReturning(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		a := heldAudience{entered: make(chan struct{}), release: make(chan struct{})}
+		p := took(t, blocking)
+		p.mech.audience = a
+		p.dev = observedDevice{wait: func(context.Context) error { <-a.entered; return nil }}
+		done := make(chan error, 1)
+		go func() {
+			_, err := supervising(t.Context(), p.dev, p.delivery(), feed{buffered: p.buf})
+			done <- err
+		}()
+		synctest.Wait()
+		select {
+		case <-done:
+			t.Fatal("returned while the health worker still holds delivery resources")
+		default:
+		}
+		close(a.release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestTeardownDoesNotDiscardFailuresJoinedToCancellation(t *testing.T) {
+	failure := errors.New("closing resource failed")
+	if got := unlessTeardown(errors.Join(context.Canceled, failure)); !errors.Is(got, failure) {
+		t.Fatalf("lost cleanup failure: %v", got)
+	}
 }

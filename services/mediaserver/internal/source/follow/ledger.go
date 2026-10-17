@@ -124,6 +124,11 @@ func (l *ledger) trim() {
 		delete(l.published, l.appended[0])
 		l.appended = l.appended[1:]
 	}
+	// Period memory follows the same two-window history as segment identity.
+	clear(l.periods)
+	for _, id := range l.appended {
+		l.periods[id.period] = true
+	}
 	over := len(l.entries) - l.retain
 	if over <= 0 {
 		return

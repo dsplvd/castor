@@ -51,7 +51,7 @@ func (p pass) run(ctx context.Context) (media.ProbeInfo, media.Reach, error) {
 			if parent.Err() == nil {
 				return media.ProbeInfo{}, media.ReachUnproven, fmt.Errorf("ffprobe: %w (measurement budget %s)%s", err, p.budget, evidence(said))
 			}
-			return media.ProbeInfo{}, media.ReachUnproven, fmt.Errorf("ffprobe hit castor's probe deadline: %w%s", parent.Err(), evidence(said))
+			return media.ProbeInfo{}, media.ReachUnproven, fmt.Errorf("ffprobe interrupted: %w%s", context.Cause(parent), evidence(said))
 		}
 		return media.ProbeInfo{}, classifyReach(said), fmt.Errorf("ffprobe: %w%s", err, evidence(said))
 	}

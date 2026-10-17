@@ -68,14 +68,16 @@ type collector struct {
 	window   time.Duration
 	preRoll  time.Duration
 
-	mu          sync.Mutex
-	captures    []capture
-	requests    map[network.RequestID]*requestState
-	activeReads int
+	mu        sync.Mutex
+	captures  []capture
+	requests  map[network.RequestID]*requestState
+	documents chan network.RequestID
 	// named contains the resources named by captured documents.
-	named  map[string]struct{}
-	closed bool
-	reads  sync.WaitGroup
+	named map[string]struct{}
+	reads sync.WaitGroup
+	// events owns the browser listener; workers drain accepted documents separately.
+	events context.Context
+	close  func()
 
 	// added is closed and replaced on every capture.
 	added        chan struct{}
@@ -84,18 +86,34 @@ type collector struct {
 }
 
 func newCollector(ctx context.Context, readBody bodyReader, grace, window, preRoll time.Duration) *collector {
+	events, cancelEvents := context.WithCancel(ctx)
 	c := &collector{
-		ctx:      ctx,
-		readBody: readBody,
-		grace:    grace,
-		window:   window,
-		preRoll:  preRoll,
-		requests: make(map[network.RequestID]*requestState),
-		named:    make(map[string]struct{}),
-		added:    make(chan struct{}),
-		mastered: make(chan struct{}),
+		events:    events,
+		ctx:       ctx,
+		documents: make(chan network.RequestID, maxTrackedRequests),
+		readBody:  readBody,
+		grace:     grace,
+		window:    window,
+		preRoll:   preRoll,
+		requests:  make(map[network.RequestID]*requestState),
+		named:     make(map[string]struct{}),
+		added:     make(chan struct{}),
+		mastered:  make(chan struct{}),
 	}
+	c.close = sync.OnceFunc(func() {
+		c.mu.Lock()
+		cancelEvents()
+		close(c.documents)
+		c.mu.Unlock()
+		c.reads.Wait()
+		// Canceled workers may leave queued request IDs behind.
+		for range c.documents {
+		}
+	})
 	c.markMastered = sync.OnceFunc(func() { close(c.mastered) })
+	for range maxDocumentReads {
+		c.reads.Go(c.readDocuments)
+	}
 	return c
 }
 
@@ -137,7 +155,7 @@ func (c *collector) addByMIME(raw string, reqID network.RequestID, mime string) 
 func (c *collector) add(raw string, reqID network.RequestID, contentType string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.events.Err() != nil {
 		return
 	}
 	var hop *requestHop
@@ -181,7 +199,7 @@ func (c *collector) entries() []*castorv1.StreamCandidate {
 
 	var out []*castorv1.StreamCandidate
 	for _, cp := range c.captures {
-		if _, part := c.named[cp.raw]; part {
+		if _, part := c.named[cp.raw]; part || advertisementURL(cp.raw) {
 			continue
 		}
 		out = append(out, &castorv1.StreamCandidate{
@@ -204,8 +222,38 @@ func (c *collector) hasHits() bool {
 func (c *collector) progress() (hits, onlyAds bool, next <-chan struct{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	onlyAds = !slices.ContainsFunc(c.captures, func(cp capture) bool { return cp.runtime <= 0 || cp.runtime >= 5*time.Minute })
+	onlyAds = !slices.ContainsFunc(c.captures, func(cp capture) bool { return !advertisementURL(cp.raw) })
 	return len(c.captures) > 0, onlyAds, c.added
+}
+
+// advertisementURL interprets combined source labels: an advertising namespace
+// and a distinct pre/mid/post-roll role token. Neither a short duration, an
+// isolated "ad" folder, nor a filename alone is sufficient evidence.
+func advertisementURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	namespace := false
+	role := false
+	for part := range strings.SplitSeq(strings.ToLower(u.Path), "/") {
+		switch part {
+		case "ad", "ads", "advertisement":
+			namespace = true
+		}
+		tokens := strings.FieldsFunc(part, func(r rune) bool { return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) })
+		for i, token := range tokens {
+			switch token {
+			case "preroll", "midroll", "postroll":
+				role = true
+			case "pre", "mid", "post":
+				if i+1 < len(tokens) && tokens[i+1] == "roll" {
+					role = true
+				}
+			}
+		}
+	}
+	return namespace && role
 }
 
 // hasMaster reports whether a document advertising renditions has been captured.
@@ -217,59 +265,51 @@ func (c *collector) hasMaster() bool {
 
 // askForDocument reads a finished response as a document, once, on a read the collector joins on close.
 func (c *collector) askForDocument(reqID network.RequestID, size float64) {
-	if !c.claimBodyRead(reqID, size) {
-		return
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.events.Err() != nil || c.ctx.Err() != nil || len(c.documents) == cap(c.documents) || !c.claimBodyRead(reqID, size) {
 		return
 	}
-	if c.activeReads >= maxDocumentReads {
-		return
-	}
-	c.activeReads++
-	c.reads.Go(func() {
-		defer func() {
-			c.mu.Lock()
-			c.activeReads--
-			c.mu.Unlock()
-		}()
-		body, err := c.readBody(reqID)
-		if err != nil {
-			slog.DebugContext(c.ctx, "response body unavailable, renditions unknown", "request", reqID, "error", err)
-			return
-		}
-		if len(body) <= documentSizeLimit {
-			c.noteDocument(reqID, string(body))
-		}
-	})
+	c.documents <- reqID
 }
 
-// close waits out every body read in flight; none starts after it.
-func (c *collector) close() {
-	c.mu.Lock()
-	c.closed = true
-	c.mu.Unlock()
-	c.reads.Wait()
+// Four workers own the bounded queue for this collector's lifetime. Closing it
+// drains accepted work; cancellation abandons it without issuing more CDP calls.
+func (c *collector) readDocuments() {
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case reqID, ok := <-c.documents:
+			if !ok || c.ctx.Err() != nil {
+				return
+			}
+			body, err := c.readBody(reqID)
+			if err != nil {
+				slog.DebugContext(c.ctx, "response body unavailable, renditions unknown", "request", reqID, "error", err)
+				continue
+			}
+			if len(body) <= documentSizeLimit {
+				c.noteDocument(reqID, string(body))
+			}
+		}
+	}
 }
 
 // documentSizeLimit is how large a response may be and still be worth reading as a document.
 const documentSizeLimit = 2 << 20
 
-// claimBodyRead decides whether one finished request is worth reading as a document and claims it.
+// claimBodyRead decides whether one finished request is worth reading as a document and claims it. Caller holds mu.
 func (c *collector) claimBodyRead(reqID network.RequestID, size float64) bool {
 	if reqID == "" || size < 0 || math.IsNaN(size) || size > documentSizeLimit {
 		return false
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	req := c.requests[reqID]
 	if req == nil || req.bodyRead {
 		return false
 	}
 	i := c.captureFor(reqID)
-	if c.closed || i < 0 || !segmented(c.captures[i].contentType) || c.captures[i].ladder != castorv1.Ladder_LADDER_UNSPECIFIED {
+	if c.events.Err() != nil || i < 0 || !segmented(c.captures[i].contentType) || c.captures[i].ladder != castorv1.Ladder_LADDER_UNSPECIFIED {
 		return false
 	}
 	req.bodyRead = true
@@ -341,7 +381,7 @@ func (c *collector) Wait(ctx context.Context) ([]*castorv1.StreamCandidate, erro
 		if !onlyAds {
 			break
 		}
-		slog.InfoContext(ctx, "everything captured runs shorter than content; waiting for what the ads precede")
+		slog.InfoContext(ctx, "only explicitly labeled advertisements captured; waiting for content")
 		select {
 		case <-next:
 			continue

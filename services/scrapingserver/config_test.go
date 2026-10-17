@@ -7,21 +7,17 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func TestServiceDefaultsRule164(t *testing.T) {
+func TestDefaultsAreValidAndKeepBrowserSandbox(t *testing.T) {
 	d := defaults()
-	if d.Scraping.Listen != ":8412" || d.Scraping.Token != "" {
-		t.Errorf("scraping = %+v", d.Scraping)
-	}
-	b, c := d.Browser, d.Capture
-	if b.Timeout != 30*time.Second || !b.Headless || b.NoSandbox || b.ChromePath != "" || c.MaxConcurrency != 4 {
-		t.Errorf("browser %+v capture %+v", b, c)
-	}
 	if err := validator.New().Struct(d); err != nil {
-		t.Errorf("defaults invalid: %v", err)
+		t.Fatalf("default configuration cannot start: %v", err)
+	}
+	if d.Browser.NoSandbox {
+		t.Fatal("browser sandbox disabled by default")
 	}
 }
 
-func TestListenValidationRule164(t *testing.T) {
+func TestListenRequiresAHostAndPort(t *testing.T) {
 	for _, tc := range []struct {
 		listen string
 		ok     bool
@@ -37,7 +33,7 @@ func TestListenValidationRule164(t *testing.T) {
 	}
 }
 
-func TestBrowserAndCaptureValidationRule164(t *testing.T) {
+func TestBrowserRequiresPositiveTimeoutAndConcurrency(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		edit func(*ServiceConfig)

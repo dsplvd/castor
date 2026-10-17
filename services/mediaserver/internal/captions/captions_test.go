@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 	"github.com/stupside/castor/services/mediaserver/internal/source/timeline"
@@ -42,7 +43,7 @@ func TestPickFollowsTheLanguageAskedOrTheSourcesOwnMarks(t *testing.T) {
 func TestMergeMovesEachSegmentOntoTheStreamsClock(t *testing.T) {
 	first := "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000\n\n00:00:01.000 --> 00:00:02.000\nhello\n"
 	second := "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:1440000,LOCAL:00:00:00.000\n\n00:00:01.000 --> 00:00:03.500 align:start\nworld\n"
-	got := merge([]string{first, second})
+	got := merge([]string{first, second}, 10*time.Second)
 	// 1440000/90000 = 16s against a first map of 10s: the second segment sits 6s in.
 	for _, want := range []string{"00:00:01.000 --> 00:00:02.000\nhello", "00:00:07.000 --> 00:00:09.500 align:start\nworld"} {
 		if !strings.Contains(got, want) {
@@ -52,7 +53,7 @@ func TestMergeMovesEachSegmentOntoTheStreamsClock(t *testing.T) {
 }
 
 func TestSegmentsWithoutAMapKeepTheirTimes(t *testing.T) {
-	got := merge([]string{"WEBVTT\n\n00:01.500 --> 00:02.000\nhi\n"})
+	got := merge([]string{"WEBVTT\n\n00:01.500 --> 00:02.000\nhi\n"}, 0)
 	if !strings.Contains(got, "00:00:01.500 --> 00:00:02.000\nhi") {
 		t.Errorf("merged = %q", got)
 	}
@@ -81,7 +82,7 @@ func TestFetchJoinsAPlaylistsSegments(t *testing.T) {
 		"/subs/seg0.vtt": "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\none\n",
 		"/subs/seg1.vtt": "WEBVTT\n\n00:00:07.000 --> 00:00:08.000\ntwo\n",
 	}
-	got, err := Fetch(t.Context(), client, source.Caption{URL: &url.URL{Scheme: "http", Host: "h", Path: "/subs/en.m3u8"}}, nil)
+	got, err := FetchAt(t.Context(), client, source.Caption{URL: &url.URL{Scheme: "http", Host: "h", Path: "/subs/en.m3u8"}}, nil, nil)
 	if err != nil || !strings.Contains(got, "one") || !strings.Contains(got, "two") {
 		t.Errorf("Fetch = %q, %v", got, err)
 	}

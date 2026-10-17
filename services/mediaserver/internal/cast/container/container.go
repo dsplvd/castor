@@ -2,47 +2,9 @@
 package container
 
 import (
-	"path"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
-
-// HLS output filenames: muxer writes, server serves.
-const (
-	hlsPlaylistName   = "stream.m3u8"
-	hlsInitName       = "init.mp4"
-	hlsSegmentPattern = "seg_%05d.m4s"
-)
-
-const (
-	// hlsSegmentSeconds: target only; copy cuts on keyframe (lower bound, not exact).
-	hlsSegmentSeconds = 4
-	// hlsListSize is how many segments the rolling playlist keeps on disk.
-	hlsListSize = 8
-	// hlsWindowSeconds: on-disk window and burst size (prebuffer one window).
-	hlsWindowSeconds = hlsSegmentSeconds * hlsListSize
-)
-
-// HLSWindow is how much media a live playlist keeps; a device handed off reads within it, past it media is deleted.
-const HLSWindow = hlsWindowSeconds * time.Second
-
-// HLSArtifactContentType returns the response type for a generated HLS artifact name.
-func HLSArtifactContentType(name string) (string, bool) {
-	switch strings.ToLower(path.Ext(name)) {
-	case path.Ext(hlsPlaylistName):
-		return media.HLS, true
-	case path.Ext(hlsSegmentPattern):
-		return "video/iso.segment", true
-	case path.Ext(hlsInitName):
-		return media.MP4, true
-	default:
-		return "", false
-	}
-}
 
 // DeliveryKind determines how server hands stream to device; per-format data.
 type DeliveryKind int
@@ -50,7 +12,7 @@ type DeliveryKind int
 const (
 	// DeliverStream: one growing output from byte 0 (MPEG-TS, frag mp4).
 	DeliverStream DeliveryKind = iota
-	// DeliverSegmented is live playlist plus rolling segments (HLS).
+	// DeliverSegmented is a playlist plus rolling segments.
 	DeliverSegmented
 )
 
@@ -91,21 +53,6 @@ var formats = map[string]Format{
 			// Pipe needs fragmented mp4; empty_moov disables auto BSF (AAC filter hand-written).
 			MovFlags: []string{"frag_keyframe", "empty_moov", "default_base_moof"},
 			Output:   ffmpeg.StdoutPipe,
-		},
-	},
-	media.HLS: {
-		ContentType: media.HLS, Extension: ".m3u8", Muxer: ffmpeg.FormatHLS, Delivery: DeliverSegmented, Framing: media.FramingOutOfBand,
-		Tuning: Tuning{
-			// Sliding-window fMP4 tail; unset hls_playlist_type so window rolls.
-			Args: []string{
-				"-hls_time", strconv.Itoa(hlsSegmentSeconds),
-				"-hls_list_size", strconv.Itoa(hlsListSize),
-				"-hls_flags", "delete_segments+independent_segments",
-				"-hls_segment_type", "fmp4",
-				"-hls_fmp4_init_filename", hlsInitName,
-				"-hls_segment_filename", hlsSegmentPattern,
-			},
-			Output: hlsPlaylistName,
 		},
 	},
 }

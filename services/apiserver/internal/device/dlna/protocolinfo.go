@@ -1,11 +1,13 @@
 package dlna
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,15 +42,11 @@ func negotiateCaps(ctx context.Context, loc *goupnp.RootDevice, u *url.URL) (*me
 		return nil, nil, fmt.Errorf("asking the device what it plays: %w", err)
 	}
 	caps, sinks := parseSinkProtocolInfo(response.Sink)
-	switch {
-	case len(caps.Video) == 0:
-		return nil, nil, errors.New("the device advertises no H.264 or HEVC video in its sink")
-	case len(caps.Audio) == 0:
-		return nil, nil, errors.New("the device advertises no AAC, AC-3 or E-AC-3 audio in its sink")
-	case len(caps.Containers) == 0:
-		return nil, nil, errors.New("the device advertises neither MPEG-TS nor MP4 in its sink")
+	if len(caps.Formats) == 0 {
+		return nil, nil, errors.New("the device advertises no complete supported playback envelope in its sink")
 	}
-	slog.InfoContext(ctx, "negotiated device capabilities", "codecs", codecs(caps.Video), "containers", caps.Containers)
+	slog.InfoContext(ctx, "negotiated device capabilities", "formats", caps.Formats)
+
 	return caps, sinks, nil
 }
 
@@ -60,71 +58,67 @@ func audioSupportFor(codec mediav1.AudioCodec) *mediav1.AudioSupport {
 	return &mediav1.AudioSupport{Codec: codec}
 }
 
-// The fixed order capabilities are reported in, so a given Sink always yields the same record.
-var (
-	discoverableCodecs      = []mediav1.VideoCodec{mediav1.VideoCodec_VIDEO_CODEC_H264, mediav1.VideoCodec_VIDEO_CODEC_HEVC}
-	discoverableAudioCodecs = []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3}
-	discoverableContainers  = []mediav1.Container{mediav1.Container_CONTAINER_MPEGTS, mediav1.Container_CONTAINER_MP4}
-)
-
 // parseSinkProtocolInfo maps a ConnectionManager Sink protocolInfo CSV into capabilities and the device's own entry per container.
 func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Container]sinkEntry) {
-	present := map[mediav1.VideoCodec]bool{}
-	audioPresent := map[mediav1.AudioCodec]bool{}
+	r := &mediav1.Capabilities{Provenance: "receiver ConnectionManager protocolInfo; video envelope uses conservative family defaults"}
 	sinks := map[mediav1.Container]sinkEntry{}
+	var captions []mediav1.CaptionFormat
 	for entry := range strings.SplitSeq(sink, ",") {
 		fields := strings.SplitN(strings.TrimSpace(entry), ":", 4)
-		if len(fields) < 3 || !strings.EqualFold(fields[0], "http-get") {
+		if len(fields) != 4 || !strings.EqualFold(fields[0], "http-get") {
 			continue
 		}
-		mime := strings.ToLower(fields[2])
-		features := "*"
-		if len(fields) == 4 {
-			features = fields[3]
+		mime, pn := strings.ToLower(fields[2]), strings.ToUpper(fields[3])
+		switch mime {
+		case "application/x-subrip", "text/srt":
+			captions = append(captions, mediav1.CaptionFormat_CAPTION_FORMAT_SRT)
+		case "text/vtt":
+			captions = append(captions, mediav1.CaptionFormat_CAPTION_FORMAT_VTT)
 		}
-		info := strings.ToUpper(features)
-		codec, hasCodec := codecFromProfile(mime, info)
-		if hasCodec {
-			present[codec] = true
-		}
-		if c, ok := audioFromProfile(mime, info); ok {
-			audioPresent[c] = true
-		}
-		// The first entry naming a codec speaks for its container, else the first there is.
-		if ct, ok := containerFromMIME(mime); ok {
-			if _, seen := sinks[ct]; !seen || hasCodec && !hasKnownCodec(sinks[ct]) {
-				sinks[ct] = sinkEntry{mime: fields[2], features: features}
+		ct, cok := containerFromMIME(mime)
+		v, vok := codecFromProfile(mime, pn)
+		a, aok := audioFromProfile(mime, pn)
+		// A separate audio-only profile says nothing about this video container.
+		if !cok || !vok || !aok {
+			if cok {
+				if _, exists := sinks[ct]; !exists {
+					sinks[ct] = sinkEntry{mime: fields[2], features: fields[3]}
+				}
 			}
+			continue
+		}
+		video := device.VideoSupport(v)
+		if strings.Contains(pn, "_BL_") {
+			video.Profiles = []mediav1.Profile{mediav1.Profile_PROFILE_BASELINE, mediav1.Profile_PROFILE_CONSTRAINED_BASELINE}
+		}
+		if strings.Contains(pn, "_MP_") {
+			video.Profiles = []mediav1.Profile{mediav1.Profile_PROFILE_MAIN}
+		}
+		progressive := mediav1.ProgressiveSupport_CONTAINER_MP4
+		if ct == mediav1.Container_CONTAINER_MPEGTS {
+			progressive = mediav1.ProgressiveSupport_CONTAINER_MPEGTS
+		}
+		alternative := slices.ContainsFunc(r.Formats, func(f *mediav1.FormatSupport) bool {
+			return f.GetProgressive().GetContainer() == progressive
+		})
+		r.Formats = append(r.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: progressive}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: video, Audio: audioSupportFor(a)}}})
+		if alternative {
+			// The play contract names a container, not a DLNA profile. With multiple
+			// alternatives, omit the profile rather than advertise one not selected.
+			sinks[ct] = sinkEntry{mime: device.MIME(ct), features: "*"}
+		} else {
+			sinks[ct] = sinkEntry{mime: fields[2], features: fields[3]}
 		}
 	}
-
-	// A DLNA device deinterlaces: broadcast reaches it as fields.
-	r := &mediav1.Capabilities{Deinterlaces: true, Captions: []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_SRT}}
-	for _, c := range discoverableCodecs {
-		if present[c] {
-			r.Video = append(r.Video, device.VideoSupport(c))
-		}
-	}
-	for _, c := range discoverableAudioCodecs {
-		if audioPresent[c] {
-			r.Audio = append(r.Audio, audioSupportFor(c))
-		}
-	}
-	for _, ct := range discoverableContainers {
-		if _, ok := sinks[ct]; ok {
-			r.Containers = append(r.Containers, ct)
-		}
-	}
-	if len(r.Containers) > 0 {
-		r.ServedContainer = r.Containers[0]
+	// Prefer MPEG-TS, then MP4, keeping each receiver-advertised tuple intact.
+	slices.SortStableFunc(r.Formats, func(a, b *mediav1.FormatSupport) int {
+		return cmp.Compare(b.GetProgressive().GetContainer(), a.GetProgressive().GetContainer())
+	})
+	for _, f := range r.Formats {
+		f.Captions = slices.Clone(captions)
 	}
 	return r, sinks
-}
 
-// hasKnownCodec is whether entry names a codec castor produces.
-func hasKnownCodec(entry sinkEntry) bool {
-	_, ok := codecFromProfile(strings.ToLower(entry.mime), strings.ToUpper(entry.features))
-	return ok
 }
 
 // codecFromProfile reads the DLNA.ORG_PN token (already upper-cased), failing that the MIME type.
@@ -159,15 +153,4 @@ func containerFromMIME(mime string) (mediav1.Container, bool) {
 		return mediav1.Container_CONTAINER_MP4, true
 	}
 	return mediav1.Container_CONTAINER_UNSPECIFIED, false
-}
-
-// codecs names the codec of each support, video or audio.
-func codecs[C interface {
-	mediav1.VideoCodec | mediav1.AudioCodec
-}, S interface{ GetCodec() C }](supports []S) []C {
-	out := make([]C, len(supports))
-	for i, s := range supports {
-		out[i] = s.GetCodec()
-	}
-	return out
 }

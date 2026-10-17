@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
@@ -31,7 +32,7 @@ func made() media.Progress {
 type mechanism struct {
 	name string
 	// open builds the mechanism over a producer the case controls, and returns that producer.
-	open func(t *testing.T) (sink sink, producer *io.PipeWriter)
+	open func(t *testing.T) (sink output.Output, producer *io.PipeWriter)
 	// judged states whether this mechanism can be judged while it runs.
 	judged bool
 	// reads states whether the mechanism reads the producer itself, rather than serving what another writes.
@@ -41,12 +42,13 @@ type mechanism struct {
 }
 
 // opened builds a sink the way a cast does, for the format named.
-func opened(t *testing.T, contentType string) (sink, *io.PipeWriter) {
+func opened(t *testing.T, contentType string) (output.Output, *io.PipeWriter) {
 	t.Helper()
-	format, ok := container.For(contentType)
-	if !ok {
-		t.Fatalf("castor produces no %s", contentType)
+	selected, err := adapters.Default().Select(chromecastLike(contentType), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	format := selected.Plan.Format()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, format.Tuning.Output), []byte("#EXTM3U\n"), 0o600); err != nil {
 		t.Fatalf("writing the playlist the mechanism serves: %v", err)
@@ -55,7 +57,7 @@ func opened(t *testing.T, contentType string) (sink, *io.PipeWriter) {
 		t.Fatalf("writing the segment the mechanism serves: %v", err)
 	}
 	pr, pw := io.Pipe()
-	sink, err := sinkFor(t.Context(), deliver.Opening{
+	sink, err := selected.Plan.Open(t.Context(), deliver.Opening{
 		Format:        format,
 		Listeners:     loopback{},
 		IdleGrace:     50 * time.Millisecond,
@@ -68,7 +70,7 @@ func opened(t *testing.T, contentType string) (sink, *io.PipeWriter) {
 }
 
 // relayed builds the sink a cast serves its read's own spool through, the producer writing that spool as a read does.
-func relayed(t *testing.T) (sink, *io.PipeWriter) {
+func relayed(t *testing.T) (output.Output, *io.PipeWriter) {
 	t.Helper()
 	sp, err := deliver.NewSpool(filepath.Join(t.TempDir(), "spool"+transcode.SpoolFormat.Extension))
 	if err != nil {
@@ -82,7 +84,11 @@ func relayed(t *testing.T) (sink, *io.PipeWriter) {
 		sp.CloseWrite(err)
 	}()
 	t.Cleanup(func() { _ = pw.Close(); <-drained })
-	sink, err := spoolSink(t.Context(), deliver.Opening{
+	selected, err := adapters.Default().Select(chromecastLike(media.MPEGTS), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink, err := selected.Plan.(output.Relayer).OpenSpool(t.Context(), deliver.Opening{
 		Format:        transcode.SpoolFormat,
 		Listeners:     loopback{},
 		IdleGrace:     50 * time.Millisecond,
@@ -97,19 +103,19 @@ func relayed(t *testing.T) (sink, *io.PipeWriter) {
 // mechanisms is every implementation of sink. A new delivery is a row here.
 func mechanisms() []mechanism {
 	return []mechanism{
-		{name: "streamed", judged: true, reads: true, open: func(t *testing.T) (sink, *io.PipeWriter) { return opened(t, media.MP4) }},
-		{name: "segmented", judged: false, reads: true, media: "seg_00000.m4s", open: func(t *testing.T) (sink, *io.PipeWriter) { return opened(t, media.HLS) }},
+		{name: "streamed", judged: true, reads: true, open: func(t *testing.T) (output.Output, *io.PipeWriter) { return opened(t, media.MP4) }},
+		{name: "segmented", judged: false, reads: true, media: "seg_00000.m4s", open: func(t *testing.T) (output.Output, *io.PipeWriter) { return opened(t, media.HLS) }},
 		{name: "relayed", judged: true, open: relayed},
 	}
 }
 
 // each runs one case per mechanism over a fresh sink and its producer.
-func each(t *testing.T, check func(t *testing.T, m mechanism, sink sink, producer *io.PipeWriter)) {
+func each(t *testing.T, check func(t *testing.T, m mechanism, sink output.Output, producer *io.PipeWriter)) {
 	eachWhere(t, func(mechanism) bool { return true }, check)
 }
 
 // eachWhere runs check on the mechanisms a property is about; the others have no case, rather than a skipped one.
-func eachWhere(t *testing.T, applies func(mechanism) bool, check func(t *testing.T, m mechanism, sink sink, producer *io.PipeWriter)) {
+func eachWhere(t *testing.T, applies func(mechanism) bool, check func(t *testing.T, m mechanism, sink output.Output, producer *io.PipeWriter)) {
 	for _, m := range mechanisms() {
 		if !applies(m) {
 			continue
@@ -137,7 +143,7 @@ func get(t *testing.T, u *url.URL) *http.Response {
 }
 
 func TestEveryMechanismAnswersAtItsURLAndSaysWhetherItIsJudgedInFlight(t *testing.T) {
-	each(t, func(t *testing.T, m mechanism, sink sink, _ *io.PipeWriter) {
+	each(t, func(t *testing.T, m mechanism, sink output.Output, _ *io.PipeWriter) {
 		u := sink.URL()
 		if u == nil || !u.IsAbs() {
 			t.Fatalf("URL %v is not an absolute address to point a device at", u)
@@ -152,14 +158,14 @@ func TestEveryMechanismAnswersAtItsURLAndSaysWhetherItIsJudgedInFlight(t *testin
 }
 
 func TestEveryMechanismSettlesOnlyWhatTheDeviceTook(t *testing.T) {
-	each(t, func(t *testing.T, _ mechanism, sink sink, producer *io.PipeWriter) {
+	each(t, func(t *testing.T, _ mechanism, sink output.Output, producer *io.PipeWriter) {
 		_ = producer.Close()
 		<-sink.Drained()
 		if _, ok := errors.AsType[*health.Undelivered](sink.Settled()); !ok {
 			t.Errorf("nobody fetched a delivery and Settled = %v, want *health.Undelivered", sink.Settled())
 		}
 	})
-	each(t, func(t *testing.T, m mechanism, sink sink, producer *io.PipeWriter) {
+	each(t, func(t *testing.T, m mechanism, sink output.Output, producer *io.PipeWriter) {
 		go func() {
 			_, _ = producer.Write(make([]byte, madeBytes))
 			_ = producer.Close()
@@ -173,7 +179,7 @@ func TestEveryMechanismSettlesOnlyWhatTheDeviceTook(t *testing.T) {
 }
 
 func TestEveryMechanismSaysWhenItHasReadTheProducerOut(t *testing.T) {
-	each(t, func(t *testing.T, _ mechanism, sink sink, producer *io.PipeWriter) {
+	each(t, func(t *testing.T, _ mechanism, sink output.Output, producer *io.PipeWriter) {
 		select {
 		case <-sink.Drained():
 			t.Fatal("Drained is closed while the producer is still running")
@@ -191,7 +197,7 @@ func TestEveryMechanismSaysWhenItHasReadTheProducerOut(t *testing.T) {
 // TestEveryMechanismFinishesReadingBeforeCloseReturns: teardown reaps the producer and removes its directory next.
 func TestEveryMechanismFinishesReadingBeforeCloseReturns(t *testing.T) {
 	// A mechanism serving another writer's spool is stopped with that writer, after Close (see the test below).
-	eachWhere(t, func(m mechanism) bool { return m.reads }, func(t *testing.T, _ mechanism, sink sink, producer *io.PipeWriter) {
+	eachWhere(t, func(m mechanism) bool { return m.reads }, func(t *testing.T, _ mechanism, sink output.Output, producer *io.PipeWriter) {
 		_ = producer.Close()
 		_ = sink.Close()
 		select {
@@ -204,7 +210,7 @@ func TestEveryMechanismFinishesReadingBeforeCloseReturns(t *testing.T) {
 
 // TestAMechanismServingAnotherWritersSpoolClosesWhileThatWriterRuns: teardown closes the sink before it cancels the read.
 func TestAMechanismServingAnotherWritersSpoolClosesWhileThatWriterRuns(t *testing.T) {
-	eachWhere(t, func(m mechanism) bool { return !m.reads }, func(t *testing.T, _ mechanism, sink sink, _ *io.PipeWriter) {
+	eachWhere(t, func(m mechanism) bool { return !m.reads }, func(t *testing.T, _ mechanism, sink output.Output, _ *io.PipeWriter) {
 		closed := make(chan error, 1)
 		go func() { closed <- sink.Close() }()
 		select {
@@ -221,7 +227,7 @@ func TestAMechanismServingAnotherWritersSpoolClosesWhileThatWriterRuns(t *testin
 }
 
 func TestEveryMechanismStopsWhenTheCallerDoes(t *testing.T) {
-	each(t, func(t *testing.T, _ mechanism, sink sink, _ *io.PipeWriter) {
+	each(t, func(t *testing.T, _ mechanism, sink output.Output, _ *io.PipeWriter) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		done := make(chan error, 1)

@@ -2,21 +2,24 @@
 package process
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime/debug"
-	"sync"
 	"syscall"
+	"time"
 
 	"charm.land/log/v2"
 	"github.com/urfave/cli/v3"
 
 	"github.com/stupside/castor/internal/castid"
+	"github.com/stupside/castor/internal/logging"
 	"github.com/stupside/castor/internal/settings"
+	"github.com/stupside/castor/internal/telemetry"
 )
 
 // version is stamped at link time; the commit and its time come from the build's VCS stamp.
@@ -28,7 +31,7 @@ const debugFlag = "debug"
 var Flags = []cli.Flag{settings.Flag, &cli.BoolFlag{Name: debugFlag, Usage: "Enable debug logging"}}
 
 // Run runs root until it returns or the process is interrupted, exiting non-zero on its error.
-func Run(root *cli.Command) {
+func Run(root *cli.Command, observed func(*cli.Command) bool) {
 	slog.SetDefault(logger(log.InfoLevel))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -36,24 +39,83 @@ func Run(root *cli.Command) {
 	// The first signal asks for a clean stop; restoring the default lets a second one end the process at once.
 	context.AfterFunc(ctx, stop)
 
+	if err := run(ctx, root, os.Args, observed); err != nil {
+		os.Exit(1)
+	}
+}
+
+// run owns telemetry for the entire command, including any embedded services.
+// It flushes after reporting the command outcome and before Run may call os.Exit.
+func run(ctx context.Context, root *cli.Command, args []string, observed func(*cli.Command) bool) error {
+	shutdown := func(context.Context) error { return nil }
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := shutdown(flushCtx); err != nil {
+			slog.WarnContext(flushCtx, "telemetry shutdown failed", "error", err)
+		}
+	}()
 	root.Version = version
 	root.Flags = append(root.Flags, Flags...)
+	before := root.Before
 	root.Before = func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 		if cmd.Bool(debugFlag) {
 			slog.SetDefault(logger(log.DebugLevel))
 		}
+		if before != nil {
+			return before(ctx, cmd)
+		}
 		return ctx, nil
 	}
+	// Instrument actual actions, after parsing/validation. The composition root
+	// identifies local-only actions that intentionally need no runtime config.
+	if err := root.Walk(func(command *cli.Command) error {
+		action := command.Action
+		if action == nil {
+			return nil
+		}
+		command.Action = func(ctx context.Context, cmd *cli.Command) error {
+			if observed == nil || observed(cmd) {
+				cfg, err := settings.Load(cmd, struct {
+					Telemetry telemetry.Config `yaml:"telemetry"`
+				}{})
+				if err != nil {
+					return err
+				}
+				stop, err := telemetry.Setup(ctx, cfg.Telemetry, cmp.Or(os.Getenv("OTEL_SERVICE_NAME"), root.Name))
+				if err != nil {
+					return err
+				}
+				shutdown = stop
+			}
+			return action(ctx, cmd)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Build information never depends on working runtime configuration.
 	root.Commands = append(root.Commands, info())
-
-	if err := root.Run(ctx, os.Args); err != nil {
-		if cause := context.Cause(ctx); cause != nil {
+	err := root.Run(ctx, args)
+	if err != nil {
+		// Only a single cancellation failure is a clean signal shutdown. A joined
+		// error can carry a failed flush/cleanup beside cancellation and must survive.
+		leaf := err
+		for {
+			wrapped, ok := leaf.(interface{ Unwrap() error })
+			if !ok {
+				break
+			}
+			leaf = wrapped.Unwrap()
+		}
+		_, multiple := leaf.(interface{ Unwrap() []error })
+		if cause := context.Cause(ctx); errors.Is(cause, context.Canceled) && !multiple && errors.Is(leaf, context.Canceled) {
 			slog.InfoContext(ctx, "shutting down", "cause", cause)
-			return
+			return nil
 		}
 		slog.ErrorContext(ctx, "application error", "error", err)
-		os.Exit(1)
 	}
+	return err
 }
 
 func info() *cli.Command {
@@ -80,36 +142,11 @@ func info() *cli.Command {
 	}
 }
 
-// file is where every castor process also writes its log lines, kept open for the process's life; nil when it cannot be opened.
-var file = sync.OnceValue(func() *os.File {
-	open := func() (*os.File, error) {
-		dir, err := os.UserCacheDir()
-		if err != nil {
-			return nil, err
-		}
-		dir = filepath.Join(dir, "castor")
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, err
-		}
-		return os.OpenFile(filepath.Join(dir, "castor.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	}
-	f, err := open()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "castor: not writing a log file:", err)
-	}
-	return f
-})
-
 func logger(level log.Level) *slog.Logger {
 	screen := log.NewWithOptions(os.Stderr, log.Options{
 		ReportTimestamp: true,
 		TimeFormat:      "15:04:05.000",
 		Level:           level,
 	})
-	f := file()
-	if f == nil {
-		return slog.New(castid.Tagged(screen))
-	}
-	text := slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.Level(level)})
-	return slog.New(castid.Tagged(slog.NewMultiHandler(screen, text)))
+	return slog.New(castid.Tagged(logging.Redact(slog.NewMultiHandler(screen, telemetry.Handler()))))
 }

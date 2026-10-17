@@ -12,7 +12,7 @@ func gate(ctx context.Context, buf *buffered) error {
 	return health.Watch(ctx, readMonitor(buf.reader, health.Monitor{
 		Subject: "playback gate",
 		Phase:   health.Reading,
-		Lead:    buf.burn,
+		Lead:    buf.transcript,
 	}))
 }
 
@@ -34,36 +34,60 @@ func supervising(ctx context.Context, dev Device, d delivery, f feed) (bool, err
 	defer cancel()
 
 	delivered := make(chan error, 1)
-	go func() { delivered <- d.sink.Wait(ctx) }()
+	go func(result chan<- error) { result <- d.sink.Wait(ctx) }(delivered)
 	playback := make(chan error, 1)
-	go func() { playback <- dev.AwaitEnd(ctx) }()
+	go func(result chan<- error) { result <- dev.AwaitEnd(ctx) }(playback)
 
 	// Nil where delivery has no supervisor; sink deleting behind its live edge reads as stall on every cast.
 	var judged chan error
 	if aud := d.sink.Audience(); aud != nil {
 		judged = make(chan error, 1)
-		go func() { judged <- health.Watch(ctx, playingMonitor(f, d, aud, dev)) }()
+		go func(result chan<- error) { result <- health.Watch(ctx, playingMonitor(f, d, aud, dev)) }(judged)
 	}
 
+	// The first completion ends playback, but every worker belongs to this scope.
+	// Join them before the caller tears down the resources they observe.
+	var err error
+	var completed bool
 	select {
-	case err := <-delivered:
-		cancel()
-		return err == nil, errors.Join(err, unlessTeardown(<-playback))
-	case err := <-judged:
-		cancel()
-		return false, errors.Join(err, unlessTeardown(<-playback))
-	case err := <-playback:
-		cancel()
-		select {
-		case local := <-delivered:
-			return local == nil, errors.Join(err, unlessTeardown(local))
-		case local := <-judged:
-			return false, errors.Join(err, unlessTeardown(local))
-		}
+	case err = <-delivered:
+		completed = err == nil
+		delivered = nil
+	case err = <-judged:
+		judged = nil
+	case err = <-playback:
+		playback = nil
 	}
+	cancel()
+	if delivered != nil {
+		local := <-delivered
+		completed = local == nil
+		err = errors.Join(err, unlessTeardown(local))
+	}
+	if judged != nil {
+		err = errors.Join(err, unlessTeardown(<-judged))
+	}
+	if playback != nil {
+		err = errors.Join(err, unlessTeardown(<-playback))
+	}
+	return completed, err
 }
 
+// Ignore cancellation caused by joining workers, but retain failures joined to it.
 func unlessTeardown(err error) error {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var kept []error
+		for _, child := range joined.Unwrap() {
+			kept = append(kept, unlessTeardown(child))
+		}
+		return errors.Join(kept...)
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		if child := wrapped.Unwrap(); child != nil && unlessTeardown(child) == nil {
+			return nil
+		}
+		return err
+	}
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}

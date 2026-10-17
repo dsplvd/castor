@@ -3,9 +3,7 @@ package media
 import "testing"
 
 func TestDeviceCanCopyVideo(t *testing.T) {
-	envelope := Capabilities{Video: []VideoSupport{
-		{Codec: CodecH264, Profiles: []Profile{"Constrained Baseline", "Baseline", "Main", "High"}},
-	}}
+	envelope := Capabilities{Formats: []FormatSupport{{Transport: TransportMP4, Video: VideoSupport{Codec: CodecH264, Profiles: []Profile{"Constrained Baseline", "Baseline", "Main", "High"}}}}}
 	base := ProbeInfo{VideoCodec: CodecH264, VideoProfile: "High", VideoHeight: 1080, VideoBitDepth: 8}
 	for _, tt := range []struct {
 		name   string
@@ -30,7 +28,7 @@ func TestDeviceCanCopyVideo(t *testing.T) {
 }
 
 func TestDeviceCanCopyAudio(t *testing.T) {
-	envelope := Capabilities{Audio: []AudioSupport{{Codec: CodecAAC, MaxChannels: 2}, {Codec: CodecAC3}}}
+	envelope := Capabilities{Formats: []FormatSupport{{Transport: TransportMP4, Audio: AudioSupport{Codec: CodecAAC, MaxChannels: 2}}, {Transport: TransportMP4, Audio: AudioSupport{Codec: CodecAC3}}}}
 	for _, tt := range []struct {
 		name  string
 		codec Codec
@@ -47,5 +45,15 @@ func TestDeviceCanCopyAudio(t *testing.T) {
 				t.Errorf("CanCopyAudio = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAudioOnlyCapabilities(t *testing.T) {
+	caps := Capabilities{Formats: []FormatSupport{{Transport: TransportMPEGTS, Audio: AudioSupport{Codec: CodecAAC}}}}
+	if !caps.CanPlayIn(MPEGTS, ProbeInfo{AudioCodec: CodecAAC, AudioChannels: 2}) {
+		t.Fatal("audio-only tuple rejected")
+	}
+	if caps.CanPlayIn(MPEGTS, ProbeInfo{}) {
+		t.Fatal("unprobed empty media accepted")
 	}
 }

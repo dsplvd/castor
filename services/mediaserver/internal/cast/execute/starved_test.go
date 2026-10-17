@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
 
@@ -22,11 +23,17 @@ func TestADeviceThatEndsHavingTakenEverythingTheUnfinishedReadMadeIsStarved(t *t
 	if _, err := sp.Write(body); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := deliver.OpenSpooledStream(t.Context(), deliver.Opening{
-		Format:        container.Format{ContentType: media.MPEGTS, Extension: ".ts"},
+	madeBytes := int64(len(body))
+	progress := func() media.Progress { return media.Progress{Position: time.Minute, Bytes: madeBytes} }
+	selected, err := adapters.Default().Select(chromecastLike(media.MPEGTS), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := selected.Plan.(output.Relayer).OpenSpool(t.Context(), deliver.Opening{
+		Format:        selected.Plan.Format(),
 		Listeners:     loopback{},
 		WriteDeadline: time.Minute,
-	}, sp, make(chan struct{}))
+	}, sp, make(chan struct{}), progress)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,8 +50,7 @@ func TestADeviceThatEndsHavingTakenEverythingTheUnfinishedReadMadeIsStarved(t *t
 
 	read := &pull{done: make(chan struct{})}
 	feedOf := func(r *pull) feed { return feed{buffered: &buffered{reader: r}} }
-	madeBytes := int64(len(body))
-	d := delivery{sink: streamedSink{Stream: srv, made: func() media.Progress { return media.Progress{Position: time.Minute, Bytes: madeBytes} }}}
+	d := delivery{sink: srv, output: progressProducer{pull: read, progress: progress}}
 
 	if _, _, ok := starved(feedOf(read), d); !ok {
 		t.Error("a device that took all the read had made, while the read still ran, was not starved")
@@ -61,3 +67,10 @@ func TestADeviceThatEndsHavingTakenEverythingTheUnfinishedReadMadeIsStarved(t *t
 		t.Error("a device that took everything from a read that had finished was called starved")
 	}
 }
+
+type progressProducer struct {
+	*pull
+	progress func() media.Progress
+}
+
+func (p progressProducer) Progress() media.Progress { return p.progress() }

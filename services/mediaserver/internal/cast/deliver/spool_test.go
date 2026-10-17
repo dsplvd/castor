@@ -100,3 +100,44 @@ func TestClosingATailTerminatesAReadParkedInIt(t *testing.T) {
 		}
 	})
 }
+
+func TestCloseWritePreservesFileCloseFailure(t *testing.T) {
+	s, err := NewSpool(filepath.Join(t.TempDir(), "spool"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s.CloseWrite(nil)
+	if !errors.Is(s.Err(), fs.ErrClosed) {
+		t.Fatalf("terminal error = %v, want file close failure", s.Err())
+	}
+}
+
+// A later cleanup cannot rewrite the result readers were already promised.
+func TestSpoolCompletionIsFinal(t *testing.T) {
+	for _, first := range []error{nil, errors.New("producer failed")} {
+		s := newTestSpool(t)
+		t.Cleanup(func() { _ = s.Close() })
+		s.CloseWrite(first)
+		s.CloseWrite(errors.New("later teardown failed"))
+		if !errors.Is(s.Err(), first) {
+			t.Fatalf("completion changed: %v, want %v", s.Err(), first)
+		}
+		tail, err := s.TailAt(t.Context(), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tail.Read(make([]byte, 1))
+		_ = tail.Close()
+		want := first
+		if want == nil {
+			want = io.EOF
+		}
+		if !errors.Is(err, want) {
+			t.Fatalf("tail = %v, want original completion %v", err, want)
+		}
+	}
+}

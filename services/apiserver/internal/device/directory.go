@@ -3,8 +3,10 @@ package device
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -13,15 +15,17 @@ import (
 
 // Directory is the devices this server reached, by the id a cast's target names them with.
 type Directory struct {
-	reach Registry
+	reach   Registry
+	resolve func(context.Context, string) ([]net.IPAddr, error)
 
-	mu   sync.Mutex
-	seen map[string]Info
+	mu     sync.Mutex
+	seen   discoveries
+	leases map[string]*lease
 }
 
 // NewDirectory lists and lends the devices reach finds.
 func NewDirectory(reach Registry) *Directory {
-	return &Directory{reach: reach, seen: map[string]Info{}}
+	return &Directory{reach: reach, resolve: net.DefaultResolver.LookupIPAddr, seen: discoveries{}, leases: map[string]*lease{}}
 }
 
 func (d *Directory) ListDevices(ctx context.Context, _ *castorv1.ListDevicesRequest) (*castorv1.ListDevicesResponse, error) {
@@ -65,13 +69,34 @@ func requestedType(t castorv1.DeviceType) (Type, error) {
 
 // Connect opens target for one cast, which holds it to its end; a Play that finds it gone connects it again.
 func (d *Directory) Connect(ctx context.Context, target Info) (Device, error) {
-	dev, at, err := d.dial(ctx, target)
+	ctx, cancel := context.WithTimeout(ctx, d.reach.Timeout)
+	defer cancel()
+	family, err := d.reach.family(target.Type)
 	if err != nil {
 		return nil, err
 	}
-	r := &reconnecting{dir: d}
+	resolved, err := locate(ctx, family, target)
+	if err != nil {
+		return nil, err
+	}
+	l := newLease(d)
+	if err := l.claimResolved(ctx, resolved); err != nil {
+		return nil, err
+	}
+	dev, at, err := d.dial(ctx, resolved)
+	if err != nil {
+		l.release()
+		return nil, err
+	}
+	if err := l.claimResolved(ctx, at); err != nil {
+		_ = dev.Close()
+		l.release()
+		return nil, err
+	}
+	r := &reconnecting{dir: d, owner: l}
 	r.cur.Store(&link{device: dev, target: at})
-	return r, nil
+	l.device = r
+	return l, nil
 }
 
 // dial connects target, discovering it again once when a seen device no longer answers where it was found.
@@ -93,15 +118,14 @@ func (d *Directory) discover(ctx context.Context) []Info {
 	found := d.reach.Discover(ctx)
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for _, info := range found {
-		d.seen[info.id()] = info
-	}
+	d.seen.remember(found)
 	return found
 }
 
 func (d *Directory) lookup(id string) (Info, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	info, ok := d.seen[id]
-	return info, ok
+	d.seen.prune(time.Now())
+	observed, ok := d.seen[id]
+	return observed.info, ok
 }

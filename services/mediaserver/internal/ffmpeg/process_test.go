@@ -113,3 +113,22 @@ func TestSideOutputsEndWhenFFmpegNeverOpensThem(t *testing.T) {
 		t.Errorf("got %d PCM bytes from an output ffmpeg never opened", pcm.Len())
 	}
 }
+
+func TestProcessCancellationIsOneOperation(t *testing.T) {
+	proc, err := Start(t.Context(), "/bin/sh", Command{Args: []string{"-c", "exec sleep 30"}}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := proc.cmd.Cancel(); err != nil {
+		t.Fatal(err)
+	}
+	_ = proc.Wait()
+	// os/exec cancellation and explicit teardown share the original signal;
+	// a later kill must not replace its outcome with ProcessDone.
+	if err := proc.cmd.Cancel(); err != nil {
+		t.Fatalf("repeated cancellation replaced original result: %v", err)
+	}
+	if got := proc.Evidence().ExitStatus; got != noExitStatus {
+		t.Fatalf("own cancellation classified as exit %d", got)
+	}
+}

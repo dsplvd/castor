@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/stupside/castor/internal/settings"
-	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/internal/transport"
 	"github.com/urfave/cli/v3"
 )
@@ -16,9 +15,8 @@ type ServerConfig struct {
 }
 
 type ServiceConfig struct {
-	Config    `yaml:",inline"`
-	Scraping  ServerConfig     `yaml:"scraping" validate:"required"`
-	Telemetry telemetry.Config `yaml:"telemetry"`
+	Config   `yaml:",inline"`
+	Scraping ServerConfig `yaml:"scraping" validate:"required"`
 }
 
 func defaults() ServiceConfig {
@@ -31,11 +29,6 @@ func Command() *cli.Command {
 		if err != nil {
 			return err
 		}
-		flush, err := telemetry.Setup(ctx, cfg.Telemetry, "castor-scraping")
-		if err != nil {
-			return err
-		}
-		defer func() { _ = flush(context.WithoutCancel(ctx)) }()
 		listener, err := transport.Listen(ctx, cfg.Scraping.Listen, cfg.Scraping.Token, "scraping.token")
 		if err != nil {
 			return err

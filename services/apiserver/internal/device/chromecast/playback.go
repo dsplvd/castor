@@ -82,12 +82,13 @@ func (w *playback) disarm() {
 }
 
 func (w *playback) observe(status castmedia.Media) (bool, error) {
-	if w.mediaSession == 0 {
+	switch {
+	case w.mediaSession == 0:
 		if status.Media.ContentId != w.content || status.MediaSessionId == 0 {
 			return false, nil
 		}
 		w.mediaSession = status.MediaSessionId
-	} else if status.MediaSessionId != w.mediaSession {
+	case status.MediaSessionId != w.mediaSession:
 		return false, nil
 	}
 

@@ -6,10 +6,12 @@
     const style = getComputedStyle(f);
     if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0) continue;
     const r = f.getBoundingClientRect();
-    if (r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) continue;
     const a = r.width * r.height;
     if (a > maxArea && r.width > 100 && r.height > 100) { maxArea = a; best = f; }
   }
-  if (best) return best.src;
+  if (best) {
+    best.scrollIntoView({block: 'center', behavior: 'instant'});
+    return best.src;
+  }
   return null;
 })()

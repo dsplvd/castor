@@ -14,6 +14,7 @@ import (
 	"github.com/stupside/castor/gen/castor/scraping/v1/scrapingv1connect"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/internal/transport"
+	"golang.org/x/sync/semaphore"
 )
 
 // Resolver is implemented by the composition root that owns the browser.
@@ -23,15 +24,17 @@ type Resolver interface {
 type Server struct {
 	http.Handler
 	resolver Resolver
+	requests *semaphore.Weighted
 	ctx      context.Context
 	cancel   context.CancelFunc
 	mu       sync.Mutex
-	wg       sync.WaitGroup
 }
+
+const maxRequests = 16
 
 func New(resolver Resolver) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{resolver: resolver, ctx: ctx, cancel: cancel}
+	s := &Server{requests: semaphore.NewWeighted(maxRequests), resolver: resolver, ctx: ctx, cancel: cancel}
 	mux := http.NewServeMux()
 	mux.Handle(scrapingv1connect.NewScrapingServiceHandler(s, transport.Options()))
 	transport.Introspect(mux, scrapingv1connect.ScrapingServiceName)
@@ -45,9 +48,12 @@ func (s *Server) Resolve(ctx context.Context, req *scrapingv1.ResolveRequest) (*
 		s.mu.Unlock()
 		return nil, connect.NewError(connect.CodeUnavailable, context.Canceled)
 	}
-	s.wg.Add(1)
+	if !s.requests.TryAcquire(1) {
+		s.mu.Unlock()
+		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("concurrent request capacity exhausted"))
+	}
+	defer s.requests.Release(1)
 	s.mu.Unlock()
-	defer s.wg.Done()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stop := context.AfterFunc(s.ctx, cancel)
@@ -75,11 +81,10 @@ func (s *Server) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	s.cancel()
 	s.mu.Unlock()
-	done := make(chan struct{})
-	go func() { s.wg.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-ctx.Done():
+	// Admission has stopped. Taking every slot joins the accepted requests;
+	// the context bounds the wait without leaving a waiter goroutine behind.
+	if s.requests.Acquire(ctx, maxRequests) == nil {
+		s.requests.Release(maxRequests)
 	}
 }
 

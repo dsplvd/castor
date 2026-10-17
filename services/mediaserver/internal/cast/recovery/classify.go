@@ -15,6 +15,7 @@ const (
 	unclassified kind = iota
 	// cancelled is the cast's context ending, not a failure.
 	cancelled
+	resourceExhausted
 	// unreachable is a link that established no media and never stated a speed.
 	unreachable
 	// sourceStalled is a source that stopped delivering mid-cast.
@@ -35,6 +36,8 @@ const (
 
 func (k kind) String() string {
 	switch k {
+	case resourceExhausted:
+		return "resource-exhausted"
 	case cancelled:
 		return "cancelled"
 	case unreachable:
@@ -70,6 +73,10 @@ var classes = []classRule{{
 	why:  "cancelled",
 	when: func(e Evidence) bool { return e.Cancelled },
 	kind: cancelled,
+}, {
+	why:  "the local resource budget is exhausted",
+	when: func(e Evidence) bool { return e.ResourceErr != nil },
+	kind: resourceExhausted,
 }, {
 	why:  "the device stopped answering",
 	when: func(e Evidence) bool { return e.DeviceGone != nil },

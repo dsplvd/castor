@@ -1,6 +1,9 @@
 package subtitle
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 // One row per signal that can end a cue.
 func TestCueCut(t *testing.T) {
@@ -74,11 +77,11 @@ func TestCuesCloseInOrder(t *testing.T) {
 	}
 	b.Commit(words, 5.0)
 
-	cues := b.cues
+	cues := b.Snapshot(0, 100).Cues
 	if len(cues) != 2 {
 		t.Fatalf("want 2 cues, got %d: %v", len(cues), cues)
 	}
-	if cues[0].start > cues[1].start {
+	if cues[0].Start > cues[1].Start {
 		t.Error("cues must be appended in non-decreasing start order")
 	}
 	if got := b.cueAt(3.2); got != "Second line." {
@@ -96,11 +99,117 @@ func TestCuesSilentTailClosesTheFinalCue(t *testing.T) {
 		{Start: 0.8, End: 1.6, Text: "end"}, // no sentence punctuation
 	}
 	b.Commit(sentence, 1.6)
-	if n := len(b.cues); n != 0 {
+	if n := len(b.Snapshot(0, 100).Cues); n != 0 {
 		t.Fatalf("cue without a closing signal should stay open, got %d cues", n)
 	}
 	b.Commit(nil, 1.6+cueGapSeconds)
-	if n := len(b.cues); n != 1 {
+	if n := len(b.Snapshot(0, 100).Cues); n != 1 {
 		t.Fatalf("confirmed silence should close the trailing cue, got %d cues", n)
+	}
+}
+
+func TestSnapshotWaitsForOpenCuesAndIncludesSilence(t *testing.T) {
+	c := &Cues{}
+	c.Commit([]Word{{Start: 2, End: 2.5, Text: "hello"}}, 2.5)
+	if got := c.Snapshot(0, 10); got.SettledTo != 2 || len(got.Cues) != 0 || got.Complete {
+		t.Fatalf("pending cue snapshot = %+v", got)
+	}
+	c.Commit(nil, 8)
+	got := c.Snapshot(0, 10)
+	if got.SettledTo != 8 || len(got.Cues) != 1 {
+		t.Fatalf("silence snapshot = %+v", got)
+	}
+	got.Cues[0].Text = "mutated"
+	if next := c.Snapshot(0, 10); next.Cues[0].Text != "hello" {
+		t.Fatal("snapshot aliases committed cues")
+	}
+	c.Close()
+	if !c.Snapshot(0, 10).Complete {
+		t.Fatal("completion not published")
+	}
+}
+
+func TestSnapshotIncludesOverlappingCuesAndPrunesConsumedCues(t *testing.T) {
+	c := &Cues{}
+	c.Commit([]Word{{Start: 2, End: 4, Text: "first."}, {Start: 7, End: 9, Text: "second."}}, 12)
+	if got := c.Snapshot(3, 8); len(got.Cues) != 2 {
+		t.Fatalf("overlap snapshot = %+v", got)
+	}
+	c.DiscardBefore(5)
+	c.Commit(nil, 15)
+	got := c.Snapshot(0, 20)
+	if len(got.Cues) != 1 || got.Cues[0].Text != "second." || got.SettledTo != 15 {
+		t.Fatalf("pruned snapshot = %+v", got)
+	}
+}
+
+func TestLateHypothesesCannotRevisePublishedTimeline(t *testing.T) {
+	c := &Cues{}
+	c.Commit(nil, 6)
+	c.Commit([]Word{{Start: 2, End: 4, Text: "too late"}, {Start: 5, End: 8, Text: "overlap."}}, 10)
+	got := c.Snapshot(0, 12)
+	if len(got.Cues) != 1 || got.Cues[0].Start < 6 || got.Cues[0].Text != "overlap." {
+		t.Fatalf("late hypothesis changed settled timeline: %+v", got)
+	}
+}
+
+func TestSnapshotsRemainSafeDuringPublicationAndPruning(t *testing.T) {
+	c := &Cues{}
+	var readers sync.WaitGroup
+	readers.Go(func() {
+		for range 1000 {
+			snapshot := c.Snapshot(0, 3000)
+			if len(snapshot.Cues) > 0 {
+				snapshot.Cues[0].Text = "reader copy"
+			}
+		}
+	})
+	for i := range 1000 {
+		start := float64(i * 3)
+		c.DiscardBefore(start - 12)
+		c.Commit([]Word{{Start: start, End: start + 2, Text: "caption."}}, start+3)
+	}
+	c.Close()
+	readers.Wait()
+	if got := c.Snapshot(0, 3000); len(got.Cues) > 5 {
+		t.Fatalf("retained %d cues", len(got.Cues))
+	}
+}
+
+func TestCompletedTranscriptReleasesConsumedCaptionsWithoutAnotherCommit(t *testing.T) {
+	c := &Cues{}
+	for i := range 100 {
+		start := float64(i * 3)
+		c.Commit([]Word{{Start: start, End: start + 2, Text: "caption."}}, start+3)
+	}
+	c.Close()
+	c.DiscardBefore(294)
+	snapshot := c.Snapshot(0, 400)
+	if !snapshot.Complete || len(snapshot.Cues) != 2 || snapshot.SettledTo != 300 {
+		t.Fatalf("completed prune = %+v", snapshot)
+	}
+	current := c.published.Load()
+	if cap(current.Cues) > 4 {
+		t.Fatalf("completed snapshot retains original backing array: cap=%d", cap(current.Cues))
+	}
+}
+
+func TestConcurrentPruningDoesNotRestoreConsumedPrefix(t *testing.T) {
+	c := &Cues{}
+	var consumer sync.WaitGroup
+	consumer.Go(func() {
+		for i := range 1000 {
+			c.DiscardBefore(float64(i*3 - 12))
+		}
+	})
+	for i := range 1000 {
+		start := float64(i * 3)
+		c.Commit([]Word{{Start: start, End: start + 2, Text: "caption."}}, start+3)
+	}
+	c.Close()
+	consumer.Wait()
+	c.DiscardBefore(2994)
+	if got := c.Snapshot(0, 4000); len(got.Cues) != 2 || !got.Complete {
+		t.Fatalf("concurrent prune retained %d cues complete=%v", len(got.Cues), got.Complete)
 	}
 }

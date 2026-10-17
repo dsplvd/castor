@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
@@ -54,10 +55,13 @@ func Cast(ctx context.Context, in Intent, run Runner, resolver SourceResolver) e
 			return cmp.Or(context.Cause(ctx), out.Err)
 		}
 
-		rev := revise(ctx, in, out, f, led, resolver)
+		revisionCtx, finish := telemetry.Start(ctx, telemetry.Recovery)
+		rev := revise(revisionCtx, in, out, f, led, resolver)
 		if !rev.offered {
+			finish(f)
 			return f
 		}
+		finish(nil)
 
 		revising(ctx, f, rev)
 		in.Turns.Revising(rev.strategy.action, f.why)

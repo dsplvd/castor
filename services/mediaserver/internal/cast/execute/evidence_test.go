@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"testing"
 	"time"
 
@@ -77,8 +78,8 @@ func TestACancelledAttemptSaysSo(t *testing.T) {
 		ctx  context.Context
 		want bool
 	}{{ctx, true}, {t.Context(), false}} {
-		dev := &fakeDevice{caps: chromecastLike(media.MP4)}
-		out := Cast{Timelines: direct{}, MaxHeight: 1080, Device: dev}.Run(tc.ctx,
+		dev := &fakeDevice{caps: chromecastLike(media.MP4), ended: true}
+		out := Cast{Timelines: direct{}, Outputs: adapters.Default(), MaxHeight: 1080, Device: dev}.Run(tc.ctx,
 			recovery.Attempt{Program: programFromStream(t, handoffStream())})
 		if out.Evidence.Cancelled != tc.want {
 			t.Errorf("Cancelled = %v under a context cancelled %v", out.Evidence.Cancelled, tc.want)

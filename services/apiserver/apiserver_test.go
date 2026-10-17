@@ -35,8 +35,9 @@ import (
 
 // family is the one device on the network: each connection to it plays what it is handed until its cast lets it go.
 type family struct {
-	played chan string
-	closed chan int
+	played  chan string
+	closed  chan int
+	devices []device.Info
 	// stops counts the stops the device was sent.
 	stops atomic.Int32
 	// unreachable is a device that answers no connection.
@@ -54,7 +55,12 @@ var bedroom = device.Info{ID: "uuid-1", Name: "Bedroom", Type: "dlna", Address: 
 
 func (*family) Type() device.Type { return bedroom.Type }
 
-func (*family) Discover(context.Context) []device.Info { return []device.Info{bedroom} }
+func (f *family) Discover(context.Context) []device.Info {
+	if len(f.devices) > 0 {
+		return f.devices
+	}
+	return []device.Info{bedroom}
+}
 
 func (*family) Locate(_ context.Context, address string) (string, error) { return address, nil }
 
@@ -94,7 +100,9 @@ func (*connection) AwaitEnd(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (*connection) Capabilities() *mediav1.Capabilities { return &mediav1.Capabilities{} }
+func (*connection) Capabilities() *mediav1.Capabilities {
+	return &mediav1.Capabilities{Formats: []*mediav1.FormatSupport{{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MP4}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC}}}}}}
+}
 
 func (c *connection) Close() error {
 	c.f.closed <- c.n
@@ -210,7 +218,7 @@ func (m *media) Drive(ctx context.Context, req *mediav1.DriveRequest, out *conne
 	play := &mediav1.DeviceCommand_Play{Url: ranked(c.source)[0].GetUrl(), Container: mediav1.Container_CONTAINER_HLS}
 	cmd := m.driveCommand
 	if cmd == nil {
-		cmd = &mediav1.DeviceCommand{Id: "play", Command: &mediav1.DeviceCommand_Play_{Play: play}}
+		cmd = &mediav1.DeviceCommand{Command: &mediav1.DeviceCommand_Call_{Call: &mediav1.DeviceCommand_Call{Id: "play", Operation: &mediav1.DeviceCommand_Call_Play{Play: play}}}}
 	}
 	if err := out.Send(&mediav1.DriveResponse{Command: cmd}); err != nil {
 		return err
@@ -692,7 +700,7 @@ func TestBrokenMediaWatchStopsTheCast(t *testing.T) {
 
 func TestMalformedDeviceCommandsFailTheCastBeforeTouchingTheDevice(t *testing.T) {
 	m, f := newMedia(true), newFamily()
-	m.driveCommand = &mediav1.DeviceCommand{Id: "play", Command: &mediav1.DeviceCommand_Play_{Play: &mediav1.DeviceCommand_Play{Url: "/stream", Container: mediav1.Container_CONTAINER_HLS}}}
+	m.driveCommand = &mediav1.DeviceCommand{Command: &mediav1.DeviceCommand_Call_{Call: &mediav1.DeviceCommand_Call{Id: "play", Operation: &mediav1.DeviceCommand_Call_Play{Play: &mediav1.DeviceCommand_Play{Url: "/stream", Container: mediav1.Container_CONTAINER_HLS}}}}}
 	c := serve(t, setup{media: m, family: f, uncheckedMedia: true})
 	w := watch(t, c, cast(t, c, streamOf("https://cdn.example/direct")))
 	if w.ended.GetFailed().GetCode() != castorv1.FailureCode_FAILURE_CODE_INTERNAL {
@@ -771,22 +779,34 @@ func TestAStoppedCastReleasesItsDeviceAndIsNoLongerListed(t *testing.T) {
 
 func TestCastsAreListedOldestFirstWithoutTheHeadersTheirStreamsWereFoundWith(t *testing.T) {
 	f := newFamily()
+	f.devices = []device.Info{bedroom, {ID: "uuid-2", Name: "Living room", Type: "dlna", Address: "10.0.0.10"}}
 	c := serve(t, setup{media: newMedia(true), family: f})
 
 	var ids []string
-	for _, raw := range []string{"https://cdn.example/first", "https://cdn.example/second"} {
+	for i, raw := range []string{"https://cdn.example/first", "https://cdn.example/second"} {
 		source := streamOf(raw)
 		source.GetStream().Headers = map[string]string{"Cookie": "session=viewer"}
-		ids = append(ids, cast(t, c, source))
-		<-f.played
+		started, err := c.casts.Cast(t.Context(), &castorv1.CastRequest{
+			Target: &castorv1.Target{Target: &castorv1.Target_DeviceId{DeviceId: "dlna:" + f.devices[i].ID}},
+			Source: source,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, started.GetCastId())
+		select {
+		case <-f.played:
+		case <-time.After(5 * time.Second):
+			t.Fatal("cast did not start on its receiver")
+		}
 	}
 	listed, err := c.casts.ListCasts(t.Context(), &castorv1.ListCastsRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := listed.GetCasts()
-	if len(got) != 2 || got[0].GetId() != ids[0] || got[1].GetId() != ids[1] || got[0].GetDevice().GetName() != "Bedroom" {
-		t.Fatalf("listed %v, want both casts on the bedroom device, oldest first", got)
+	if len(got) != 2 || got[0].GetId() != ids[0] || got[1].GetId() != ids[1] || got[0].GetDevice().GetName() != "Bedroom" || got[1].GetDevice().GetName() != "Living room" {
+		t.Fatalf("listed %v, want both receivers' casts, oldest first", got)
 	}
 	for _, listed := range got {
 		if h := listed.GetSource().GetStream().GetHeaders(); len(h) != 0 {

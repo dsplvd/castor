@@ -13,6 +13,7 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
+	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
 )
 
 // TestTheBurnInsCueReachesTheEncodeThatDrawsIt: the cue must be an input before the copy decision.
@@ -26,11 +27,11 @@ func TestTheBurnInsCueReachesTheEncodeThatDrawsIt(t *testing.T) {
 	s, buf := bufferedCast(t, ffmpegPath, ffprobePath)
 
 	s.cast.Device = &fakeDevice{caps: dlnaLike()}
-	opts, err := s.encode(feed{buffered: buf}, &fakeBurn{burnIn: cuePath})
+	opts, err := s.encode(feed{buffered: buf}, subtitle.NewCueFile(filepath.Dir(cuePath), &subtitle.Cues{}))
 	if err != nil {
 		t.Fatalf("building the encode: %v", err)
 	}
-	cmd, err := transcode.EncodeArgs(opts)
+	cmd, err := transcode.EncodeArgs(opts.EncodeOptions)
 	if err != nil {
 		t.Fatalf("building the args: %v", err)
 	}

@@ -104,24 +104,24 @@ func (c *client) Read(ctx context.Context, u *url.URL, h http.Header, r timeline
 		_ = resp.Body.Close()
 		return nil, &timeline.Failure{Status: resp.StatusCode, Err: errors.New("fetching media")}
 	}
-	if r.Length > 0 && resp.StatusCode == http.StatusPartialContent {
+	if r.Length <= 0 {
+		return resp.Body, nil
+	}
+	switch resp.StatusCode {
+	case http.StatusPartialContent:
 		var first, last int64
 		if _, err := fmt.Sscanf(resp.Header.Get("Content-Range"), "bytes %d-%d/", &first, &last); err != nil || first != r.Offset || last != r.Offset+r.Length-1 {
 			_ = resp.Body.Close()
 			return nil, fmt.Errorf("fetching media: Content-Range %q does not match %s", resp.Header.Get("Content-Range"), r.Header())
 		}
-	}
-	// An origin that ignores Range answers the whole resource, of which only r is wanted.
-	if r.Length > 0 && resp.StatusCode == http.StatusOK {
+	case http.StatusOK:
+		// An origin that ignores Range answers the whole resource, of which only r is wanted.
 		if _, err := io.CopyN(io.Discard, resp.Body, r.Offset); err != nil {
 			_ = resp.Body.Close()
 			return nil, fmt.Errorf("skipping to byte %d: %w", r.Offset, err)
 		}
 	}
-	if r.Length > 0 {
-		return &rangeReader{ReadCloser: resp.Body, remaining: r.Length}, nil
-	}
-	return resp.Body, nil
+	return &rangeReader{ReadCloser: resp.Body, remaining: r.Length}, nil
 }
 
 // rangeReader stops at the requested length and reports a short origin body as truncated media.

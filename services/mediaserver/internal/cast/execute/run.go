@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stupside/castor/internal/telemetry"
 	"log/slog"
 	"net/url"
 	"os"
@@ -13,12 +14,15 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
+	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
 )
 
 var _ recovery.Runner = Cast{}
 
 // Run casts a end to end; everything it acquired is released before its outcome is read.
-func (c Cast) Run(parent context.Context, a recovery.Attempt) recovery.Outcome {
+func (c Cast) Run(parent context.Context, a recovery.Attempt) (result recovery.Outcome) {
+	parent, finish := telemetry.Start(parent, telemetry.Attempt)
+	defer func() { finish(result.Err) }()
 	if err := a.Program.Validate(); err != nil {
 		err = fmt.Errorf("attempt has no valid media program: %w", err)
 		return recovery.Outcome{Err: err, Evidence: evidence(ran{}, err, parent.Err() != nil)}
@@ -73,15 +77,18 @@ func (s *pipeline) handoff() (ran, error) {
 	if err := hand(s.ctx, s.cast.Device, primary.URL, primary.ContentType, s.shown, true); err != nil {
 		return ran{}, err
 	}
-	return ran{reached: health.Playing}, nil
+	// A LOAD acknowledgement starts playback; it does not transfer ownership of
+	// the cast's resources. Keep captions and the device lease until playback ends.
+	return ran{reached: health.Playing}, s.cast.Device.AwaitEnd(s.ctx)
 }
 
 // prepare is the work directory and the program with its followed timelines, which a cast castor serves starts from.
 func (s *pipeline) prepare() (string, media.Program, error) {
-	work, err := s.workdir()
+	work, err := os.MkdirTemp("", "castor-")
 	if err != nil {
-		return "", media.Program{}, err
+		return "", media.Program{}, fmt.Errorf("creating work directory: %w", err)
 	}
+	s.releases.push(func() error { return os.RemoveAll(work) })
 	program, err := s.follow(s.attempt.Program)
 	return work, program, err
 }
@@ -108,31 +115,31 @@ func (s *pipeline) readOnce() (ran, error) {
 	if err := gate(s.ctx, buf); err != nil {
 		return reading, err
 	}
-	reached, err := s.serve(work, feed{buffered: buf}, buf.burn)
+	f := feed{buffered: buf}
+	var burn burnRenderer
+	if _, native := s.nativeOutput(f); buf.transcript != nil && !native {
+		burn = subtitle.NewCueFile(work, buf.transcript.Cues())
+	}
+	reached, err := s.serve(work, f, burn)
 	return ran{reached: max(reading.reached, reached), reader: buf.reader}, err
 }
 
 func (s *pipeline) compose() compose.Kind {
 	shape := compose.Shape{
-		Device:    s.cast.Device.Capabilities(),
+		Device:    s.playbackCapabilities(),
 		Program:   s.attempt.Program,
 		Delivery:  s.attempt.Delivery,
 		Height:    s.attempt.SelfFetchHeight(),
 		MaxHeight: s.cast.MaxHeight,
 	}
 	kind := compose.For(shape)
+	// Requested transcription needs a buffered PCM feed whenever no usable
+	// native captions are shown, including sources that publish no caption track.
+	if s.cast.Subtitles != nil && len(s.shown) == 0 {
+		kind = compose.ReadOnce
+	}
 	slog.InfoContext(s.ctx, "cast composition", "composition", string(kind))
 	return kind
-}
-
-// workdir is where an attempt keeps its files, removed when it is released.
-func (s *pipeline) workdir() (string, error) {
-	dir, err := os.MkdirTemp("", "castor-")
-	if err != nil {
-		return "", fmt.Errorf("creating work directory: %w", err)
-	}
-	s.releases.push(func() error { _ = os.RemoveAll(dir); return nil })
-	return dir, nil
 }
 
 // follow points the inputs whose timelines castor keeps at castor's republished playlists.
@@ -141,7 +148,7 @@ func (s *pipeline) follow(program media.Program) (media.Program, error) {
 	if err != nil {
 		return media.Program{}, &timelineUnreadable{err: err}
 	}
-	s.releases.push(func() error { _ = unfollow(); return nil })
+	s.releases.push(unfollow)
 	return followed, nil
 }
 

@@ -4,8 +4,6 @@ package fetch
 import (
 	"cmp"
 	"time"
-
-	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
 )
 
 // BackoffMax is the longest ffmpeg waits before it reconnects to a source.
@@ -51,24 +49,6 @@ var (
 	// pacePlayback asks for a link at the rate it is played, with no burst.
 	pacePlayback = Pace{Realtime: 1.0}
 )
-
-// paceBurning keeps the subtitle-burning encoder just above realtime.
-var paceBurning = Pace{Realtime: 1.15, Burst: EncodeBurst}
-
-// paceSegmentWindow is a client draining a segment window at 1x.
-var paceSegmentWindow = Pace{Realtime: 1.0, Burst: container.HLSWindow}
-
-// Ceiling is the pace an encode's output imposes over whatever its input was read at.
-func Ceiling(output container.DeliveryKind, burning bool) Pace {
-	switch {
-	case burning:
-		return paceBurning
-	case output == container.DeliverSegmented:
-		return paceSegmentWindow
-	default:
-		return Pace{}
-	}
-}
 
 // segmentOpenRetries is how many times a segment that would not open is asked for again.
 const segmentOpenRetries = 3

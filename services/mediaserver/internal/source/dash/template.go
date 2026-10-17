@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Eyevinn/dash-mpd/mpd"
@@ -36,7 +38,23 @@ func early(t *mpd.SegmentTemplateType, length time.Duration) time.Duration {
 }
 
 func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Segment, error) {
+	for _, template := range []string{t.Media, t.Initialization} {
+		if len(template)+len(a.rep.Id) > 4096 {
+			return nil, fmt.Errorf("DASH segment template exceeds URL budget")
+		}
+		for _, m := range identifier.FindAllStringSubmatch(template, -1) {
+			if m[2] != "" {
+				width, err := strconv.Atoi(cmp.Or(strings.TrimSuffix(strings.TrimPrefix(m[2], "%"), "d"), "0"))
+				if err != nil || width > 64 {
+					return nil, fmt.Errorf("DASH segment template exceeds numeric width budget")
+				}
+			}
+		}
+	}
 	timescale, first, offset := value(t.Timescale, 1), value(t.StartNumber, 1), value(t.PresentationTimeOffset, 0)
+	if first < 0 || offset < 0 || offset > math.MaxInt64/4 {
+		return nil, fmt.Errorf("DASH numeric field exceeds timeline range")
+	}
 	if timescale <= 0 {
 		return nil, fmt.Errorf("representation %q states timescale %d", a.rep.Id, timescale)
 	}
@@ -55,6 +73,9 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 		}
 	}
 	add := func(out []timeline.Segment, number, at, d int64, place timeline.Place) ([]timeline.Segment, error) {
+		if err := a.budget.take(1); err != nil {
+			return nil, err
+		}
 		u, err := a.base.Parse(a.expand(t.Media, number, at))
 		if err != nil {
 			return nil, err
@@ -62,8 +83,18 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 		return append(out, timeline.Segment{URI: u.String(), Duration: ticks(d, timescale), Map: init, Place: place}), nil
 	}
 	tick := func(d time.Duration) int64 { return int64(d.Seconds() * float64(timescale)) }
+	if e.live {
+		for _, elapsed := range []time.Duration{a.elapsed(e), e.depth} {
+			if math.Abs(elapsed.Seconds()*float64(timescale)) > float64(math.MaxInt64/4) {
+				return nil, fmt.Errorf("DASH live clock exceeds timeline range")
+			}
+		}
+	}
 	periodEnd := int64(math.MaxInt64)
 	if a.period.duration > 0 {
+		if a.period.duration.Seconds()*float64(timescale) > float64(math.MaxInt64/4) {
+			return nil, fmt.Errorf("DASH period exceeds timeline range")
+		}
 		periodEnd = offset + tick(a.period.duration)
 	}
 
@@ -78,12 +109,21 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 		number, at := first, int64(0)
 		entries := t.SegmentTimeline.S
 		for i, s := range entries {
+			if err := a.budget.check(0); err != nil {
+				return nil, err
+			}
 			if s.T != nil {
+				if *s.T > math.MaxInt64/4 {
+					return nil, fmt.Errorf("DASH timestamp exceeds timeline range")
+				}
 				at = int64(*s.T)
 			}
 			d := int64(s.D)
-			if d <= 0 {
+			if d <= 0 || d > math.MaxInt64/4 {
 				return nil, fmt.Errorf("representation %q lists a segment of duration %d", a.rep.Id, d)
+			}
+			if i+1 < len(entries) && entries[i+1].T != nil && *entries[i+1].T > math.MaxInt64/4 {
+				return nil, fmt.Errorf("DASH timestamp exceeds timeline range")
 			}
 			repeats := int64(s.R)
 			if repeats < 0 {
@@ -101,7 +141,13 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 				}
 			}
 			// Skip expired repeats arithmetically: a long-running timeline must not walk its entire history at every reload.
+			if repeats == math.MaxInt64 {
+				return nil, errExpansionLimit
+			}
 			count := repeats + 1
+			if at < 0 || count > (math.MaxInt64-at)/d || number < 0 || count > math.MaxInt64-number {
+				return nil, fmt.Errorf("DASH timeline arithmetic overflow")
+			}
 			skip := int64(0)
 			if kept >= at+d {
 				skip = min(count, (kept-at)/d)
@@ -113,6 +159,9 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 			if e.live {
 				produced := offset + tick(a.elapsed(e)+early(t, ticks(d, timescale)))
 				until = min(until, max(0, (produced-at)/d))
+			}
+			if err := a.budget.check(max(0, until-skip)); err != nil {
+				return nil, err
 			}
 			for n := skip; n < until; n++ {
 				start := at + n*d
@@ -141,6 +190,12 @@ func (a addressed) templated(t *mpd.SegmentTemplateType, e edge) ([]timeline.Seg
 	}
 	if count == math.MaxInt64 {
 		return nil, fmt.Errorf("representation %q numbers segments without end", a.rep.Id)
+	}
+	if err := a.budget.check(max(0, count-from)); err != nil {
+		return nil, err
+	}
+	if offset < 0 || first < 0 || count > (math.MaxInt64-offset)/d || count > math.MaxInt64-first {
+		return nil, fmt.Errorf("DASH duration arithmetic overflow")
 	}
 	for n := from; n < count; n++ {
 		number := first + n

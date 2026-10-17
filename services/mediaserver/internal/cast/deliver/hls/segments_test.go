@@ -1,10 +1,12 @@
-package deliver
+package hls
 
 import (
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver/httpserve"
 	"io"
 	"net"
 	"net/http"
@@ -22,9 +24,11 @@ import (
 func TestServedCountsOnlyMediaHandedOver(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{
-		"stream.m3u8":   "#EXTM3U\n#EXTINF:4,\nseg_00001.m4s\n",
-		"seg_00001.m4s": "\x00\x00\x00\x18moof",
-		"seg_00002.m4s": "",
+		"stream.m3u8":       "#EXTM3U\n#EXTINF:4,\nseg_00001.m4s\n",
+		"seg_00001.m4s":     "\x00\x00\x00\x18moof",
+		"seg_00002.m4s":     "",
+		"init.mp4":          "initialization",
+		"seg_00003.m4s.tmp": "partial",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
 			t.Fatal(err)
@@ -41,11 +45,13 @@ func TestServedCountsOnlyMediaHandedOver(t *testing.T) {
 		{http.MethodGet, "/seg_00000.m4s", 0, ""},
 		{http.MethodGet, "/", 0, ""},
 		{http.MethodGet, "/seg_00002.m4s", 0, ""},
+		{http.MethodGet, "/init.mp4", 0, media.MP4},
+		{http.MethodGet, "/seg_00003.m4s.tmp", 0, ""},
 		{http.MethodGet, "/seg_00001.m4s", 1, "video/iso.segment"},
 	} {
 		t.Run(tt.method+tt.path, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				srv, _ := serving(t, dir, Opening{Headers: map[string]string{"transferMode.dlna.org": "Streaming", "Content-Type": "text/plain"}})
+				srv, _ := serving(t, dir, deliver.Opening{Headers: map[string]string{"transferMode.dlna.org": "Streaming", "Content-Type": "text/plain"}})
 				resp, err := request(t.Context(), srv, tt.method, tt.path)
 				if err != nil {
 					t.Fatal(err)
@@ -71,8 +77,8 @@ func TestServedCountsOnlyMediaHandedOver(t *testing.T) {
 // The grace is seeded at open, so a device coming late for the tail segments still has its window.
 func TestTheIdleGraceStartsBeforeTheFirstRequest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		const grace = 3 * settleInterval
-		srv, ended := serving(t, t.TempDir(), Opening{IdleGrace: grace})
+		const grace = 3 * httpserve.PollInterval
+		srv, ended := serving(t, t.TempDir(), deliver.Opening{IdleGrace: grace})
 		ended()
 		// One tick short: at exactly grace the two timers tie.
 		waiting, cancel := context.WithTimeout(t.Context(), grace-time.Nanosecond)
@@ -90,7 +96,7 @@ func TestADevicePollingThePlaylistIsNotIdle(t *testing.T) {
 			t.Fatal(err)
 		}
 		const poll = 50 * time.Millisecond
-		srv, ended := serving(t, dir, Opening{IdleGrace: 6 * poll})
+		srv, ended := serving(t, dir, deliver.Opening{IdleGrace: 6 * poll})
 		ended()
 
 		polling, stop := context.WithCancel(t.Context())
@@ -109,7 +115,7 @@ func TestADevicePollingThePlaylistIsNotIdle(t *testing.T) {
 		}
 
 		stop()
-		drained, cancel := context.WithTimeout(t.Context(), 6*poll+2*settleInterval)
+		drained, cancel := context.WithTimeout(t.Context(), 6*poll+2*httpserve.PollInterval)
 		defer cancel()
 		if err := srv.Wait(drained); err != nil {
 			t.Errorf("Wait = %v once the device stopped asking, want nil", err)
@@ -130,7 +136,7 @@ func TestAHungSegmentClientIsReleasedByTheWriteDeadline(t *testing.T) {
 		}
 		_ = f.Close()
 		const deadline = 100 * time.Millisecond
-		srv, _ := serving(t, dir, Opening{WriteDeadline: deadline})
+		srv, _ := serving(t, dir, deliver.Opening{WriteDeadline: deadline})
 		u := srv.URL()
 		u.Path = "/seg_00000.m4s"
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, u.String(), nil)
@@ -158,13 +164,13 @@ func TestAHungSegmentClientIsReleasedByTheWriteDeadline(t *testing.T) {
 }
 
 // serving serves dir's stream.m3u8 on o; end closes the producer, which starts the idle grace.
-func serving(t *testing.T, dir string, o Opening) (srv *Segments, end func()) {
+func serving(t *testing.T, dir string, o deliver.Opening) (srv *Segments, end func()) {
 	t.Helper()
 	pr, pw := io.Pipe()
 	o.Listeners = newLAN(t)
-	o.Format.Tuning.Output = "stream.m3u8"
+	o.Format = format()
 	o.IdleGrace = cmp.Or(o.IdleGrace, 30*time.Second)
-	srv, err := OpenSegments(t.Context(), o, dir, pr)
+	srv, err := Open(t.Context(), o, dir, pr)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -208,7 +214,7 @@ func newLAN(t *testing.T) *lan {
 }
 
 // device is the client of the lan a delivery was opened on.
-func device(o Opening) *http.Client { return o.Listeners.(*lan).client }
+func device(o deliver.Opening) *http.Client { return o.Listeners.(*lan).client }
 
 func (l *lan) Listen(context.Context) (net.Listener, error) {
 	l.mu.Lock()
@@ -263,3 +269,38 @@ type lanAddr string
 
 func (lanAddr) Network() string  { return "lan" }
 func (a lanAddr) String() string { return string(a) }
+
+func TestCloseInterruptsBlockedProducer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		reader, writer := io.Pipe()
+		defer writer.Close()
+		srv, err := Open(t.Context(), deliver.Opening{Listeners: newLAN(t), Format: format()}, t.TempDir(), reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.Close(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-srv.Drained():
+		default:
+			t.Fatal("producer remains blocked after close")
+		}
+	})
+}
+
+func TestProducerFailureReachesClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		reader, writer := io.Pipe()
+		want := errors.New("producer read failed")
+		srv, err := Open(t.Context(), deliver.Opening{Listeners: newLAN(t), Format: format()}, t.TempDir(), reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writer.CloseWithError(want)
+		<-srv.Drained()
+		if err := srv.Close(); !errors.Is(err, want) {
+			t.Fatalf("Close() = %v, want producer error", err)
+		}
+	})
+}

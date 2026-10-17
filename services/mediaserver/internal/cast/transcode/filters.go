@@ -34,7 +34,9 @@ func videoFilters(venc codec.VideoEncode) []string {
 	if venc.MaxFrameRate > 0 {
 		filters = append(filters, fmt.Sprintf("fps='min(source_fps,%s)'", strconv.FormatFloat(venc.MaxFrameRate, 'f', -1, 64)))
 	}
-	if f := scaleFilter(venc.MaxHeight); f != "" {
+	if venc.MaxWidth > 0 && venc.MaxHeight > 0 {
+		filters = append(filters, fmt.Sprintf("scale=w='min(iw,%d)':h='min(ih,%d)':force_original_aspect_ratio=decrease:force_divisible_by=2", venc.MaxWidth, int(venc.MaxHeight)&^1))
+	} else if f := scaleFilter(venc.MaxHeight); f != "" {
 		filters = append(filters, f)
 	}
 	if venc.SubtitleTextFile != "" {

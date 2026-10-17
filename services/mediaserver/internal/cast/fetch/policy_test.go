@@ -2,14 +2,14 @@ package fetch
 
 import (
 	"testing"
+	"time"
 
-	"github.com/stupside/castor/services/mediaserver/internal/cast/container"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 )
 
 func TestAnUnboundedEncodePacesOnlyItsSegmentedInputs(t *testing.T) {
 	plan := Plan{"video": {Pace: paceVOD}, "audio": {Pace: paceVOD}}
-	got := plan.Encoding(mixedProgram(t), Ceiling(container.DeliverStream, false))
+	got := plan.Encoding(mixedProgram(t), Pace{})
 	if got["video"].Pace != paceVOD || got["audio"].Pace != (Pace{}) {
 		t.Errorf("playlist paced %+v and progressive input %+v, want %+v and unpaced", got["video"].Pace, got["audio"].Pace, paceVOD)
 	}
@@ -24,10 +24,10 @@ func TestASegmentedOutputBoundsTheReadItDoesNotReplaceIt(t *testing.T) {
 		own, want Pace
 	}{
 		{"a live edge keeps its empty burst", paceLive, Pace{Realtime: 1}},
-		{"a VOD source is held to one window", paceVOD, Pace{Realtime: 1, Burst: container.HLSWindow}},
+		{"a VOD source is held to one window", paceVOD, Pace{Realtime: 1, Burst: 20 * time.Second}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Plan{"video": {Pace: tt.own}, "audio": {Pace: tt.own}}.Encoding(mixedProgram(t), Ceiling(container.DeliverSegmented, false))
+			got := Plan{"video": {Pace: tt.own}, "audio": {Pace: tt.own}}.Encoding(mixedProgram(t), Pace{Realtime: 1, Burst: 20 * time.Second})
 			for id, policy := range got {
 				if policy.Pace != tt.want {
 					t.Errorf("%s reads at %+v, want %+v", id, policy.Pace, tt.want)

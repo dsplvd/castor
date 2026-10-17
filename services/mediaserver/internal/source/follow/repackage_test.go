@@ -165,7 +165,7 @@ func TestNothingIsListedBeforeCastorKnowsHowToServeIt(t *testing.T) {
 	m := fragmented("avc1")
 	init := m.resources["https://origin.example/init.mp4"]
 	delete(m.resources, "https://origin.example/init.mp4")
-	feed := newFeed("primary", m, labelled)
+	feed := newFeed(t.Context(), "primary", m, labelled)
 	if err := feed.refresh(t.Context()); err == nil || feed.render != nil {
 		t.Fatalf("rendered %q before the init section deciding its addressing could be read", feed.render)
 	}

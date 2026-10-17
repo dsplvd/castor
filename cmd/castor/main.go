@@ -18,5 +18,8 @@ func main() {
 		Name:     "castor",
 		Usage:    "Cast video streams to networked devices",
 		Commands: slices.Concat(Commands(local), []*cli.Command{apiserver.Command(), mediaserver.Command(), scrapingserver.Command()}),
+	}, func(cmd *cli.Command) bool {
+		// Printing a direct URL is entirely local and deliberately ignores config.
+		return cmd.Name != "url" || !cmd.Bool(dryRunFlag)
 	})
 }

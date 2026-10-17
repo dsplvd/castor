@@ -63,7 +63,8 @@ func decideAudio(in Inputs) (Track[AudioEncode], []Reason, error) {
 	}
 	for _, t := range targets {
 		outputChannels := 0
-		for _, support := range in.Caps.Audio {
+		for _, format := range in.Caps.Formats {
+			support := format.Audio
 			if support.Codec != t.codec {
 				continue
 			}

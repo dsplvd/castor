@@ -34,11 +34,12 @@ func Serve(ctx context.Context, l net.Listener, h http.Handler, drain func(conte
 	var draining sync.WaitGroup
 	draining.Go(func() { drain(grace) })
 	err := srv.Shutdown(grace)
-	draining.Wait()
 	if err != nil {
-		// The grace ran out: what still runs is cut.
-		return errors.Join(serveErr, srv.Close())
+		// Closing active connections cancels their request contexts; drain may be
+		// waiting for that work, so force-close before joining it.
+		serveErr = errors.Join(serveErr, fmt.Errorf("shutting down HTTP server: %w", err), srv.Close())
 	}
+	draining.Wait()
 	return serveErr
 }
 

@@ -10,7 +10,6 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stupside/castor/internal/settings"
-	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/internal/transport"
 )
 
@@ -31,11 +30,6 @@ func Command() *cli.Command {
 			if cfg.Server.URL == "" {
 				return errors.New("server.url is required: the API server casts through a media server (`castor media-server`)")
 			}
-			flush, err := telemetry.Setup(ctx, cfg.Telemetry, "castor-api")
-			if err != nil {
-				return err
-			}
-			defer func() { _ = flush(context.WithoutCancel(ctx)) }()
 			scraping := transport.Endpoint{URL: cmp.Or(cfg.Scraping.URL, "http://localhost:8412"), Token: cfg.Scraping.Token}
 			srv, err := New(cfg.backend(transport.Endpoint{URL: cfg.Server.URL, Token: cfg.Server.Token}, scraping), cfg.Cast)
 			if err != nil {

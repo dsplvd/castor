@@ -28,8 +28,12 @@ func TestSurroundAudioTargets(t *testing.T) {
 		{"mono-only audio support is respected", []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 1}}, "dts", 6, "aac", 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			var formats []media.FormatSupport
+			for _, audio := range tt.caps {
+				formats = append(formats, media.FormatSupport{Transport: media.TransportMP4, Audio: audio})
+			}
 			track := mustDecideAudio(t, Inputs{
-				Caps:     media.Capabilities{Audio: tt.caps},
+				Caps:     media.Capabilities{Formats: formats},
 				Probe:    media.ProbeInfo{AudioCodec: tt.codec, AudioChannels: tt.channels},
 				Measured: true, Into: testFormat(t, media.MP4),
 			})
@@ -42,7 +46,7 @@ func TestSurroundAudioTargets(t *testing.T) {
 }
 
 func TestAnUnmeasuredAudioTrackIsNotAnAbsentOne(t *testing.T) {
-	caps := media.Capabilities{Audio: []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}}}
+	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	in := Inputs{Caps: caps, Into: testFormat(t, media.MP4), Measured: true}
 	if track := mustDecideAudio(t, in); track.Name() != "copy" {
 		t.Errorf("a probe that measured no audio decided %q, want copy", track.Name())

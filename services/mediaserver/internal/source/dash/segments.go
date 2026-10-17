@@ -1,6 +1,7 @@
 package dash
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -27,6 +28,7 @@ type indexer func(uri string, r timeline.Range) ([]byte, error)
 
 // addressed is one representation in one Period, with everything it inherits settled.
 type addressed struct {
+	budget *expansionBudget
 	period placed
 	set    *mpd.AdaptationSetType
 	rep    *mpd.RepresentationType
@@ -37,6 +39,12 @@ type addressed struct {
 
 // segments lists what the representation publishes in its Period, as the presentation states it at the edge.
 func (a addressed) segments(e edge, fetch indexer) ([]timeline.Segment, error) {
+	if a.budget == nil {
+		a.budget = newExpansionBudget(context.Background())
+	}
+	if err := a.budget.check(0); err != nil {
+		return nil, err
+	}
 	switch t, l, b := a.template(), a.list(), a.segmentBase(); {
 	case t != nil:
 		return a.templated(t, e)
@@ -45,6 +53,9 @@ func (a addressed) segments(e edge, fetch indexer) ([]timeline.Segment, error) {
 	case b != nil:
 		return a.indexed(b, fetch)
 	case a.named:
+		if err := a.budget.take(1); err != nil {
+			return nil, err
+		}
 		// A representation naming no addressing is one file: the whole Period in a single segment.
 		return []timeline.Segment{{URI: a.base.String(), Duration: a.period.duration, Place: a.place(0, 1)}}, nil
 	default:
@@ -122,4 +133,35 @@ func inherit[T any](fill func(into, from *T), levels ...*T) *T {
 		}
 	}
 	return out
+}
+
+// maxWindowSegments is an aggregate limit across all Periods in one window.
+// Exceeding it fails the presentation; silently truncating a movie is unsafe.
+const maxWindowSegments = 50000
+
+var errExpansionLimit = errors.New("DASH window exceeds the 50000 segment expansion budget")
+
+type expansionBudget struct {
+	ctx       context.Context
+	remaining int64
+}
+
+func newExpansionBudget(ctx context.Context) *expansionBudget {
+	return &expansionBudget{ctx: ctx, remaining: maxWindowSegments}
+}
+func (b *expansionBudget) check(n int64) error {
+	if err := b.ctx.Err(); err != nil {
+		return err
+	}
+	if n < 0 || n > b.remaining {
+		return errExpansionLimit
+	}
+	return nil
+}
+func (b *expansionBudget) take(n int64) error {
+	if err := b.check(n); err != nil {
+		return err
+	}
+	b.remaining -= n
+	return nil
 }

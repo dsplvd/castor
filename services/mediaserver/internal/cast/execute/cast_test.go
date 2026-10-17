@@ -3,6 +3,7 @@ package execute
 import (
 	"context"
 	"errors"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
 	"io"
 	"net"
 	"net/http"
@@ -31,6 +32,7 @@ type fakeDevice struct {
 	drain  bool
 	refuse error
 	served []byte
+	ended  bool
 }
 
 // finished is a process that has run and exited cleanly, standing in for a read's ffmpeg.
@@ -76,6 +78,9 @@ func (d *fakeDevice) Play(ctx context.Context, streamURL *url.URL, _ string, _ [
 }
 
 func (d *fakeDevice) AwaitEnd(ctx context.Context) error {
+	if d.ended {
+		return ctx.Err()
+	}
 	<-ctx.Done()
 	return context.Cause(ctx)
 }
@@ -83,21 +88,26 @@ func (d *fakeDevice) AwaitEnd(ctx context.Context) error {
 func (d *fakeDevice) Capabilities() media.Capabilities { return d.caps }
 
 func chromecastLike(accepts ...string) media.Capabilities {
-	return media.Capabilities{
-		SelfFetch:       true,
-		Containers:      accepts,
-		ServedContainer: media.MP4,
-		Video:           []media.VideoSupport{{Codec: media.CodecH264}},
-		Audio:           []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
+	caps := media.Capabilities{SelfFetch: true}
+	for _, contentType := range accepts {
+		transport := media.TransportMP4
+		switch contentType {
+		case media.HLS:
+			transport = media.TransportHLS
+		case media.MPEGTS:
+			transport = media.TransportMPEGTS
+		case media.MKV:
+			transport = media.TransportMKV
+		case media.WebM:
+			transport = media.TransportWebM
+		}
+		caps.Formats = append(caps.Formats, media.FormatSupport{Transport: transport, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}})
 	}
+	return caps
 }
 
 func dlnaLike() media.Capabilities {
-	return media.Capabilities{
-		Video:           []media.VideoSupport{{Codec: media.CodecH264}},
-		Audio:           []media.AudioSupport{{Codec: media.CodecAAC, MaxChannels: 2}},
-		ServedContainer: media.MPEGTS,
-	}
+	return media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMPEGTS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 }
 
 // TestEncoderFailureFailsTheCast is the regression test for "castor exited 0 having cast nothing".
@@ -112,7 +122,7 @@ func TestEncoderFailureFailsTheCast(t *testing.T) {
 
 	// Rejects the source container, so it is remuxed by an encoder that cannot open its input.
 	dev := &fakeDevice{
-		caps:  media.Capabilities{SelfFetch: true, Containers: []string{media.MKV}, ServedContainer: media.MP4},
+		caps:  media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMPEGTS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC}}}, SelfFetch: true},
 		drain: true,
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), castTimeout)
@@ -157,7 +167,7 @@ func TestAnAudioOnlyCastDoesNotRequireAVideoEncoder(t *testing.T) {
 	origin := serveGenerated(t, ffmpegPath, "audio.mp4", "/audio.mp4", media.MP4,
 		"-map", "1:a", "-c:a", "aac", "-ac", "2")
 	caps := dlnaLike()
-	caps.Video = nil
+	caps.Formats[0].Video = media.VideoSupport{}
 	dev := &fakeDevice{caps: caps, drain: true}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -203,6 +213,7 @@ var formats = source.Formats{hls.Format{}, dash.Format{}}
 // realCast is a cast on dev over the real ffmpeg tools, served where these tests' devices reach it.
 func realCast(dev Device, ffmpegPath, ffprobePath string) Cast {
 	return Cast{
+		Outputs:    adapters.Default(),
 		FFmpegPath: ffmpegPath,
 		Binary:     ffmpeg.Inspect(ffmpegPath),
 		Encoders:   ffmpeg.Encoders(ffmpegPath),

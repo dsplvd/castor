@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stupside/castor/internal/telemetry"
 	"log/slog"
 	"slices"
 	"sync"
@@ -30,7 +31,9 @@ func New(cfg Config, maxHeight media.HeightCap, probes Probes) *Ranker {
 }
 
 // Rank measures every candidate and returns the order a cast walks them in, best first.
-func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) ([]*source.Stream, error) {
+func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) (rankedStreams []*source.Stream, err error) {
+	ctx, finish := telemetry.Start(ctx, telemetry.Rank)
+	defer func() { finish(err) }()
 	slog.InfoContext(ctx, "ranking streams", "count", len(streams))
 	if len(streams) == 0 {
 		return nil, errors.New("no streams to rank")
@@ -64,7 +67,9 @@ func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) ([]*source.
 }
 
 // Measure is the other half of Rank, for the one link an operator named themselves.
-func (r *Ranker) Measure(ctx context.Context, stream *source.Stream) (*source.Stream, error) {
+func (r *Ranker) Measure(ctx context.Context, stream *source.Stream) (measured *source.Stream, err error) {
+	ctx, finish := telemetry.Start(ctx, telemetry.Measure)
+	defer func() { finish(err) }()
 	one := r.measureAll(ctx, []*source.Stream{stream})[0]
 	if err := context.Cause(ctx); err != nil {
 		return nil, err
