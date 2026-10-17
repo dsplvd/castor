@@ -14,7 +14,7 @@ import (
 
 // newTestResolver wires resolution to this format alone, under a 1080 cap.
 func newTestResolver(client source.Client) *source.Resolver {
-	return source.NewResolver(client, 1080, "", source.Formats{Format{}})
+	return source.NewResolver(client, 1080, nil, source.Formats{Format{}})
 }
 
 const mediaPlaylist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nseg0.ts\n#EXT-X-ENDLIST\n"
@@ -137,6 +137,58 @@ video.m3u8
 	track, ok := resolved.Program.Track(media.TrackAudio)
 	if !ok || track.Input != media.AudioInputID || track.Optional {
 		t.Errorf("audio track = %+v, want it required of the companion input, which exists only to carry it", track)
+	}
+}
+
+func TestPreferredAudioLanguageOutranksVariantBitrate(t *testing.T) {
+	const master = `#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="low",NAME="French",LANGUAGE="fr",DEFAULT=YES,URI="audio/fr.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="high",NAME="German",LANGUAGE="de",DEFAULT=YES,URI="audio/de.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480,CODECS="avc1.4d401f,mp4a.40.2",AUDIO="low"
+low.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2",AUDIO="high"
+high.m3u8
+`
+	client := &sourcetest.Documents{ByPath: map[string]string{
+		"/master.m3u8": master, "/low.m3u8": mediaPlaylist, "/audio/fr.m3u8": mediaPlaylist,
+	}}
+	resolver := source.NewResolver(client, 1080, []string{"fr", "en"}, source.Formats{Format{}})
+	got, err := resolver.Resolve(t.Context(), hlsAt(t, "https://origin.example/master.m3u8"), source.Rendition{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rendition.URL.Path != "/low.m3u8" || got.Rendition.AudioLanguage != "fr" {
+		t.Fatalf("selected %+v, want French low variant", got.Rendition)
+	}
+}
+
+func TestAudioOnlyMasterIsNotAVideoRendition(t *testing.T) {
+	const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS=\"mp4a.40.2\"\naudio.m3u8\n"
+	client := &sourcetest.Documents{ByPath: map[string]string{"/master.m3u8": master}}
+	_, err := newTestResolver(client).Resolve(t.Context(), hlsAt(t, "https://origin.example/master.m3u8"), source.Rendition{})
+	if err == nil {
+		t.Fatal("audio-only master was accepted as a video rendition")
+	}
+}
+
+func TestFreshManifestDoesNotInheritOldCompanionTracks(t *testing.T) {
+	const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480,CODECS=\"avc1.4d401f,mp4a.40.2\"\nvideo.m3u8\n"
+	client := &sourcetest.Documents{ByPath: map[string]string{"/master.m3u8": master, "/video.m3u8": mediaPlaylist}}
+	prior := source.Rendition{
+		URL:           sourcetest.URL(t, "https://origin.example/video.m3u8"),
+		AudioURL:      sourcetest.URL(t, "https://origin.example/old-audio.m3u8"),
+		AudioLanguage: "fr",
+		Captions:      []source.Caption{{URL: sourcetest.URL(t, "https://origin.example/old-captions.vtt"), Language: "fr"}},
+	}
+	got, err := newTestResolver(client).Resolve(t.Context(), hlsAt(t, "https://origin.example/master.m3u8"), prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Rendition.AudioURL != nil || got.Rendition.AudioLanguage != "" || len(got.Rendition.Captions) != 0 {
+		t.Fatalf("fresh rendition retained old tracks: %+v", got.Rendition)
+	}
+	if len(got.Program.Inputs) != 1 {
+		t.Fatalf("program inputs = %+v, want video with muxed audio only", got.Program.Inputs)
 	}
 }
 

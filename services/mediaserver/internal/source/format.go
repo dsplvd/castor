@@ -42,8 +42,8 @@ type Identity struct {
 type Env struct {
 	Client    Client
 	MaxHeight media.HeightCap
-	// AudioLanguage is the language to play where a source offers several, empty for the source's default.
-	AudioLanguage string
+	// AudioLanguages are tried in order before the source's default.
+	AudioLanguages []string
 }
 
 // Choose is the rung a cast reads from origin, and says so: the one settled on earlier while the manifest still names it, else the best under the cast's ceiling by preferred.

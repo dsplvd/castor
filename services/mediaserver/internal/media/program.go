@@ -35,6 +35,9 @@ const (
 type Program struct {
 	Inputs []Input
 	Tracks []TrackRef
+	// NeedsTrackSelection means handing the source URL to a device cannot
+	// guarantee the chosen language, even if its track happens to be first.
+	NeedsTrackSelection bool
 
 	// ClockInput, Offsets, EndPolicy: how independently fetched inputs share a timeline.
 	ClockInput InputID
@@ -214,6 +217,12 @@ func (p Program) SelfFetchable() bool {
 	if len(p.Inputs) != 1 {
 		return false
 	}
+	if p.NeedsTrackSelection {
+		return false
+	}
+	if slices.ContainsFunc(p.Tracks, func(track TrackRef) bool { return track.Index != 0 }) {
+		return false
+	}
 	input := p.Inputs[0]
 	return len(input.Headers) == 0 && !input.RequiresRelaxedInput
 }
@@ -221,11 +230,12 @@ func (p Program) SelfFetchable() bool {
 // Clone returns a deep enough copy for independent planning (URL, header, offset copies).
 func (p Program) Clone() Program {
 	clone := Program{
-		Inputs:     slices.Clone(p.Inputs),
-		Tracks:     slices.Clone(p.Tracks),
-		ClockInput: p.ClockInput,
-		Offsets:    maps.Clone(p.Offsets),
-		EndPolicy:  p.EndPolicy,
+		Inputs:              slices.Clone(p.Inputs),
+		Tracks:              slices.Clone(p.Tracks),
+		NeedsTrackSelection: p.NeedsTrackSelection,
+		ClockInput:          p.ClockInput,
+		Offsets:             maps.Clone(p.Offsets),
+		EndPolicy:           p.EndPolicy,
 	}
 	for i := range clone.Inputs {
 		clone.Inputs[i].URL = p.Inputs[i].URL.Clone()

@@ -69,7 +69,8 @@ type Device interface {
 	Capabilities() media.Capabilities
 }
 
-// Subtitles opens a transcription independently of how its cues are rendered.
+// Subtitles opens the transcription chosen for this attempt, independently of
+// how its cues are rendered. Source and language selection happened upstream.
 type Subtitles func(ctx context.Context) Transcript
 
 // Transcript owns recognition and exposes committed timed cues to the selected renderer.

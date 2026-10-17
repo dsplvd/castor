@@ -13,25 +13,38 @@ func byBitrate(a, b source.Rendition) int {
 	return cmp.Or(cmp.Compare(a.Bitrate, b.Bitrate), cmp.Compare(a.Height, b.Height))
 }
 
+// byAudioPreference keeps language priority across the whole ladder, not just
+// within each variant's audio group. Quality breaks ties after language.
+func byAudioPreference(languages []string) func(a, b source.Rendition) int {
+	rank := func(language string) int {
+		for i, preferred := range languages {
+			if language != "" && source.SameLanguage(language, preferred) {
+				return len(languages) - i
+			}
+		}
+		return 0
+	}
+	return func(a, b source.Rendition) int {
+		return cmp.Or(cmp.Compare(rank(a.AudioLanguage), rank(b.AudioLanguage)), byBitrate(a, b))
+	}
+}
+
 // castable narrows a variant list to those that carry video (audio-only variants must not be picked).
-func castable(doc document, language string) []variant {
+func castable(doc document, languages []string) []variant {
 	withVideo := slices.DeleteFunc(slices.Clone(doc.variants), func(v variant) bool {
-		audio := doc.audioFor(v, language)
+		audio := doc.audioFor(v, languages).url
 		return !v.hasVideo || (audio != nil && v.url.String() == audio.String())
 	})
-	if len(withVideo) == 0 {
-		return doc.variants
-	}
 	return withVideo
 }
 
 // ladder is the choice the source offered: publication order preserved, audio-only rungs excluded.
-func ladder(doc document, probe *media.ProbeInfo, language string) []source.Rendition {
+func ladder(doc document, probe *media.ProbeInfo, languages ...string) []source.Rendition {
 	measured := measuredHeights(doc, probe)
-	rungs := castable(doc, language)
+	rungs := castable(doc, languages)
 	out := make([]source.Rendition, len(rungs))
 	for i, v := range rungs {
-		out[i] = rendition(doc, v, measured[v.program], language)
+		out[i] = rendition(doc, v, measured[v.program], languages)
 	}
 	return out
 }
@@ -53,7 +66,7 @@ func measuredHeights(doc document, probe *media.ProbeInfo) map[int]int {
 }
 
 // rendition translates one variant without dropping its companion audio; a probe of this very master wins over RESOLUTION, since it numbers variants as the master does.
-func rendition(doc document, v variant, measured int, language string) source.Rendition {
+func rendition(doc document, v variant, measured int, languages []string) source.Rendition {
 	height := cmp.Or(measured, v.height)
 	declared := v.declared
 	if declared != nil && declared.VideoHeight != height {
@@ -61,26 +74,14 @@ func rendition(doc document, v variant, measured int, language string) source.Re
 		stated.VideoHeight = height
 		declared = &stated
 	}
+	audio := doc.audioFor(v, languages)
 	return source.Rendition{
-		URL:      v.url,
-		AudioURL: doc.audioFor(v, language),
-		Captions: doc.captionsFor(v),
-		Bitrate:  media.Bitrate(v.bandwidth),
-		Height:   height,
-		Declared: declared,
+		URL:           v.url,
+		AudioURL:      audio.url,
+		AudioLanguage: audio.language,
+		Captions:      doc.captionsFor(v),
+		Bitrate:       media.Bitrate(v.bandwidth),
+		Height:        height,
+		Declared:      declared,
 	}
-}
-
-// backedBy is r, with what the caller already knew of the rung filling what this document left unsaid.
-func backedBy(r, prior source.Rendition) source.Rendition {
-	if r.AudioURL == nil {
-		r.AudioURL = prior.AudioURL
-	}
-	if r.Captions == nil {
-		r.Captions = prior.Captions
-	}
-	if r.Declared == nil {
-		r.Declared = prior.Declared
-	}
-	return r
 }

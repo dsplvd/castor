@@ -31,8 +31,8 @@ func (s *pipeline) shownCaptions() []media.Caption {
 		slog.InfoContext(s.ctx, "the source publishes captions, but the device shows none")
 		return nil
 	}
-	pick, ok := captions.Pick(published, want.Want)
-	if !ok {
+	matches := captions.Matches(published, want.Want)
+	if len(matches) == 0 {
 		slog.InfoContext(s.ctx, "the source publishes no caption in the language asked", "published", len(published))
 		return nil
 	}
@@ -41,23 +41,26 @@ func (s *pipeline) shownCaptions() []media.Caption {
 	if measured, ok := s.attempt.Program.Measurement(); ok && measured.StartKnown {
 		origin = &measured.Start
 	}
-	vtt, err := captions.FetchAt(s.ctx, want.Client, pick, primary.Headers, origin)
-	if err != nil {
-		slog.WarnContext(s.ctx, "casting without the source's captions", "error", err)
-		return nil
+	for _, pick := range matches {
+		vtt, err := captions.FetchAt(s.ctx, want.Client, pick, primary.Headers, origin)
+		if err != nil {
+			slog.WarnContext(s.ctx, "source caption unavailable, trying the next track", "language", pick.Language, "error", err)
+			continue
+		}
+		name, contentType, body := "captions.vtt", "text/vtt", vtt
+		if format == media.CaptionSRT {
+			name, contentType, body = "captions.srt", "text/srt", captions.SRT(vtt)
+		}
+		u, closeStatic, err := deliver.Static(s.ctx, s.cast.Listeners, name, contentType, body)
+		if err != nil {
+			slog.WarnContext(s.ctx, "casting without the source's captions", "error", err)
+			return nil
+		}
+		s.releases.push(closeStatic)
+		slog.InfoContext(s.ctx, "showing the source's captions", "language", pick.Language, "format", string(format))
+		return []media.Caption{{URL: u, Format: format, Language: pick.Language, Name: pick.Name, Default: true}}
 	}
-	name, contentType, body := "captions.vtt", "text/vtt", vtt
-	if format == media.CaptionSRT {
-		name, contentType, body = "captions.srt", "text/srt", captions.SRT(vtt)
-	}
-	u, closeStatic, err := deliver.Static(s.ctx, s.cast.Listeners, name, contentType, body)
-	if err != nil {
-		slog.WarnContext(s.ctx, "casting without the source's captions", "error", err)
-		return nil
-	}
-	s.releases.push(closeStatic)
-	slog.InfoContext(s.ctx, "showing the source's captions", "language", pick.Language, "format", string(format))
-	return []media.Caption{{URL: u, Format: format, Language: pick.Language, Name: pick.Name, Default: true}}
+	return nil
 }
 
 // captionFormat is the format a device takes captions in, WebVTT before SubRip.

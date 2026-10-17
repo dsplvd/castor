@@ -1,13 +1,13 @@
 package apiserver_test
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -319,6 +319,16 @@ type setup struct {
 
 var shipped = apiserver.CastConfig{Delivery: apiserver.Delivery(castorv1.Delivery_DELIVERY_AUTO), MaxHeight: 1080}
 
+func preferred(languages ...string) *castorv1.SubtitleSelection {
+	return &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: languages}}}
+}
+
+func preferredWithFallback(languages ...string) *castorv1.SubtitleSelection {
+	selection := preferred(languages...)
+	selection.TranscribeIfMissing = true
+	return selection
+}
+
 // serve runs the media server's contract and the API server before it, as castor does, and returns a client of the API.
 func serve(t *testing.T, s setup) api {
 	t.Helper()
@@ -348,11 +358,15 @@ func serve(t *testing.T, s setup) api {
 	scrapingMux := http.NewServeMux()
 	scrapingMux.Handle(scrapingv1connect.NewScrapingServiceHandler(s.resolver, valid))
 	scrapingAPI := httptest.NewTestServer(t, scrapingMux)
+	cast := s.cast
+	if reflect.DeepEqual(cast, apiserver.CastConfig{}) {
+		cast = shipped
+	}
 	srv, err := apiserver.New(apiserver.Backend{
 		Devices:  device.Registry{Families: []device.Family{s.family}, Timeout: time.Second},
 		Media:    mediaclient.New(mediaAPI.Client(), mediaAPI.URL),
 		Scraping: scrapingclient.New(scrapingAPI.Client(), scrapingAPI.URL),
-	}, cmp.Or(s.cast, shipped))
+	}, cast)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -615,8 +629,12 @@ func TestRequestPreferencesOverrideTheDefaultsFieldByField(t *testing.T) {
 		{nil, &mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_AUTO, MaxHeight: 1080, Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}}}},
 		{&castorv1.Preferences{MaxHeight: new(uint32(720))}, &mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_AUTO, MaxHeight: 720, Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}}}},
 		{
-			&castorv1.Preferences{Delivery: castorv1.Delivery_DELIVERY_SERVE.Enum(), Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "fr"}}},
-			&mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_SERVE, MaxHeight: 1080, Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "fr"}}},
+			&castorv1.Preferences{Delivery: castorv1.Delivery_DELIVERY_SERVE.Enum(), Subtitles: preferred("fr")},
+			&mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_SERVE, MaxHeight: 1080, Subtitles: preferred("fr")},
+		},
+		{
+			&castorv1.Preferences{Subtitles: preferredWithFallback("en")},
+			&mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_AUTO, MaxHeight: 1080, Subtitles: preferredWithFallback("en")},
 		},
 	} {
 		if _, err := c.casts.Resolve(t.Context(), &castorv1.ResolveRequest{Source: streamOf("https://cdn.example/direct"), Preferences: tc.asked}); err != nil {
@@ -625,6 +643,7 @@ func TestRequestPreferencesOverrideTheDefaultsFieldByField(t *testing.T) {
 		if got := <-m.asked; !proto.Equal(got, tc.want) {
 			t.Errorf("asking %v resolved as %v, want %v", tc.asked, got, tc.want)
 		}
+		<-m.sources
 		started, err := c.casts.Cast(t.Context(), &castorv1.CastRequest{Target: onBedroom, Source: streamOf("https://cdn.example/direct"), Preferences: tc.asked})
 		if err != nil {
 			t.Fatal(err)
@@ -635,6 +654,23 @@ func TestRequestPreferencesOverrideTheDefaultsFieldByField(t *testing.T) {
 		if got := <-m.asked; !proto.Equal(got, tc.want) {
 			t.Errorf("asking %v cast as %v, want %v", tc.asked, got, tc.want)
 		}
+		<-m.sources
+	}
+}
+
+func TestPreferredAudioAndSubtitleLanguagesReachMedia(t *testing.T) {
+	m := newMedia(false)
+	c := serve(t, setup{media: m, family: newFamily()})
+	preferences := &castorv1.Preferences{
+		Audio:     &castorv1.AudioSelection{Languages: []string{"fr", "en"}},
+		Subtitles: preferred("fr", "en"),
+	}
+	if _, err := c.casts.Resolve(t.Context(), &castorv1.ResolveRequest{Source: streamOf("https://cdn.example/direct"), Preferences: preferences}); err != nil {
+		t.Fatal(err)
+	}
+	got := <-m.asked
+	if !proto.Equal(got.GetAudio(), preferences.Audio) || !proto.Equal(got.GetSubtitles(), preferences.Subtitles) {
+		t.Errorf("media preferences: audio=%v subtitles=%v", got.GetAudio(), got.GetSubtitles())
 	}
 }
 
@@ -643,15 +679,14 @@ func TestSubtitleModesOverrideOrInheritTheConfiguredLanguage(t *testing.T) {
 		preferences *castorv1.Preferences
 		want        *castorv1.SubtitleSelection
 	}{
-		"omitted preferences": {nil, &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "fr"}}},
-		"omitted subtitles":   {&castorv1.Preferences{MaxHeight: proto.Uint32(720)}, &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "fr"}}},
+		"omitted preferences": {nil, preferred("fr")},
+		"omitted subtitles":   {&castorv1.Preferences{MaxHeight: proto.Uint32(720)}, preferred("fr")},
 		"disabled":            {&castorv1.Preferences{Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}}}, &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}}},
-		"auto detect":         {&castorv1.Preferences{Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_AutoDetect{AutoDetect: &emptypb.Empty{}}}}, &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_AutoDetect{AutoDetect: &emptypb.Empty{}}}},
-		"language":            {&castorv1.Preferences{Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "en"}}}, &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "en"}}},
+		"language":            {&castorv1.Preferences{Subtitles: preferred("en")}, preferred("en")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := newMedia(false)
-			c := serve(t, setup{media: m, family: newFamily(), cast: apiserver.CastConfig{Delivery: apiserver.Delivery(castorv1.Delivery_DELIVERY_SERVE), MaxHeight: 720, Subtitles: "fr"}})
+			c := serve(t, setup{media: m, family: newFamily(), cast: apiserver.CastConfig{Delivery: apiserver.Delivery(castorv1.Delivery_DELIVERY_SERVE), MaxHeight: 720, Subtitles: apiserver.SubtitleConfig{Languages: []string{"fr"}}}})
 			want := &mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_SERVE, MaxHeight: 720, Subtitles: tc.want}
 			source := streamOf("https://cdn.example/direct")
 			if _, err := c.casts.Resolve(t.Context(), &castorv1.ResolveRequest{Source: source, Preferences: tc.preferences}); err != nil {
@@ -671,6 +706,33 @@ func TestSubtitleModesOverrideOrInheritTheConfiguredLanguage(t *testing.T) {
 				t.Errorf("Cast asked media for %v, want %v", got, want)
 			}
 		})
+	}
+}
+
+func TestSubtitleFallbackCanBeOverriddenPerCast(t *testing.T) {
+	m := newMedia(false)
+	c := serve(t, setup{media: m, family: newFamily(), cast: apiserver.CastConfig{
+		Delivery: apiserver.Delivery(castorv1.Delivery_DELIVERY_AUTO), MaxHeight: 1080,
+		Subtitles: apiserver.SubtitleConfig{Languages: []string{"en"}, TranscribeIfMissing: true},
+	}})
+	for _, tc := range []struct {
+		selection *castorv1.SubtitleSelection
+		want      bool
+	}{
+		{nil, true},
+		{preferred("en"), false},
+		{preferredWithFallback("en"), true},
+	} {
+		_, err := c.casts.Resolve(t.Context(), &castorv1.ResolveRequest{
+			Source:      streamOf("https://cdn.example/direct"),
+			Preferences: &castorv1.Preferences{Subtitles: tc.selection},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := (<-m.asked).GetSubtitles().GetTranscribeIfMissing(); got != tc.want {
+			t.Errorf("transcription = %v, want %v", got, tc.want)
+		}
 	}
 }
 

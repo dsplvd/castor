@@ -67,4 +67,34 @@ func TestParsePlaylistPlaysTheAudioLanguageAskedElseTheDefault(t *testing.T) {
 	if !master.offersAudioIn("fr") || master.offersAudioIn("de") {
 		t.Error("offersAudioIn disagrees with the group")
 	}
+	for _, tc := range []struct {
+		languages []string
+		want      string
+	}{
+		{[]string{"fr", "en"}, "fr"},
+		{[]string{"de", "en"}, "en"},
+		{[]string{"de"}, ""},
+	} {
+		if got := master.preferredAudioLanguage(tc.languages); got != tc.want {
+			t.Errorf("preferredAudioLanguage(%v) = %q, want %q", tc.languages, got, tc.want)
+		}
+	}
+}
+
+func TestAudioPreferencesAreTriedWithinEachVariantsGroup(t *testing.T) {
+	body := "#EXTM3U\n" +
+		`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="low",NAME="French",LANGUAGE="fr",DEFAULT=YES,URI="audio/low-fr.m3u8"` + "\n" +
+		`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="high",NAME="German",LANGUAGE="de",DEFAULT=YES,URI="audio/high-de.m3u8"` + "\n" +
+		`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="high",NAME="English",LANGUAGE="en",URI="audio/high-en.m3u8"` + "\n" +
+		`#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480,CODECS="avc1.4d401f,mp4a.40.2",AUDIO="low"` + "\n480.m3u8\n" +
+		`#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2",AUDIO="high"` + "\n1080.m3u8\n"
+	base := sourcetest.URL(t, "http://example.com/master.m3u8")
+	master, err := parsePlaylist(body, base, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rungs := ladder(master, nil, "fr", "en")
+	if len(rungs) != 2 || rungs[0].AudioURL.Path != "/audio/low-fr.m3u8" || rungs[0].AudioLanguage != "fr" || rungs[1].AudioURL.Path != "/audio/high-en.m3u8" || rungs[1].AudioLanguage != "en" {
+		t.Fatalf("preferred audio for each rendition = %+v", rungs)
+	}
 }

@@ -15,6 +15,8 @@ type Rendition struct {
 
 	// AudioURL is the companion audio rendition for this rung.
 	AudioURL *url.URL
+	// AudioLanguage is the language of the selected audio track, when declared.
+	AudioLanguage string
 
 	// Captions are the text renditions the source published beside this rung.
 	Captions []Caption

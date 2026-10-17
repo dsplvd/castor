@@ -8,7 +8,58 @@ import (
 	"testing"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
+	castorv1 "github.com/stupside/castor/gen/castor/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+func TestSourceCaptionSelectionDoesNotEnableTranscription(t *testing.T) {
+	selection := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: []string{"en"}}}}
+	e := &engine{}
+	if got := e.subtitles(selection, "en"); got != nil {
+		t.Fatal("selecting source captions started transcription")
+	}
+	selection.TranscribeIfMissing = true
+	if got := e.subtitles(selection, "en"); got == nil {
+		t.Fatal("explicit transcription did not enable the fallback")
+	}
+	disabled := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}, TranscribeIfMissing: true}
+	if got := e.subtitles(disabled, "en"); got != nil {
+		t.Fatal("disabled subtitles started transcription")
+	}
+
+	cfg := defaults()
+	create := cfg.backend()
+	for _, tc := range []struct {
+		transcribe bool
+		want       bool
+	}{
+		{false, false},
+		{true, true},
+	} {
+		selected := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: []string{"en"}}}, TranscribeIfMissing: tc.transcribe}
+		got := create(&mediav1.PlaybackSettings{Subtitles: selected}).(caster)
+		if enabled := got.engine.subtitles(got.asked.GetSubtitles(), "en") != nil; enabled != tc.want {
+			t.Errorf("transcribe=%v: fallback enabled=%v, want %v", tc.transcribe, enabled, tc.want)
+		}
+	}
+}
+
+func TestTranscriptionUsesThePreferredLanguageOfTheSelectedAudio(t *testing.T) {
+	for _, tc := range []struct {
+		preferred []string
+		audio     string
+		want      string
+	}{
+		{[]string{"fr", "en"}, "en-US", "en"},
+		{[]string{"fr", "en"}, "fr-FR", "fr"},
+		{[]string{"fr", "en"}, "de", ""},
+		{[]string{"fr", "en"}, "", "fr"},
+	} {
+		if got := transcriptLanguage(tc.preferred, tc.audio); got != tc.want {
+			t.Errorf("preferred=%v audio=%q: got %q, want %q", tc.preferred, tc.audio, got, tc.want)
+		}
+	}
+}
 
 type originTransport func(*http.Request) (*http.Response, error)
 

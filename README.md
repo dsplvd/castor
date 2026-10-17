@@ -107,11 +107,15 @@ Every log line of a cast carries `cast_id`, the same in all three services, so o
 
 ### Subtitles
 
-Castor shows the captions a source publishes (an HLS stream's WebVTT renditions) in the language you pick, as a native caption track on Chromecast and DLNA. Roku does not support these source caption tracks yet. When the source has none in that language, Castor transcribes the sound with Whisper and serves the video itself. Generated captions use a native track where the device and output support one; otherwise they are burned into the served video. The source's captions take priority, so the two never show together. The appropriate default model downloads once to your cache.
+Castor shows the captions a source publishes (an HLS stream's WebVTT renditions) in the language you pick, as a native caption track on Chromecast and DLNA. Roku does not support these source caption tracks yet. If the source has no usable caption in that language, playback continues without captions by default. Set `cast.subtitles.transcribe_if_missing: true` to generate captions with Whisper in that case. Generated captions use a native track where the device and output support one; otherwise they are burned into the served video. The source's captions take priority, so the two never show together. The appropriate default model downloads once to your cache when transcription is enabled.
+
+With several subtitle languages, Whisper uses the selected audio language when it is among them. If the source does not declare that language, it tries the first preference. It skips transcription when the declared audio language is outside the subtitle preferences.
 
 ```yaml
 cast:
-  subtitles: en            # a language code, or auto to detect it; unset for none
+  subtitles:
+    languages: [fr, en]   # try source caption languages in order
+    # transcribe_if_missing: true  # generate captions if the source has none
 servers:
   media:
     whisper:
@@ -119,15 +123,17 @@ servers:
 ```
 
 Set `servers.media.whisper.model_path` to use a larger model (e.g. multilingual `ggml-base.bin`). English-only models reject other languages and `auto`.
+The short form `subtitles: en` selects one source caption language.
 
 ### Audio language
 
 ```yaml
 cast:
-  audio: fr                # a language code; unset plays the source's default track
+  audio:
+    languages: [fr, en]   # try in order; unset plays the source's default track
 ```
 
-Castor plays the matching track when an HLS source publishes its audio as separate renditions. A source that offers no such track plays its default, with a warning in the log. Audio muxed inside one container is not chosen yet.
+Castor tries these languages across HLS variants, DASH audio representations, and audio tracks in direct files. If none matches, it uses the source's marked default track when one is known, otherwise the first track. A direct file with a selected audio track is served by Castor so the device cannot choose a different track.
 
 ### Video quality
 

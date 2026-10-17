@@ -87,14 +87,25 @@ func (d document) offersAudioIn(language string) bool {
 	return false
 }
 
-// audioFor is the rendition v plays its sound from: the one in language when its group offers it, else the group's default
+func (d document) preferredAudioLanguage(languages []string) string {
+	for _, language := range languages {
+		if d.offersAudioIn(language) {
+			return language
+		}
+	}
+	return ""
+}
+
+// audioFor is the rendition v plays its sound from: the first preferred language its group offers, else the group's default
 // (the last one marked; nil when that is muxed into the variant), else the group's first.
-func (d document) audioFor(v variant, language string) *url.URL {
+func (d document) audioFor(v variant, languages []string) audioRendition {
 	group := d.audio[v.audioGroup]
-	if language != "" {
-		for _, a := range group {
-			if a.url != nil && source.SameLanguage(a.language, language) {
-				return a.url
+	for _, language := range languages {
+		if language != "" {
+			for _, a := range group {
+				if a.url != nil && source.SameLanguage(a.language, language) {
+					return a
+				}
 			}
 		}
 	}
@@ -106,11 +117,11 @@ func (d document) audioFor(v variant, language string) *url.URL {
 	}
 	switch {
 	case chosen >= 0:
-		return group[chosen].url
+		return group[chosen]
 	case len(group) > 0:
-		return group[0].url
+		return group[0]
 	}
-	return nil
+	return audioRendition{}
 }
 
 func (d document) captionsFor(v variant) []source.Caption { return d.subtitles[v.subtitleGroup] }

@@ -178,7 +178,7 @@ func serve(t *testing.T, b func(*mediav1.PlaybackSettings) cast.Caster) server {
 }
 
 // asked is what this operator asks of every cast in these tests.
-var asked = &mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_SERVE, MaxHeight: 720, Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Language{Language: "fr"}}}
+var asked = &mediav1.PlaybackSettings{Delivery: castorv1.Delivery_DELIVERY_SERVE, MaxHeight: 720, Subtitles: &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: []string{"fr"}}}}}
 
 func streamOf(raw string) *mediav1.Source {
 	return &mediav1.Source{Source: &mediav1.Source_Stream{Stream: &castorv1.Stream{Url: raw, Headers: map[string]string{"Referer": "https://page.example/"}}}}

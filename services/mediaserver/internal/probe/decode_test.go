@@ -62,6 +62,18 @@ func TestDecodeSelectsThePictureAndTheDefaultAudio(t *testing.T) {
 	}
 }
 
+func TestDecodeKeepsAudioLanguagesAndDefaultMarks(t *testing.T) {
+	streams := `{"codec_type":"audio","codec_name":"aac","channels":2,"tags":{"language":"en"}},` +
+		`{"codec_type":"audio","codec_name":"ac3","channels":6,"disposition":{"default":1},"tags":{"language":"fr-FR"}}`
+	info, err := decode(probeJSON(vodFormat, streams), -1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(info.AudioTracks) != 2 || info.AudioTracks[0].Language != "en" || info.AudioTracks[1].Language != "fr-FR" || !info.AudioTracks[1].Default {
+		t.Fatalf("audio tracks = %+v", info.AudioTracks)
+	}
+}
+
 func TestDecodeReadsTheContainersOwnFacts(t *testing.T) {
 	for _, tc := range []struct {
 		name         string

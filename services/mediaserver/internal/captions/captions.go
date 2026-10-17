@@ -12,37 +12,25 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
-// Want is the language a cast asked its captions in: a code, or Auto for whichever the source marks first.
+// Want is the ordered list of caption languages a cast prefers.
 type Want struct {
-	Language string
-	Auto     bool
+	Languages []string
 }
 
-// Pick is the caption of the source that Want selects, none when it has not the language asked.
-// Auto takes the source's default, then its forced, then its first.
-func Pick(available []source.Caption, want Want) (source.Caption, bool) {
-	if want.Auto {
-		for _, c := range available {
-			if c.Default {
-				return c, true
+// Matches returns published captions in preference order, including alternative tracks
+// in the same language so a broken track does not hide another usable one.
+func Matches(available []source.Caption, want Want) []source.Caption {
+	var matches []source.Caption
+	seen := make([]bool, len(available))
+	for _, language := range want.Languages {
+		for i, c := range available {
+			if !seen[i] && source.SameLanguage(c.Language, language) {
+				matches = append(matches, c)
+				seen[i] = true
 			}
 		}
-		for _, c := range available {
-			if c.Forced {
-				return c, true
-			}
-		}
-		if len(available) == 0 {
-			return source.Caption{}, false
-		}
-		return available[0], true
 	}
-	for _, c := range available {
-		if source.SameLanguage(c.Language, want.Language) {
-			return c, true
-		}
-	}
-	return source.Caption{}, false
+	return matches
 }
 
 const (

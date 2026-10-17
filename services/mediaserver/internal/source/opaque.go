@@ -12,7 +12,7 @@ import (
 type opaque struct{}
 
 // Resolve reads the whole source behind one URL.
-func (opaque) Resolve(_ context.Context, _ Env, s Subject) (Resolution, error) {
+func (opaque) Resolve(_ context.Context, env Env, s Subject) (Resolution, error) {
 	program, err := ProgramFor(&s.Stream)
 	if err != nil {
 		return Resolution{Origin: s.Origin}, fmt.Errorf("normalizing source program: %w", err)
@@ -22,7 +22,39 @@ func (opaque) Resolve(_ context.Context, _ Env, s Subject) (Resolution, error) {
 		program.Inputs[i].Fetch.Live = s.Origin.Live
 		program.Inputs[i].Fetch.Framing = s.Origin.Framing
 	}
-	return Resolution{Program: program, Origin: s.Origin}, nil
+	var chosen Rendition
+	if probe := s.Stream.Probe; probe != nil && len(probe.AudioTracks) > 0 {
+		index, preferred := selectAudioTrack(probe.AudioTracks, env.AudioLanguages)
+		for i := range program.Tracks {
+			if program.Tracks[i].Kind == media.TrackAudio {
+				program.Tracks[i].Index = index
+			}
+		}
+		program.NeedsTrackSelection = preferred && len(probe.AudioTracks) > 1
+		track := probe.AudioTracks[index]
+		chosen.AudioLanguage = track.Language
+		measurement := probe.Clone()
+		measurement.AudioCodec, measurement.AudioChannels, measurement.AudioSampleRate = track.Codec, track.Channels, track.SampleRate
+		program.SetMeasurement(measurement)
+	}
+	return Resolution{Program: program, Origin: s.Origin, Rendition: chosen}, nil
+}
+
+// selectAudioTrack applies language order before the container's default mark.
+func selectAudioTrack(tracks []media.AudioTrack, languages []string) (index int, preferred bool) {
+	for _, language := range languages {
+		for i, track := range tracks {
+			if SameLanguage(track.Language, language) {
+				return i, true
+			}
+		}
+	}
+	for i, track := range tracks {
+		if track.Default {
+			return i, false
+		}
+	}
+	return 0, false
 }
 
 func (opaque) Timeline(Client, media.Input, media.TrackKind) timeline.Source { return nil }

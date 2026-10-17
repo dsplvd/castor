@@ -28,10 +28,40 @@ type ServersConfig struct {
 type CastConfig struct {
 	Delivery  Delivery `yaml:"delivery"`
 	MaxHeight uint32   `yaml:"max_height"`
-	// Subtitles is the requested caption language, or auto to detect it; empty disables captions.
-	Subtitles string `yaml:"subtitles"`
-	// Audio is the language to play where a source offers several, empty for the source's default.
-	Audio string `yaml:"audio"`
+	// Subtitles selects the source's captions and optionally enables transcription as a fallback.
+	Subtitles SubtitleConfig `yaml:"subtitles"`
+	// Audio is the ordered list of languages to try before the source's default.
+	Audio AudioConfig `yaml:"audio"`
+}
+
+// AudioConfig accepts a single legacy language or an ordered list.
+type AudioConfig struct {
+	Languages []string `yaml:"languages"`
+}
+
+func (c *AudioConfig) UnmarshalText(value []byte) error {
+	*c = AudioConfig{}
+	if len(value) > 0 {
+		c.Languages = []string{string(value)}
+	}
+	return nil
+}
+
+// SubtitleConfig accepts one scalar language or an ordered mapping.
+type SubtitleConfig struct {
+	Languages           []string `yaml:"languages"`
+	TranscribeIfMissing bool     `yaml:"transcribe_if_missing"`
+}
+
+func (c *SubtitleConfig) UnmarshalText(value []byte) error {
+	*c = SubtitleConfig{}
+	if string(value) == "auto" {
+		return fmt.Errorf("subtitle selection %q is unsupported; choose preferred languages", value)
+	}
+	if len(value) > 0 {
+		c.Languages = []string{string(value)}
+	}
+	return nil
 }
 
 // Delivery is how a cast reaches the device, spelled in configuration as the contract names it, such as auto.
@@ -80,18 +110,19 @@ func defaults() Config {
 // settings resolves configuration into media's complete playback policy.
 func (c CastConfig) settings() *mediav1.PlaybackSettings {
 	subtitles := &castorv1.SubtitleSelection{}
-	switch c.Subtitles {
-	case "":
+	if len(c.Subtitles.Languages) > 0 {
+		subtitles.Mode = &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.LanguagePreferences{Languages: c.Subtitles.Languages}}
+	} else {
 		subtitles.Mode = &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}
-	case "auto":
-		subtitles.Mode = &castorv1.SubtitleSelection_AutoDetect{AutoDetect: &emptypb.Empty{}}
-	default:
-		subtitles.Mode = &castorv1.SubtitleSelection_Language{Language: c.Subtitles}
 	}
-	return &mediav1.PlaybackSettings{
-		Delivery:      castorv1.Delivery(c.Delivery),
-		MaxHeight:     c.MaxHeight,
-		Subtitles:     subtitles,
-		AudioLanguage: c.Audio,
+	subtitles.TranscribeIfMissing = c.Subtitles.TranscribeIfMissing
+	settings := &mediav1.PlaybackSettings{
+		Delivery:  castorv1.Delivery(c.Delivery),
+		MaxHeight: c.MaxHeight,
+		Subtitles: subtitles,
 	}
+	if len(c.Audio.Languages) > 0 {
+		settings.Audio = &castorv1.AudioSelection{Languages: c.Audio.Languages}
+	}
+	return settings
 }

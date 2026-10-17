@@ -63,7 +63,6 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 			}),
 			engine: &e,
 			asked:  asked,
-			subs:   e.subtitles(asked.GetSubtitles()),
 		}
 	}
 }
@@ -75,13 +74,14 @@ type engine struct {
 }
 
 // subtitles transcribes the selected language with Whisper; delivery chooses a native track or burn-in.
-func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtitles {
-	if selection.GetDisabled() != nil {
+func (e *engine) subtitles(selection *castorv1.SubtitleSelection, audioLanguage string) execute.Subtitles {
+	if !selection.GetTranscribeIfMissing() || selection.GetDisabled() != nil {
 		return nil
 	}
-	language := selection.GetLanguage()
-	if selection.GetAutoDetect() != nil {
-		language = "auto"
+	preferred := selection.GetPreferredLanguages().GetLanguages()
+	language := transcriptLanguage(preferred, audioLanguage)
+	if language == "" {
+		return nil
 	}
 	return func(ctx context.Context) execute.Transcript {
 		b, err := whisper.New(ctx, e.cfg.Servers.Media.Whisper, language)
@@ -93,12 +93,29 @@ func (e *engine) subtitles(selection *castorv1.SubtitleSelection) execute.Subtit
 	}
 }
 
+// transcriptLanguage follows the selected audio when its language is declared.
+// Without that fact, the first subtitle preference is the explicit best guess.
+func transcriptLanguage(preferred []string, audioLanguage string) string {
+	if audioLanguage != "" {
+		for _, language := range preferred {
+			if source.SameLanguage(audioLanguage, language) {
+				return language
+			}
+		}
+		return ""
+	}
+	if len(preferred) > 0 {
+		return preferred[0]
+	}
+	return ""
+}
+
 // captions shows the source's own captions in the selected language, none when the selection disables them.
 func (e *engine) captions(selection *castorv1.SubtitleSelection) *execute.Captions {
 	if selection.GetDisabled() != nil {
 		return nil
 	}
-	return &execute.Captions{Want: captions.Want{Language: selection.GetLanguage(), Auto: selection.GetAutoDetect() != nil}, Client: e.client}
+	return &execute.Captions{Want: captions.Want{Languages: selection.GetPreferredLanguages().GetLanguages()}, Client: e.client}
 }
 
 // caster ranks and plays one cast as it was asked.
@@ -106,7 +123,6 @@ type caster struct {
 	*rank.Ranker
 	engine *engine
 	asked  *mediav1.PlaybackSettings
-	subs   execute.Subtitles
 }
 
 // Measure names what a link carries when it says nothing, then measures it.
@@ -123,7 +139,6 @@ func (k caster) Play(ctx context.Context, device execute.Device, listeners deliv
 		Device:    device,
 		Listeners: listeners,
 		Captions:  k.engine.captions(k.asked.GetSubtitles()),
-		Subtitles: k.subs,
 		MaxHeight: media.HeightCap(k.asked.GetMaxHeight()),
 	}
 	// The ranked streams, head first; the rest are what recovery switches to.
@@ -132,5 +147,23 @@ func (k caster) Play(ctx context.Context, device execute.Device, listeners deliv
 		Deadline:   readDeadline,
 		Delivery:   wire.FromDelivery(k.asked.GetDelivery()),
 		Turns:      turns,
-	}, run, source.NewResolver(k.engine.client, run.MaxHeight, k.asked.GetAudioLanguage(), formats))
+	}, subtitleRunner{Cast: run, engine: k.engine, selection: k.asked.GetSubtitles()}, source.NewResolver(k.engine.client, run.MaxHeight, k.asked.GetAudio().GetLanguages(), formats))
+}
+
+// subtitleRunner binds the generated-caption language after source resolution,
+// before composition decides whether a buffered PCM read is needed.
+type subtitleRunner struct {
+	execute.Cast
+	engine    *engine
+	selection *castorv1.SubtitleSelection
+}
+
+func (r subtitleRunner) Run(ctx context.Context, attempt recovery.Attempt) recovery.Outcome {
+	r.Cast.Subtitles = r.engine.subtitles(r.selection, attempt.Rendition.AudioLanguage)
+	if r.selection.GetTranscribeIfMissing() && r.Cast.Subtitles == nil && r.selection.GetDisabled() == nil {
+		slog.WarnContext(ctx, "transcription skipped: selected audio language is not among subtitle preferences",
+			"audio_language", attempt.Rendition.AudioLanguage,
+			"preferred_languages", r.selection.GetPreferredLanguages().GetLanguages())
+	}
+	return r.Cast.Run(ctx, attempt)
 }

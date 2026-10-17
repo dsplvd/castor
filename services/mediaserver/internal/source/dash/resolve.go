@@ -43,9 +43,14 @@ func (Format) Resolve(ctx context.Context, env source.Env, s source.Subject) (so
 	}
 	if picture == nil || !picture.muxed() {
 		if audio := offers(film.Period, media.TrackAudio); len(audio) > 0 {
-			best := slices.MaxFunc(audio, byAudio)
+			best := preferredAudio(audio, env.AudioLanguages)
 			sound = &best
 		}
+	}
+	if sound != nil {
+		chosen.AudioLanguage = sound.set.Lang
+	} else if picture != nil {
+		chosen.AudioLanguage = picture.set.Lang
 	}
 	if picture == nil && sound == nil {
 		return source.Resolution{Origin: origin}, errors.New("the DASH presentation offers neither picture nor sound castor can cast")

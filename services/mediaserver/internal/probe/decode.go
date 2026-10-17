@@ -17,7 +17,8 @@ import (
 
 const showEntries = "format=format_name,bit_rate,duration,start_time:" +
 	"stream=index,start_time,codec_type,codec_name,profile,level,width,height,pix_fmt,color_transfer,field_order,channels,sample_rate:" +
-	"stream_disposition=attached_pic:stream_side_data=rotation:" +
+	"stream_disposition=attached_pic,default:stream_side_data=rotation:" +
+	"stream_tags=language:" +
 	"program=program_id:program_stream_disposition=attached_pic:" +
 	"frame=stream_index,interlaced_frame"
 
@@ -37,8 +38,12 @@ func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 			FieldOrder    string `json:"field_order"`
 			Channels      int    `json:"channels"`
 			SampleRate    string `json:"sample_rate"`
-			Disposition   struct {
+			Tags          struct {
+				Language string `json:"language"`
+			} `json:"tags"`
+			Disposition struct {
 				AttachedPic int `json:"attached_pic"`
+				Default     int `json:"default"`
 			} `json:"disposition"`
 			SideData []struct {
 				Rotation int `json:"rotation"`
@@ -111,10 +116,14 @@ func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 			}
 			videoSeen++
 		case "audio":
+			sampleRate, _ := strconv.Atoi(s.SampleRate)
+			info.AudioTracks = append(info.AudioTracks, media.AudioTrack{
+				Language: s.Tags.Language, Codec: media.Codec(s.CodecName), Channels: s.Channels, SampleRate: sampleRate, Default: s.Disposition.Default != 0,
+			})
 			if audioSeen == audioIndex {
 				info.AudioCodec = media.Codec(s.CodecName)
 				info.AudioChannels = s.Channels
-				info.AudioSampleRate, _ = strconv.Atoi(s.SampleRate)
+				info.AudioSampleRate = sampleRate
 			}
 			audioSeen++
 		}

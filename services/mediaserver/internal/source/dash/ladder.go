@@ -102,3 +102,17 @@ func rank(codecs string) int {
 func byAudio(a, b offered) int {
 	return cmp.Or(source.CompareBool(mainRole(a.set), mainRole(b.set)), cmp.Compare(rank(a.codecs()), rank(b.codecs())), cmp.Compare(a.rep.Bandwidth, b.rep.Bandwidth))
 }
+
+// preferredAudio chooses the first requested language the presentation offers.
+// Its normal main/codec ranking applies within that language and when none match.
+func preferredAudio(audio []offered, languages []string) offered {
+	for _, language := range languages {
+		matching := slices.DeleteFunc(slices.Clone(audio), func(o offered) bool {
+			return !source.SameLanguage(o.set.Lang, language)
+		})
+		if len(matching) > 0 {
+			return slices.MaxFunc(matching, byAudio)
+		}
+	}
+	return slices.MaxFunc(audio, byAudio)
+}

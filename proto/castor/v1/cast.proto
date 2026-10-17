@@ -77,6 +77,7 @@ message Source {
 
 // Preferences are what one cast asks; each unset field takes the server's configuration.
 message Preferences {
+  reserved 4;
   optional Delivery delivery = 1 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
@@ -85,17 +86,32 @@ message Preferences {
   optional uint32 max_height = 2 [(buf.validate.field).uint32.gte = 2];
   // Absent subtitles inherit the server's default; an explicit mode replaces it.
   SubtitleSelection subtitles = 3;
-  // audio_language is the language to play where a source offers several; absent takes the server's default, empty the source's own.
-  optional string audio_language = 4 [(buf.validate.field).string.pattern = "^([a-z]{2,3})?$"];
+  // Ordered audio languages to try before the source's default track; absent takes the server's default.
+  AudioSelection audio = 5;
+}
+
+message AudioSelection {
+  repeated string languages = 1 [(buf.validate.field).repeated.items.string.pattern = "^[a-z]{2,3}$"];
 }
 
 message SubtitleSelection {
+  reserved 2, 3;
+  option (buf.validate.message).cel = {
+    id: "subtitle.transcription_requires_languages"
+    message: "transcription requires preferred subtitle languages"
+    expression: "!this.transcribe_if_missing || has(this.preferred_languages)"
+  };
   oneof mode {
     option (buf.validate.oneof).required = true;
     google.protobuf.Empty disabled = 1;
-    google.protobuf.Empty auto_detect = 2;
-    string language = 3 [(buf.validate.field).string.pattern = "^[a-z]{2,3}$"];
+    LanguagePreferences preferred_languages = 5;
   }
+  // Generate captions with Whisper if the source has no usable caption in the selected language.
+  bool transcribe_if_missing = 4;
+}
+
+message LanguagePreferences {
+  repeated string languages = 1 [(buf.validate.field).repeated.min_items = 1, (buf.validate.field).repeated.items.string.pattern = "^[a-z]{2,3}$"];
 }
 
 message WatchRequest {

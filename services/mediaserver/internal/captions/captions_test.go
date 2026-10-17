@@ -24,18 +24,14 @@ func TestPickFollowsTheLanguageAskedOrTheSourcesOwnMarks(t *testing.T) {
 		got  source.Caption
 		ok   bool
 	}{
-		{"a code matches its primary subtag", Want{Language: "en"}, en, true},
-		{"a language the source lacks gives none", Want{Language: "es"}, source.Caption{}, false},
-		{"auto prefers the default", Want{Auto: true}, de, true},
-		{"auto takes the forced without a default", Want{Auto: true}, fr, true},
+		{"a code matches its primary subtag", Want{Languages: []string{"en"}}, en, true},
+		{"a language the source lacks gives none", Want{Languages: []string{"es"}}, source.Caption{}, false},
+		{"preferred language beats source order", Want{Languages: []string{"fr", "en"}}, fr, true},
+		{"next preferred language is used", Want{Languages: []string{"es", "en"}}, en, true},
 	} {
-		list := all
-		if tc.name == "auto takes the forced without a default" {
-			list = []source.Caption{en, fr}
-		}
-		got, ok := Pick(list, tc.want)
-		if ok != tc.ok || got.Language != tc.got.Language {
-			t.Errorf("%s: Pick = %+v, %v", tc.name, got, ok)
+		matches := Matches(all, tc.want)
+		if (len(matches) > 0) != tc.ok || (len(matches) > 0 && matches[0].Language != tc.got.Language) {
+			t.Errorf("%s: Matches = %+v", tc.name, matches)
 		}
 	}
 }

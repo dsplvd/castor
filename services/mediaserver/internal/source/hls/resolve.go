@@ -14,13 +14,14 @@ import (
 // Resolve narrows the source to the rendition to read and builds the program around it.
 func (Format) Resolve(ctx context.Context, env source.Env, s source.Subject) (source.Resolution, error) {
 	stream := s.Stream
-	origin, chosen, primaryRelaxed := inspect(ctx, env, stream, s.Origin, s.Chosen)
+	origin, chosen, primaryRelaxed, err := inspect(ctx, env, stream, s.Origin, s.Chosen)
+	if err != nil {
+		return source.Resolution{Origin: origin}, err
+	}
 	read := stream.URL
 	if chosen.URL != nil {
 		read = chosen.URL
 	}
-	// What this document says about the rung it named, backed by what the caller already knew.
-	chosen = backedBy(chosen, s.Chosen)
 	audioURL := chosen.AudioURL
 
 	inputs := []media.Input{{
@@ -66,22 +67,26 @@ func (Format) Resolve(ctx context.Context, env source.Env, s source.Subject) (so
 }
 
 // inspect narrows a source to the single rendition to read and returns what the source published; relaxed is also true whenever that stays unknown, which licenses no self-fetch.
-func inspect(ctx context.Context, env source.Env, stream source.Stream, origin source.Origin, settled source.Rendition) (_ source.Origin, _ source.Rendition, relaxed bool) {
+func inspect(ctx context.Context, env source.Env, stream source.Stream, origin source.Origin, settled source.Rendition) (_ source.Origin, _ source.Rendition, relaxed bool, _ error) {
 	doc, status, err := readPlaylist(ctx, env.Client, stream.URL, stream.Headers)
 	if err != nil {
 		slog.WarnContext(ctx, "HLS playlist resolution failed, using original", "error", err, "status", status)
-		return origin, source.Rendition{}, true
+		return origin, source.Rendition{}, true, nil
 	}
 	if len(doc.variants) == 0 {
 		// A master listing nothing but I-frame playlists reduces to no castable rendition.
 		slog.WarnContext(ctx, "playlist offers no castable rendition, using original", "url", stream.URL.String())
-		return origin, source.Rendition{}, true
+		return origin, source.Rendition{}, true, nil
 	}
-	if env.AudioLanguage != "" && !doc.offersAudioIn(env.AudioLanguage) {
-		slog.WarnContext(ctx, "the source offers no audio in the language asked; playing its default", "language", env.AudioLanguage)
+	languages := env.AudioLanguages
+	if len(languages) > 0 && doc.preferredAudioLanguage(languages) == "" {
+		slog.WarnContext(ctx, "the source offers no audio in the preferred languages; playing its default", "languages", languages)
 	}
-	origin.Renditions = ladder(doc, stream.Probe, env.AudioLanguage)
-	chosen := env.Choose(ctx, origin, settled, byBitrate)
+	origin.Renditions = ladder(doc, stream.Probe, languages...)
+	if len(origin.Renditions) == 0 {
+		return origin, source.Rendition{}, false, fmt.Errorf("HLS playlist offers no video rendition")
+	}
+	chosen := env.Choose(ctx, origin, settled, byAudioPreference(languages))
 
 	// Segment facts are stated by the document that LISTS the segments (chosen variant's own playlist).
 	segments := doc
@@ -90,13 +95,13 @@ func inspect(ctx context.Context, env source.Env, stream source.Stream, origin s
 		if err != nil {
 			slog.WarnContext(ctx, "the chosen rendition's playlist could not be read; the source's own facts stay unknown",
 				"error", err, "status", status, "url", chosen.URL.String())
-			return origin, chosen, true
+			return origin, chosen, true, nil
 		}
 		// A rung naming another master states nothing about segments.
 		if segments.multivariant {
 			slog.WarnContext(ctx, "the chosen rendition names another multivariant playlist; the source's own facts stay unknown",
 				"url", chosen.URL.String())
-			return origin, chosen, true
+			return origin, chosen, true, nil
 		}
 	}
 	origin.Framing = segments.framing
@@ -108,7 +113,7 @@ func inspect(ctx context.Context, env source.Env, stream source.Stream, origin s
 		// The EXTINF sum wins: ffprobe reports no duration for most playlists.
 		origin.Duration = segments.duration
 	}
-	return origin, chosen, segments.requiresRelaxedInput
+	return origin, chosen, segments.requiresRelaxedInput, nil
 }
 
 // inspectCompanion reads the audio rendition's media playlist.

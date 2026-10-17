@@ -5,6 +5,7 @@ import "fmt"
 // keySchema covers the union of sections read by Castor's commands. A command
 // still decodes only its own fields, but typos anywhere in the shared document fail.
 type keySchema map[string]any
+type scalarOrMap keySchema
 
 var configKeys = keySchema{
 	"device": keySchema{"name": nil, "type": nil, "host": nil, "id": nil},
@@ -13,7 +14,7 @@ var configKeys = keySchema{
 		"templates": keySchema{"movie": nil, "episode": nil},
 	}},
 	"tmdb": keySchema{"api_key": nil},
-	"cast": keySchema{"delivery": nil, "max_height": nil, "subtitles": nil, "audio": nil},
+	"cast": keySchema{"delivery": nil, "max_height": nil, "subtitles": scalarOrMap{"languages": []any{nil}, "transcribe_if_missing": nil}, "audio": scalarOrMap{"languages": []any{nil}}},
 	"servers": keySchema{
 		"api": keySchema{
 			"url": nil, "listen": nil, "token": nil,
@@ -40,6 +41,13 @@ func checkKeys(value, allowed any, path string) error {
 		return nil
 	}
 	switch keys := allowed.(type) {
+	case scalarOrMap:
+		if _, ok := value.(map[string]any); ok {
+			return checkKeys(value, keySchema(keys), path)
+		}
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("configuration section %q must be a string or mapping", path)
+		}
 	case keySchema:
 		fields, ok := value.(map[string]any)
 		if !ok {

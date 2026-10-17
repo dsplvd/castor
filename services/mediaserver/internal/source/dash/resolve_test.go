@@ -30,7 +30,7 @@ const ffmpegPresentation = `<?xml version="1.0" encoding="utf-8"?>
 
 func resolveWith(t *testing.T, body string, chosen source.Rendition, ceiling media.HeightCap) source.Resolution {
 	t.Helper()
-	resolver := source.NewResolver(&sourcetest.Document{Body: body, Status: http.StatusOK}, ceiling, "", source.Formats{Format{}})
+	resolver := source.NewResolver(&sourcetest.Document{Body: body, Status: http.StatusOK}, ceiling, nil, source.Formats{Format{}})
 	stream := &source.Stream{URL: sourcetest.URL(t, "https://origin.example/manifest.mpd"), ContentType: media.DASH}
 	resolved, err := resolver.Resolve(t.Context(), stream, chosen)
 	if err != nil {
@@ -112,6 +112,36 @@ func TestAStitchedPresentationIsSplicedAndPlaysToItsLongestInput(t *testing.T) {
 	}
 }
 
+func TestDASHAudioFollowsOrderedLanguagePreferences(t *testing.T) {
+	const body = `<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT1M"><Period>
+  <AdaptationSet contentType="video"><Representation id="v" codecs="avc1.64001f" bandwidth="800000" height="360"/></AdaptationSet>
+  <AdaptationSet contentType="audio" lang="en"><Role schemeIdUri="urn:mpeg:dash:role:2011" value="main"/>
+    <Representation id="en" codecs="mp4a.40.2" bandwidth="128000"/></AdaptationSet>
+  <AdaptationSet contentType="audio" lang="fr-FR">
+    <Representation id="fr" codecs="mp4a.40.2" bandwidth="96000"/></AdaptationSet>
+</Period></MPD>`
+	for _, tc := range []struct {
+		preferences []string
+		wantTrack   string
+		wantLang    string
+	}{
+		{[]string{"fr", "en"}, "fr", "fr-FR"},
+		{[]string{"de", "en"}, "en", "en"},
+		{[]string{"de"}, "en", "en"},
+	} {
+		resolver := source.NewResolver(&sourcetest.Document{Body: body, Status: http.StatusOK}, 1080, tc.preferences, source.Formats{Format{}})
+		stream := &source.Stream{URL: sourcetest.URL(t, "https://origin.example/manifest.mpd"), ContentType: media.DASH}
+		got, err := resolver.Resolve(t.Context(), stream, source.Rendition{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		track := sourcetest.RequireInput(t, got.Program, media.AudioInputID)
+		if track.Representation != tc.wantTrack || got.Rendition.AudioLanguage != tc.wantLang {
+			t.Errorf("preferences %v selected %q (%q), want %q (%q)", tc.preferences, track.Representation, got.Rendition.AudioLanguage, tc.wantTrack, tc.wantLang)
+		}
+	}
+}
+
 // A presentation under DRM is refused at resolution, so recovery moves to the next link rather than failing a read.
 func TestAPresentationUnderDRMIsRefused(t *testing.T) {
 	const body = `<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT1H">
@@ -119,7 +149,7 @@ func TestAPresentationUnderDRMIsRefused(t *testing.T) {
     <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc"/>
     <Representation id="hd" mimeType="video/mp4" codecs="avc1.640028" bandwidth="6941000" height="1080"/>
   </AdaptationSet></Period></MPD>`
-	resolver := source.NewResolver(&sourcetest.Document{Body: body, Status: http.StatusOK}, 1080, "", source.Formats{Format{}})
+	resolver := source.NewResolver(&sourcetest.Document{Body: body, Status: http.StatusOK}, 1080, nil, source.Formats{Format{}})
 	stream := &source.Stream{URL: sourcetest.URL(t, "https://origin.example/manifest.mpd"), ContentType: media.DASH}
 	if _, err := resolver.Resolve(t.Context(), stream, source.Rendition{}); err == nil || !strings.Contains(err.Error(), "cenc") {
 		t.Errorf("Resolve = %v, want a refusal naming the protection", err)

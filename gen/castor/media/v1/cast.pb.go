@@ -87,12 +87,11 @@ func (x *StartRequest) GetSettings() *PlaybackSettings {
 
 // PlaybackSettings is the complete policy resolved by API before media is called.
 type PlaybackSettings struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Delivery  v1.Delivery            `protobuf:"varint,1,opt,name=delivery,proto3,enum=castor.v1.Delivery" json:"delivery,omitempty"`
-	MaxHeight uint32                 `protobuf:"varint,2,opt,name=max_height,json=maxHeight,proto3" json:"max_height,omitempty"`
-	Subtitles *v1.SubtitleSelection  `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
-	// audio_language is the language to play where a source offers several, empty for the source's default.
-	AudioLanguage string `protobuf:"bytes,4,opt,name=audio_language,json=audioLanguage,proto3" json:"audio_language,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Delivery      v1.Delivery            `protobuf:"varint,1,opt,name=delivery,proto3,enum=castor.v1.Delivery" json:"delivery,omitempty"`
+	MaxHeight     uint32                 `protobuf:"varint,2,opt,name=max_height,json=maxHeight,proto3" json:"max_height,omitempty"`
+	Subtitles     *v1.SubtitleSelection  `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
+	Audio         *v1.AudioSelection     `protobuf:"bytes,5,opt,name=audio,proto3" json:"audio,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -148,11 +147,11 @@ func (x *PlaybackSettings) GetSubtitles() *v1.SubtitleSelection {
 	return nil
 }
 
-func (x *PlaybackSettings) GetAudioLanguage() string {
+func (x *PlaybackSettings) GetAudio() *v1.AudioSelection {
 	if x != nil {
-		return x.AudioLanguage
+		return x.Audio
 	}
-	return ""
+	return nil
 }
 
 type StartResponse struct {
@@ -406,14 +405,14 @@ const file_castor_media_v1_cast_proto_rawDesc = "" +
 	"\fStartRequest\x12.\n" +
 	"\acast_id\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^[A-Z2-7]{26}$R\x06castId\x127\n" +
 	"\x06source\x18\x02 \x01(\v2\x17.castor.media.v1.SourceB\x06\xbaH\x03\xc8\x01\x01R\x06source\x12E\n" +
-	"\bsettings\x18\x03 \x01(\v2!.castor.media.v1.PlaybackSettingsB\x06\xbaH\x03\xc8\x01\x01R\bsettings\"\xfa\x01\n" +
+	"\bsettings\x18\x03 \x01(\v2!.castor.media.v1.PlaybackSettingsB\x06\xbaH\x03\xc8\x01\x01R\bsettings\"\xf2\x01\n" +
 	"\x10PlaybackSettings\x12;\n" +
 	"\bdelivery\x18\x01 \x01(\x0e2\x13.castor.v1.DeliveryB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\bdelivery\x12&\n" +
 	"\n" +
 	"max_height\x18\x02 \x01(\rB\a\xbaH\x04*\x02(\x02R\tmaxHeight\x12B\n" +
-	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionB\x06\xbaH\x03\xc8\x01\x01R\tsubtitles\x12=\n" +
-	"\x0eaudio_language\x18\x04 \x01(\tB\x16\xbaH\x13r\x112\x0f^([a-z]{2,3})?$R\raudioLanguage\"\x0f\n" +
+	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionB\x06\xbaH\x03\xc8\x01\x01R\tsubtitles\x12/\n" +
+	"\x05audio\x18\x05 \x01(\v2\x19.castor.v1.AudioSelectionR\x05audioJ\x04\b\x04\x10\x05\"\x0f\n" +
 	"\rStartResponse\"/\n" +
 	"\vStopRequest\x12 \n" +
 	"\acast_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06castId\"\x0e\n" +
@@ -453,30 +452,32 @@ var file_castor_media_v1_cast_proto_goTypes = []any{
 	(*Source_Streams)(nil),       // 6: castor.media.v1.Source.Streams
 	(v1.Delivery)(0),             // 7: castor.v1.Delivery
 	(*v1.SubtitleSelection)(nil), // 8: castor.v1.SubtitleSelection
-	(*v1.Stream)(nil),            // 9: castor.v1.Stream
-	(*v1.StreamCandidate)(nil),   // 10: castor.v1.StreamCandidate
-	(*v1.WatchRequest)(nil),      // 11: castor.v1.WatchRequest
-	(*v1.WatchResponse)(nil),     // 12: castor.v1.WatchResponse
+	(*v1.AudioSelection)(nil),    // 9: castor.v1.AudioSelection
+	(*v1.Stream)(nil),            // 10: castor.v1.Stream
+	(*v1.StreamCandidate)(nil),   // 11: castor.v1.StreamCandidate
+	(*v1.WatchRequest)(nil),      // 12: castor.v1.WatchRequest
+	(*v1.WatchResponse)(nil),     // 13: castor.v1.WatchResponse
 }
 var file_castor_media_v1_cast_proto_depIdxs = []int32{
 	5,  // 0: castor.media.v1.StartRequest.source:type_name -> castor.media.v1.Source
 	1,  // 1: castor.media.v1.StartRequest.settings:type_name -> castor.media.v1.PlaybackSettings
 	7,  // 2: castor.media.v1.PlaybackSettings.delivery:type_name -> castor.v1.Delivery
 	8,  // 3: castor.media.v1.PlaybackSettings.subtitles:type_name -> castor.v1.SubtitleSelection
-	9,  // 4: castor.media.v1.Source.stream:type_name -> castor.v1.Stream
-	6,  // 5: castor.media.v1.Source.streams:type_name -> castor.media.v1.Source.Streams
-	10, // 6: castor.media.v1.Source.Streams.streams:type_name -> castor.v1.StreamCandidate
-	0,  // 7: castor.media.v1.CastService.Start:input_type -> castor.media.v1.StartRequest
-	3,  // 8: castor.media.v1.CastService.Stop:input_type -> castor.media.v1.StopRequest
-	11, // 9: castor.media.v1.CastService.Watch:input_type -> castor.v1.WatchRequest
-	2,  // 10: castor.media.v1.CastService.Start:output_type -> castor.media.v1.StartResponse
-	4,  // 11: castor.media.v1.CastService.Stop:output_type -> castor.media.v1.StopResponse
-	12, // 12: castor.media.v1.CastService.Watch:output_type -> castor.v1.WatchResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	9,  // 4: castor.media.v1.PlaybackSettings.audio:type_name -> castor.v1.AudioSelection
+	10, // 5: castor.media.v1.Source.stream:type_name -> castor.v1.Stream
+	6,  // 6: castor.media.v1.Source.streams:type_name -> castor.media.v1.Source.Streams
+	11, // 7: castor.media.v1.Source.Streams.streams:type_name -> castor.v1.StreamCandidate
+	0,  // 8: castor.media.v1.CastService.Start:input_type -> castor.media.v1.StartRequest
+	3,  // 9: castor.media.v1.CastService.Stop:input_type -> castor.media.v1.StopRequest
+	12, // 10: castor.media.v1.CastService.Watch:input_type -> castor.v1.WatchRequest
+	2,  // 11: castor.media.v1.CastService.Start:output_type -> castor.media.v1.StartResponse
+	4,  // 12: castor.media.v1.CastService.Stop:output_type -> castor.media.v1.StopResponse
+	13, // 13: castor.media.v1.CastService.Watch:output_type -> castor.v1.WatchResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_castor_media_v1_cast_proto_init() }
