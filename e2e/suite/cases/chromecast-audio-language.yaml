@@ -1,0 +1,13 @@
+# A source that offers its separate audio in English (default) and French plays the French one when cast.audio asks for it.
+castor:
+  cast: {audio: fr}
+stream:
+  packaging: hls-ts
+  video: {codec: h264, ladder: [240, 360]}
+  audio: {codec: aac, channels: 2, carriage: separate}
+origin:
+  audio-languages: {other: fr}
+receiver:
+  device: chromecast
+expect:
+  audio-in: fr

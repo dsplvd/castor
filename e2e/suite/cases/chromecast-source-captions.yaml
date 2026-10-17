@@ -1,0 +1,13 @@
+# A source that offers a WebVTT rendition reaches the Cast receiver as a text track, fetched cross-origin, instead of a whisper burn-in.
+castor:
+  cast: {subtitles: fr}
+stream:
+  packaging: hls-ts
+  video: {codec: h264, ladder: [240, 360]}
+  audio: {codec: aac, channels: 2}
+origin:
+  source-captions: {language: fr}
+receiver:
+  device: chromecast
+expect:
+  captioned: vtt

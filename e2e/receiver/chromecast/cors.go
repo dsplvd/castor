@@ -2,6 +2,7 @@ package chromecast
 
 import (
 	"context"
+	"io"
 	"mime"
 	"net/http"
 	"slices"
@@ -50,4 +51,28 @@ func (c CORS) refuses(ctx context.Context, content, contentType string) bool {
 	resp.Body.Close()
 	allowed := resp.Header.Get("Access-Control-Allow-Origin")
 	return allowed != "*" && allowed != receiverOrigin
+}
+
+// fetchCaption reads a text track as the web player does, from its own origin, and records it; a server that does not allow that origin is a problem.
+func (c *castSession) fetchCaption(url string) {
+	ctx, cancel := context.WithTimeout(c.session.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		c.session.Problem("caption track %q: %v", url, err)
+		return
+	}
+	req.Header.Set("Origin", receiverOrigin)
+	req.Header.Set("User-Agent", preflightAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.session.Problem("caption track %q: %v", url, err)
+		return
+	}
+	defer resp.Body.Close()
+	if allowed := resp.Header.Get("Access-Control-Allow-Origin"); allowed != "*" && allowed != receiverOrigin {
+		c.session.Problem("caption track %q sends no Access-Control-Allow-Origin", url)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	c.session.Caption(string(body))
 }

@@ -49,6 +49,8 @@ type Received struct {
 	// Playback is how it ended; Ended is when.
 	Playback Playback
 	Ended    time.Time
+	// Captions are the text tracks the sender handed over, as the receiver fetched them.
+	Captions []string
 	// Problems are protocol violations the receiver saw.
 	Problems []string
 	// Holds is how often the sender paused playback, and Held for how long in all.
@@ -112,6 +114,13 @@ func (s *Session) Problem(format string, args ...any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.received.Problems = append(s.received.Problems, fmt.Sprintf(format, args...))
+}
+
+// Caption records a text track the receiver fetched.
+func (s *Session) Caption(body string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.received.Captions = append(s.received.Captions, body)
 }
 
 // Hand starts playing the first URL; any later hand-off is a violation, since a case casts exactly once.
@@ -180,6 +189,7 @@ func (s *Session) Received(t *testing.T, handOff time.Duration) (Received, bool)
 	defer s.mu.Unlock()
 	got := s.received
 	got.Problems = slices.Clone(got.Problems)
+	got.Captions = slices.Clone(got.Captions)
 	got.Holds, got.Held = s.clock.paused()
 	return got, true
 }

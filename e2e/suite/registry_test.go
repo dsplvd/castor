@@ -54,6 +54,8 @@ var (
 		playlist.SplicesAd{},
 		playlist.RewritesMaster{},
 		playlist.AlternateAudio{},
+		playlist.SourceCaptions{},
+		playlist.AudioLanguages{},
 		presentation.DashLive{},
 		presentation.Periods{},
 		faults.Trickles{},
@@ -104,6 +106,8 @@ var (
 		strategy.OneOf[judge.Check]{Called: "delivery", Of: strategy.Registry[judge.Check]{expect.Served{}, expect.Passthrough{}}},
 		strategy.OneOf[judge.Check]{Called: "video", Of: strategy.Registry[judge.Check]{expect.Copied{}, expect.Encoded{}}},
 		expect.Channels{},
+		expect.Captioned{},
+		expect.AudioIn{},
 		strategy.Fixed[judge.Check]{Strategy: expect.Uninterrupted{}},
 		strategy.OneOf[judge.Check]{Called: "frames", Of: strategy.Registry[judge.Check]{expect.Complete{}}},
 	}

@@ -32,6 +32,9 @@ type request struct {
 	Media     struct {
 		ContentID   string `json:"contentId"`
 		ContentType string `json:"contentType"`
+		Tracks      []struct {
+			ContentID string `json:"trackContentId"`
+		} `json:"tracks"`
 	} `json:"media"`
 	MediaSessionID int `json:"mediaSessionId"`
 }
@@ -54,6 +57,9 @@ func (c *castSession) handlers() map[string]func(msg *pb.CastMessage, req reques
 				return map[string]any{"type": "LOAD_FAILED"}
 			}
 			c.content = content
+			for _, track := range req.Media.Tracks {
+				c.fetchCaption(track.ContentID)
+			}
 			c.session.Hand(content, req.Media.ContentType)
 			c.session.Go(func() { c.report(sender, content) })
 			return mediaStatus(content, "BUFFERING", "")
