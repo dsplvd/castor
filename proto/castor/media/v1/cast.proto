@@ -27,14 +27,13 @@ message StartRequest {
 
 // PlaybackSettings is the complete policy resolved by API before media is called.
 message PlaybackSettings {
-  reserved 4;
   castor.v1.Delivery delivery = 1 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
   }];
   uint32 max_height = 2 [(buf.validate.field).uint32.gte = 2];
   castor.v1.SubtitleSelection subtitles = 3 [(buf.validate.field).required = true];
-  castor.v1.AudioSelection audio = 5;
+  castor.v1.AudioSelection audio = 4;
 }
 
 message StartResponse {}

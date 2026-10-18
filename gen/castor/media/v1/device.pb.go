@@ -406,7 +406,7 @@ type DriveRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	CastId string                 `protobuf:"bytes,1,opt,name=cast_id,json=castId,proto3" json:"cast_id,omitempty"`
 	// capabilities are the lent device's, read once its lender has connected to it for the whole cast.
-	Capabilities  *Capabilities `protobuf:"bytes,3,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	Capabilities  *Capabilities `protobuf:"bytes,2,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -637,13 +637,13 @@ func (*AnswerResponse) Descriptor() ([]byte, []int) {
 type Capabilities struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Atomic playback envelopes in preference order; the first is the default.
-	Formats      []*FormatSupport `protobuf:"bytes,9,rep,name=formats,proto3" json:"formats,omitempty"`
-	Provenance   string           `protobuf:"bytes,10,opt,name=provenance,proto3" json:"provenance,omitempty"`
-	Deinterlaces bool             `protobuf:"varint,5,opt,name=deinterlaces,proto3" json:"deinterlaces,omitempty"`
+	Formats      []*FormatSupport `protobuf:"bytes,1,rep,name=formats,proto3" json:"formats,omitempty"`
+	Provenance   string           `protobuf:"bytes,2,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	Deinterlaces bool             `protobuf:"varint,3,opt,name=deinterlaces,proto3" json:"deinterlaces,omitempty"`
 	// served_headers are set on every response the device fetches what it is served from.
-	ServedHeaders map[string]string `protobuf:"bytes,6,rep,name=served_headers,json=servedHeaders,proto3" json:"served_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ServedHeaders map[string]string `protobuf:"bytes,4,rep,name=served_headers,json=servedHeaders,proto3" json:"served_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// self_fetch is whether the device fetches a stream URL itself, rather than only playing what it is served.
-	SelfFetch     bool `protobuf:"varint,7,opt,name=self_fetch,json=selfFetch,proto3" json:"self_fetch,omitempty"`
+	SelfFetch     bool `protobuf:"varint,5,opt,name=self_fetch,json=selfFetch,proto3" json:"self_fetch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -833,11 +833,11 @@ type isFormatSupport_Transport interface {
 }
 
 type FormatSupport_Progressive struct {
-	Progressive *ProgressiveSupport `protobuf:"bytes,4,opt,name=progressive,proto3,oneof"`
+	Progressive *ProgressiveSupport `protobuf:"bytes,1,opt,name=progressive,proto3,oneof"`
 }
 
 type FormatSupport_Hls struct {
-	Hls *HLSSupport `protobuf:"bytes,5,opt,name=hls,proto3,oneof"`
+	Hls *HLSSupport `protobuf:"bytes,2,opt,name=hls,proto3,oneof"`
 }
 
 func (*FormatSupport_Progressive) isFormatSupport_Transport() {}
@@ -849,15 +849,15 @@ type isFormatSupport_Tracks interface {
 }
 
 type FormatSupport_Video struct {
-	Video *VideoSupport `protobuf:"bytes,2,opt,name=video,proto3,oneof"`
+	Video *VideoSupport `protobuf:"bytes,3,opt,name=video,proto3,oneof"`
 }
 
 type FormatSupport_Audio struct {
-	Audio *AudioSupport `protobuf:"bytes,3,opt,name=audio,proto3,oneof"`
+	Audio *AudioSupport `protobuf:"bytes,4,opt,name=audio,proto3,oneof"`
 }
 
 type FormatSupport_Av struct {
-	Av *AVSupport `protobuf:"bytes,7,opt,name=av,proto3,oneof"`
+	Av *AVSupport `protobuf:"bytes,5,opt,name=av,proto3,oneof"`
 }
 
 func (*FormatSupport_Video) isFormatSupport_Tracks() {}
@@ -1200,12 +1200,12 @@ type isDeviceCommand_Command interface {
 }
 
 type DeviceCommand_Call_ struct {
-	Call *DeviceCommand_Call `protobuf:"bytes,7,opt,name=call,proto3,oneof"`
+	Call *DeviceCommand_Call `protobuf:"bytes,1,opt,name=call,proto3,oneof"`
 }
 
 type DeviceCommand_Cancel_ struct {
 	// Cancellation identifies an existing call and is never answered.
-	Cancel *DeviceCommand_Cancel `protobuf:"bytes,4,opt,name=cancel,proto3,oneof"`
+	Cancel *DeviceCommand_Cancel `protobuf:"bytes,2,opt,name=cancel,proto3,oneof"`
 }
 
 func (*DeviceCommand_Call_) isDeviceCommand_Command() {}
@@ -1830,10 +1830,10 @@ var File_castor_media_v1_device_proto protoreflect.FileDescriptor
 
 const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\n" +
-	"\x1ccastor/media/v1/device.proto\x12\x0fcastor.media.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/descriptor.proto\"\x89\x01\n" +
+	"\x1ccastor/media/v1/device.proto\x12\x0fcastor.media.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/descriptor.proto\"{\n" +
 	"\fDriveRequest\x12 \n" +
 	"\acast_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06castId\x12I\n" +
-	"\fcapabilities\x18\x03 \x01(\v2\x1d.castor.media.v1.CapabilitiesB\x06\xbaH\x03\xc8\x01\x01R\fcapabilitiesJ\x04\b\x02\x10\x03R\x06device\"Q\n" +
+	"\fcapabilities\x18\x02 \x01(\v2\x1d.castor.media.v1.CapabilitiesB\x06\xbaH\x03\xc8\x01\x01R\fcapabilities\"Q\n" +
 	"\rDriveResponse\x12@\n" +
 	"\acommand\x18\x01 \x01(\v2\x1e.castor.media.v1.DeviceCommandB\x06\xbaH\x03\xc8\x01\x01R\acommand\"\xe3\x01\n" +
 	"\rAnswerRequest\x12 \n" +
@@ -1844,30 +1844,28 @@ const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\x05error\x18\x04 \x01(\v2\x1c.castor.media.v1.DeviceErrorH\x00R\x05error\x1a\x06\n" +
 	"\x04DoneB\x0f\n" +
 	"\x06answer\x12\x05\xbaH\x02\b\x01\"\x10\n" +
-	"\x0eAnswerResponse\"\xd3\x03\n" +
+	"\x0eAnswerResponse\"\xec\x02\n" +
 	"\fCapabilities\x12E\n" +
-	"\aformats\x18\t \x03(\v2\x1e.castor.media.v1.FormatSupportB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x01R\aformats\x12\x1e\n" +
+	"\aformats\x18\x01 \x03(\v2\x1e.castor.media.v1.FormatSupportB\v\xbaH\b\x92\x01\x05\b\x01\x10\x80\x01R\aformats\x12\x1e\n" +
 	"\n" +
-	"provenance\x18\n" +
-	" \x01(\tR\n" +
+	"provenance\x18\x02 \x01(\tR\n" +
 	"provenance\x12\"\n" +
-	"\fdeinterlaces\x18\x05 \x01(\bR\fdeinterlaces\x12p\n" +
-	"\x0eserved_headers\x18\x06 \x03(\v20.castor.media.v1.Capabilities.ServedHeadersEntryB\x17\xbaH\x14\x9a\x01\x11\"\x05r\x03\xc0\x01\x01*\br\x06\xc8\x01\x00\xc0\x01\x02R\rservedHeaders\x12\x1d\n" +
+	"\fdeinterlaces\x18\x03 \x01(\bR\fdeinterlaces\x12p\n" +
+	"\x0eserved_headers\x18\x04 \x03(\v20.castor.media.v1.Capabilities.ServedHeadersEntryB\x17\xbaH\x14\x9a\x01\x11\"\x05r\x03\xc0\x01\x01*\br\x06\xc8\x01\x00\xc0\x01\x02R\rservedHeaders\x12\x1d\n" +
 	"\n" +
-	"self_fetch\x18\a \x01(\bR\tselfFetch\x1a@\n" +
+	"self_fetch\x18\x05 \x01(\bR\tselfFetch\x1a@\n" +
 	"\x12ServedHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\b\x10\tJ\x04\b\v\x10\fR\n" +
-	"containersR\x05videoR\x05audioR\x10served_containerR\bcaptionsR\vhls_web_vtt\"\xa8\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x03\n" +
 	"\rFormatSupport\x12G\n" +
-	"\vprogressive\x18\x04 \x01(\v2#.castor.media.v1.ProgressiveSupportH\x00R\vprogressive\x12/\n" +
-	"\x03hls\x18\x05 \x01(\v2\x1b.castor.media.v1.HLSSupportH\x00R\x03hls\x125\n" +
-	"\x05video\x18\x02 \x01(\v2\x1d.castor.media.v1.VideoSupportH\x01R\x05video\x125\n" +
-	"\x05audio\x18\x03 \x01(\v2\x1d.castor.media.v1.AudioSupportH\x01R\x05audio\x12,\n" +
-	"\x02av\x18\a \x01(\v2\x1a.castor.media.v1.AVSupportH\x01R\x02av\x12K\n" +
+	"\vprogressive\x18\x01 \x01(\v2#.castor.media.v1.ProgressiveSupportH\x00R\vprogressive\x12/\n" +
+	"\x03hls\x18\x02 \x01(\v2\x1b.castor.media.v1.HLSSupportH\x00R\x03hls\x125\n" +
+	"\x05video\x18\x03 \x01(\v2\x1d.castor.media.v1.VideoSupportH\x01R\x05video\x125\n" +
+	"\x05audio\x18\x04 \x01(\v2\x1d.castor.media.v1.AudioSupportH\x01R\x05audio\x12,\n" +
+	"\x02av\x18\x05 \x01(\v2\x1a.castor.media.v1.AVSupportH\x01R\x02av\x12K\n" +
 	"\bcaptions\x18\x06 \x03(\x0e2\x1e.castor.media.v1.CaptionFormatB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\bcaptionsB\x12\n" +
 	"\ttransport\x12\x05\xbaH\x02\b\x01B\x0f\n" +
-	"\x06tracks\x12\x05\xbaH\x02\b\x01J\x04\b\x01\x10\x02R\tcontainer\"\x85\x01\n" +
+	"\x06tracks\x12\x05\xbaH\x02\b\x01\"\x85\x01\n" +
 	"\tAVSupport\x12;\n" +
 	"\x05video\x18\x01 \x01(\v2\x1d.castor.media.v1.VideoSupportB\x06\xbaH\x03\xc8\x01\x01R\x05video\x12;\n" +
 	"\x05audio\x18\x02 \x01(\v2\x1d.castor.media.v1.AudioSupportB\x06\xbaH\x03\xc8\x01\x01R\x05audio\"\xe5\x01\n" +
@@ -1897,10 +1895,10 @@ const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\fAudioSupport\x12=\n" +
 	"\x05codec\x18\x01 \x01(\x0e2\x1b.castor.media.v1.AudioCodecB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05codec\x12!\n" +
-	"\fmax_channels\x18\x02 \x01(\rR\vmaxChannels\"\xd0\t\n" +
+	"\fmax_channels\x18\x02 \x01(\rR\vmaxChannels\"\x8e\t\n" +
 	"\rDeviceCommand\x129\n" +
-	"\x04call\x18\a \x01(\v2#.castor.media.v1.DeviceCommand.CallH\x00R\x04call\x12?\n" +
-	"\x06cancel\x18\x04 \x01(\v2%.castor.media.v1.DeviceCommand.CancelH\x00R\x06cancel\x1a\xb5\x02\n" +
+	"\x04call\x18\x01 \x01(\v2#.castor.media.v1.DeviceCommand.CallH\x00R\x04call\x12?\n" +
+	"\x06cancel\x18\x02 \x01(\v2%.castor.media.v1.DeviceCommand.CancelH\x00R\x06cancel\x1a\xb5\x02\n" +
 	"\x04Call\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x129\n" +
 	"\x04play\x18\x02 \x01(\v2#.castor.media.v1.DeviceCommand.PlayH\x00R\x04play\x12F\n" +
@@ -1929,7 +1927,7 @@ const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\x06Cancel\x12&\n" +
 	"\n" +
 	"command_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tcommandIdB\x10\n" +
-	"\acommand\x12\x05\xbaH\x02\b\x01J\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x02idR\x04playR\tawait_endR\x05pauseR\x06resume\"\xcd\x01\n" +
+	"\acommand\x12\x05\xbaH\x02\b\x01\"\xcd\x01\n" +
 	"\vDeviceError\x12#\n" +
 	"\amessage\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\amessage\x127\n" +
 	"\x04gone\x18\x02 \x01(\v2!.castor.media.v1.DeviceError.GoneH\x00R\x04gone\x1aP\n" +

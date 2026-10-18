@@ -77,7 +77,6 @@ message Source {
 
 // Preferences are what one cast asks; each unset field takes the server's configuration.
 message Preferences {
-  reserved 4;
   optional Delivery delivery = 1 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
@@ -87,7 +86,7 @@ message Preferences {
   // Absent subtitles inherit the server's default; an explicit mode replaces it.
   SubtitleSelection subtitles = 3;
   // Ordered audio languages to try before the source's default track; absent takes the server's default.
-  AudioSelection audio = 5;
+  AudioSelection audio = 4;
 }
 
 message AudioSelection {
@@ -95,16 +94,18 @@ message AudioSelection {
 }
 
 message SubtitleSelection {
-  reserved 2, 3, 4;
   oneof mode {
     option (buf.validate.oneof).required = true;
     google.protobuf.Empty disabled = 1;
-    SubtitlePreferences preferred_languages = 5;
+    SubtitlePreferences preferred_languages = 2;
   }
 }
 
 message SubtitlePreferences {
-  repeated string languages = 1 [(buf.validate.field).repeated.min_items = 1, (buf.validate.field).repeated.items.string.pattern = "^[a-z]{2,3}$"];
+  repeated string languages = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.items.string.pattern = "^[a-z]{2,3}$"
+  ];
   // Generate captions with Whisper if the source has no usable caption in the selected language.
   bool transcribe_if_missing = 2;
 }

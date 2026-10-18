@@ -391,7 +391,7 @@ type Preferences struct {
 	// Absent subtitles inherit the server's default; an explicit mode replaces it.
 	Subtitles *SubtitleSelection `protobuf:"bytes,3,opt,name=subtitles,proto3" json:"subtitles,omitempty"`
 	// Ordered audio languages to try before the source's default track; absent takes the server's default.
-	Audio         *AudioSelection `protobuf:"bytes,5,opt,name=audio,proto3" json:"audio,omitempty"`
+	Audio         *AudioSelection `protobuf:"bytes,4,opt,name=audio,proto3" json:"audio,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -573,7 +573,7 @@ type SubtitleSelection_Disabled struct {
 }
 
 type SubtitleSelection_PreferredLanguages struct {
-	PreferredLanguages *SubtitlePreferences `protobuf:"bytes,5,opt,name=preferred_languages,json=preferredLanguages,proto3,oneof"`
+	PreferredLanguages *SubtitlePreferences `protobuf:"bytes,2,opt,name=preferred_languages,json=preferredLanguages,proto3,oneof"`
 }
 
 func (*SubtitleSelection_Disabled) isSubtitleSelection_Mode() {}
@@ -1489,22 +1489,22 @@ const file_castor_v1_cast_proto_rawDesc = "" +
 	"\burl.http\x12\x1cmust be an http or https URL\x1aKthis.isUri() && (this.startsWith('http://') || this.startsWith('https://'))r\x03\x18\x80@R\x04urls\x1aT\n" +
 	"\x0fResolvedStreams\x12A\n" +
 	"\astreams\x18\x01 \x03(\v2\x1a.castor.v1.StreamCandidateB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc0\fR\astreamsB\x0f\n" +
-	"\x06source\x12\x05\xbaH\x02\b\x01\"\x8b\x02\n" +
+	"\x06source\x12\x05\xbaH\x02\b\x01\"\x85\x02\n" +
 	"\vPreferences\x12@\n" +
 	"\bdelivery\x18\x01 \x01(\x0e2\x13.castor.v1.DeliveryB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00H\x00R\bdelivery\x88\x01\x01\x12+\n" +
 	"\n" +
 	"max_height\x18\x02 \x01(\rB\a\xbaH\x04*\x02(\x02H\x01R\tmaxHeight\x88\x01\x01\x12:\n" +
 	"\tsubtitles\x18\x03 \x01(\v2\x1c.castor.v1.SubtitleSelectionR\tsubtitles\x12/\n" +
-	"\x05audio\x18\x05 \x01(\v2\x19.castor.v1.AudioSelectionR\x05audioB\v\n" +
+	"\x05audio\x18\x04 \x01(\v2\x19.castor.v1.AudioSelectionR\x05audioB\v\n" +
 	"\t_deliveryB\r\n" +
-	"\v_max_heightJ\x04\b\x04\x10\x05\"H\n" +
+	"\v_max_height\"H\n" +
 	"\x0eAudioSelection\x126\n" +
-	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\xbd\x01\n" +
+	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\xab\x01\n" +
 	"\x11SubtitleSelection\x124\n" +
 	"\bdisabled\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\bdisabled\x12Q\n" +
-	"\x13preferred_languages\x18\x05 \x01(\v2\x1e.castor.v1.SubtitlePreferencesH\x00R\x12preferredLanguagesB\r\n" +
-	"\x04mode\x12\x05\xbaH\x02\b\x01J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\x83\x01\n" +
+	"\x13preferred_languages\x18\x02 \x01(\v2\x1e.castor.v1.SubtitlePreferencesH\x00R\x12preferredLanguagesB\r\n" +
+	"\x04mode\x12\x05\xbaH\x02\b\x01\"\x83\x01\n" +
 	"\x13SubtitlePreferences\x128\n" +
 	"\tlanguages\x18\x01 \x03(\tB\x1a\xbaH\x17\x92\x01\x14\b\x01\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\x122\n" +
 	"\x15transcribe_if_missing\x18\x02 \x01(\bR\x13transcribeIfMissing\"0\n" +
