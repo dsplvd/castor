@@ -38,6 +38,8 @@ type Program struct {
 	// NeedsTrackSelection means handing the source URL to a device cannot
 	// guarantee the chosen language, even if its track happens to be first.
 	NeedsTrackSelection bool
+	// RequiresRelay forbids handing a transformed source directly to a receiver.
+	RequiresRelay bool
 
 	// ClockInput, Offsets, EndPolicy: how independently fetched inputs share a timeline.
 	ClockInput InputID
@@ -217,7 +219,7 @@ func (p Program) SelfFetchable() bool {
 	if len(p.Inputs) != 1 {
 		return false
 	}
-	if p.NeedsTrackSelection {
+	if p.NeedsTrackSelection || p.RequiresRelay {
 		return false
 	}
 	if slices.ContainsFunc(p.Tracks, func(track TrackRef) bool { return track.Index != 0 }) {
@@ -233,6 +235,7 @@ func (p Program) Clone() Program {
 		Inputs:              slices.Clone(p.Inputs),
 		Tracks:              slices.Clone(p.Tracks),
 		NeedsTrackSelection: p.NeedsTrackSelection,
+		RequiresRelay:       p.RequiresRelay,
 		ClockInput:          p.ClockInput,
 		Offsets:             maps.Clone(p.Offsets),
 		EndPolicy:           p.EndPolicy,

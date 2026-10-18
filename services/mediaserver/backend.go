@@ -50,13 +50,15 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 	resolverConfig, whisperConfig := c.Servers.Media.Resolver.Config, c.Servers.Media.Whisper
 	return func(asked *mediav1.PlaybackSettings) cast.Caster {
 		client := web.New(fetchTimeout)
+		timelines := follow.New(client, formats, follow.Repackager(ffmpegBinary))
+		resolver := source.NewResolver(client, media.HeightCap(asked.GetMaxHeight()), asked.GetAudio().GetLanguages(), formats)
 		return caster{
 			Ranker: rank.New(resolverConfig, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
-				return machinery.Probes.Link(probe.Link{URL: s.URL, Headers: s.Headers, InputArgs: formats.InputArgs(s.ContentType, 0)}, fetchTimeout)
+				return candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: machinery.Probes}
 			}),
 			machinery:     machinery,
 			client:        client,
-			timelines:     follow.New(client, formats, follow.Repackager(ffmpegBinary)),
+			timelines:     timelines,
 			transcription: transcription(whisperConfig, asked.GetSubtitles()),
 			asked:         asked,
 		}
@@ -119,14 +121,6 @@ type caster struct {
 	timelines     execute.Timelines
 	transcription func(context.Context, string) execute.Subtitles
 	asked         *mediav1.PlaybackSettings
-}
-
-// Measure names what a link carries when it says nothing, then measures it.
-func (k caster) Measure(ctx context.Context, s *source.Stream) (*source.Stream, error) {
-	if s.ContentType == "" {
-		s.ContentType = formats.Identify(ctx, k.client, s.URL)
-	}
-	return k.Ranker.Measure(ctx, s)
 }
 
 func (k caster) Play(ctx context.Context, device execute.Device, publisher output.Publisher, streams []*source.Stream, turns recovery.Turns) error {

@@ -21,13 +21,23 @@ const (
 
 var errIdle = errors.New("the origin sent nothing for too long")
 
-// read fetches a segment whole, decrypted when the origin encrypted it.
+// read fetches a segment whole, then decrypts and unwraps its media payload.
 func (f *feed) read(ctx context.Context, s timeline.Segment) ([]byte, error) {
 	b, err := f.pull(ctx, s.URI, s.Range, segmentLimit)
-	if err != nil || !decryptable(s.Key) {
+	if err != nil {
 		return b, err
 	}
-	return f.decrypt(ctx, b, s.Key)
+	if decryptable(s.Key) {
+		b, err = f.decrypt(ctx, b, s.Key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	body, wrapped, err := unwrapPixels(b)
+	if wrapped {
+		f.unwrapped.Store(true)
+	}
+	return body, err
 }
 
 func (f *feed) initBytes(ctx context.Context, m timeline.Map) ([]byte, error) {

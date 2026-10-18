@@ -214,3 +214,64 @@ func TestRepublisherRetainsPlaylistRefusalUntilRecovery(t *testing.T) {
 		}
 	}
 }
+
+type inspectionFunc func(context.Context) (media.ProbeInfo, media.Reach, error)
+
+func (f inspectionFunc) Probe(ctx context.Context) (media.ProbeInfo, media.Reach, error) {
+	return f(ctx)
+}
+
+func TestInspectionCancellationJoinsOriginBeforeReturning(t *testing.T) {
+	origin := &closingOrigin{started: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}
+	release := sync.OnceFunc(func() { close(origin.release) })
+	t.Cleanup(release)
+	program, err := source.ProgramFor(&source.Stream{URL: sourcetest.URL(t, "https://origin.example/index.m3u8"), ContentType: media.HLS})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := New(&sourcetest.Document{}, source.Formats{shape{timeline: origin}}, nil).Probe(ctx, program, func(p media.Program) media.Prober {
+			return inspectionFunc(func(ctx context.Context) (media.ProbeInfo, media.Reach, error) {
+				in, _ := p.PrimaryInput()
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, in.URL.ResolveReference(&url.URL{Path: "primary/0"}).String(), nil)
+				if err != nil {
+					return media.ProbeInfo{}, media.ReachUnproven, err
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil {
+					_ = resp.Body.Close()
+				}
+				return media.ProbeInfo{}, media.ReachUnproven, err
+			})
+		})
+		done <- err
+	}()
+	select {
+	case <-origin.started:
+	case <-time.After(time.Second):
+		t.Fatal("inspection did not start reading")
+	}
+	cancel()
+	select {
+	case <-origin.cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("origin was not cancelled")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("inspection returned before origin cleanup: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	release()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("lost cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("inspection failed to join the released origin")
+	}
+}
