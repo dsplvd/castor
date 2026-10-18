@@ -79,9 +79,30 @@ func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav
 	if err := retryTransportLocked(ctx, func() error {
 		return s.action(ctx, "Play", play)
 	}); err != nil {
+		// A renderer may start playing without acknowledging Play before its deadline.
+		// Do not tear down that stream, or resend Play, if its state confirms the handover.
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) && s.playingStream(ctx, streamURL) {
+			slog.InfoContext(ctx, "device confirmed playback after Play timed out", "device", s.name())
+			return nil
+		}
+		err = errors.Join(err, context.Cause(ctx))
 		return fmt.Errorf("starting playback: %w", err)
 	}
 	return nil
+}
+
+// playingStream confirms both playback and the resource, since an older stream playing is not success.
+func (s *session) playingStream(ctx context.Context, streamURL *url.URL) bool {
+	ctx, cancel := context.WithTimeout(ctx, actionTimeout)
+	defer cancel()
+	state, err := s.transportState(ctx)
+	if err != nil || state != "PLAYING" {
+		return false
+	}
+	var response struct{ CurrentURI string }
+	err = s.transport.SOAPClient.PerformActionCtx(ctx, s.transport.Service.ServiceType,
+		"GetMediaInfo", &struct{ InstanceID string }{"0"}, &response)
+	return err == nil && response.CurrentURI == streamURL.String() && ctx.Err() == nil
 }
 
 // shownCaption is the one caption a renderer is told of: the default, else the first.
@@ -137,8 +158,13 @@ func isTransportLocked(err error) bool {
 func (s *session) action(ctx context.Context, name string, request any) error {
 	ctx, cancel := context.WithTimeout(ctx, actionTimeout)
 	defer cancel()
-	return s.transport.SOAPClient.PerformActionCtx(
+	err := s.transport.SOAPClient.PerformActionCtx(
 		ctx, s.transport.Service.ServiceType, name, request, nil)
+	// goupnp formats HTTP errors with %v, so preserve the context cause structurally.
+	if err != nil && ctx.Err() != nil {
+		return errors.Join(err, context.Cause(ctx))
+	}
+	return err
 }
 
 const transportQuery = "GetTransportInfo"
