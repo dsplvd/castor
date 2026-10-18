@@ -9,13 +9,18 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/internal/settings"
 	"github.com/stupside/castor/internal/transport"
+	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
 // Media runs a media server in this process, for an API server that names none.
 type Media func(ctx context.Context, cmd *cli.Command) (transport.Endpoint, func(), error)
 type Scraping func(context.Context, *cli.Command) (transport.Endpoint, func(), error)
+
+// DeviceDiscovery supplies devices found outside Castor's Go network discovery.
+type DeviceDiscovery func(context.Context) ([]*castorv1.Device, error)
 
 // Command is `castor api-server`: the API server alone, casting through the media server servers.media.url names, until interrupted.
 func Command() *cli.Command {
@@ -47,12 +52,17 @@ func Command() *cli.Command {
 
 // Embedded runs an API server in this process until stop, on loopback.
 func Embedded(media Media, scraping Scraping) func(ctx context.Context, cmd *cli.Command) (api transport.Endpoint, stop func(), err error) {
+	return EmbeddedWithDiscovery(media, scraping, nil)
+}
+
+// EmbeddedWithDiscovery accepts an external device source while Castor retains device control.
+func EmbeddedWithDiscovery(media Media, scraping Scraping, discovery DeviceDiscovery) func(ctx context.Context, cmd *cli.Command) (api transport.Endpoint, stop func(), err error) {
 	return func(ctx context.Context, cmd *cli.Command) (transport.Endpoint, func(), error) {
 		cfg, err := settings.Load(cmd, defaults())
 		if err != nil {
 			return transport.Endpoint{}, nil, err
 		}
-		srv, stopMedia, err := cfg.server(ctx, cmd, media, scraping)
+		srv, stopMedia, err := cfg.server(ctx, cmd, media, scraping, discovery)
 		if err != nil {
 			return transport.Endpoint{}, nil, err
 		}
@@ -70,7 +80,7 @@ func Embedded(media Media, scraping Scraping) func(ctx context.Context, cmd *cli
 }
 
 // server is the API server cfg describes, casting through the media server it names, or one media runs here; stop ends the one run here.
-func (c *Config) server(ctx context.Context, cmd *cli.Command, media Media, resolver Scraping) (srv *Server, stop func(), err error) {
+func (c *Config) server(ctx context.Context, cmd *cli.Command, media Media, resolver Scraping, discovery DeviceDiscovery) (srv *Server, stop func(), err error) {
 	at, stop := transport.Endpoint{URL: c.Servers.Media.URL, Token: c.Servers.Media.Token}, func() {}
 	if at.URL == "" {
 		if at, stop, err = media(ctx, cmd); err != nil {
@@ -87,7 +97,11 @@ func (c *Config) server(ctx context.Context, cmd *cli.Command, media Media, reso
 	}
 	stopMedia := stop
 	stop = func() { stopScraping(); stopMedia() }
-	if srv, err = New(c.backend(at, scraping), c.Cast); err != nil {
+	backend := c.backend(at, scraping)
+	if discovery != nil {
+		backend.Discover = device.ExternalDiscovery(discovery)
+	}
+	if srv, err = New(backend, c.Cast); err != nil {
 		stop()
 		return nil, nil, fmt.Errorf("validating config: %w", err)
 	}

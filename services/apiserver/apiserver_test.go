@@ -362,8 +362,10 @@ func serve(t *testing.T, s setup) api {
 	if reflect.DeepEqual(cast, apiserver.CastConfig{}) {
 		cast = shipped
 	}
+	families := []device.Family{s.family}
 	srv, err := apiserver.New(apiserver.Backend{
-		Devices:  device.Registry{Families: []device.Family{s.family}, Timeout: time.Second},
+		Devices:  device.Registry{Families: families, Timeout: time.Second},
+		Discover: device.NetworkDiscovery(families),
 		Media:    mediaclient.New(mediaAPI.Client(), mediaAPI.URL),
 		Scraping: scrapingclient.New(scrapingAPI.Client(), scrapingAPI.URL),
 	}, cast)

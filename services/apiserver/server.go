@@ -18,6 +18,7 @@ import (
 // Backend is what the API server casts with, bound at the composition root.
 type Backend struct {
 	Devices  device.Registry
+	Discover device.Discovery
 	Media    *mediaclient.Client
 	Scraping cast.Resolver
 }
@@ -38,7 +39,7 @@ func New(b Backend, cfg CastConfig) (*Server, error) {
 	if err := protovalidate.Validate(defaults); err != nil {
 		return nil, fmt.Errorf("cast: %w", err)
 	}
-	devices := device.NewDirectory(b.Devices)
+	devices := device.NewDirectory(b.Devices, b.Discover)
 	casts := cast.New(defaults, devices, b.Media, b.Scraping)
 
 	valid := transport.Options()

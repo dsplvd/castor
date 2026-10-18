@@ -15,6 +15,31 @@ import (
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
 )
 
+func directoryWithFamilies(reach Registry) *Directory {
+	return NewDirectory(reach, NetworkDiscovery(reach.Families))
+}
+
+// echoing is a family whose devices answer every sweep more than once, as SSDP and mDNS announce.
+type echoing struct{ stub }
+
+func (echoing) Discover(context.Context) []Info {
+	bedroom := Info{ID: "uuid-1", Name: "Bedroom", Type: "push", Address: "10.0.0.9"}
+	kitchen := Info{ID: "uuid-2", Name: "Kitchen", Type: "push", Address: "10.0.0.8"}
+	return []Info{bedroom, kitchen, bedroom}
+}
+
+func TestADeviceAnnouncedTwiceIsListedOnce(t *testing.T) {
+	d := directoryWithFamilies(Registry{Families: []Family{echoing{}}, Timeout: time.Second})
+	listed, err := d.ListDevices(t.Context(), &castorv1.ListDevicesRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := listed.GetDevices()
+	if len(found) != 2 || found[0].GetId() != "push:uuid-1" || found[1].GetId() != "push:uuid-2" {
+		t.Errorf("ListDevices = %+v, want Bedroom then Kitchen, once each", found)
+	}
+}
+
 // moving is a family whose one device answers only at its current address, which changes as a DHCP lease would.
 type moving struct {
 	stub
@@ -29,7 +54,7 @@ type typedStub struct {
 func (s typedStub) Type() Type { return s.kind }
 
 func TestPinnedDeviceWithDisabledFamilyIsRejected(t *testing.T) {
-	d := NewDirectory(Registry{Families: []Family{typedStub{kind: "dlna"}}})
+	d := directoryWithFamilies(Registry{Families: []Family{typedStub{kind: "dlna"}}})
 	got, err := d.Target(t.Context(), &castorv1.Target{Target: &castorv1.Target_Pinned_{Pinned: &castorv1.Target_Pinned{Type: castorv1.DeviceType_DEVICE_TYPE_ROKU, Address: "10.0.0.9"}}})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || got != (Info{}) {
 		t.Errorf("Target = %+v, %v, want no device and invalid_argument", got, err)
@@ -58,7 +83,7 @@ func (idle) Close() error                        { return nil }
 
 func TestADeviceThatMovedSinceItWasListedIsFoundAgainToConnect(t *testing.T) {
 	family := &moving{at: "10.0.0.9"}
-	d := NewDirectory(Registry{Families: []Family{family}, Timeout: time.Second})
+	d := directoryWithFamilies(Registry{Families: []Family{family}, Timeout: time.Second})
 	listed, err := d.ListDevices(t.Context(), &castorv1.ListDevicesRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +113,7 @@ func (manyDevices) Discover(context.Context) []Info {
 }
 func TestDiscoveryCacheExpiresWithoutReleasingActiveOwnership(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		d := NewDirectory(Registry{Families: []Family{manyDevices{}}, Timeout: time.Second})
+		d := directoryWithFamilies(Registry{Families: []Family{manyDevices{}}, Timeout: time.Second})
 		d.discover(t.Context())
 		if len(d.seen) != maxSeenDevices {
 			t.Fatalf("cache grew to %d", len(d.seen))

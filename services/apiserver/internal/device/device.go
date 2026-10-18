@@ -1,4 +1,4 @@
-// Package device is the port every device family implements, the registry reaching them, and the directory the API lists and lends them from.
+// Package device discovers devices, connects through their protocol families, and manages API-visible device ownership.
 package device
 
 import (
