@@ -165,7 +165,7 @@ func (s *session) AwaitEnd(ctx context.Context) error {
 func (s *session) Capabilities() *mediav1.Capabilities {
 	caps := &mediav1.Capabilities{Provenance: "Castor Roku channel defaults; model/firmware limits unverified", SelfFetch: true}
 	for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3} {
-		tracks := &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}}
+		tracks := &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.H264Support(), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}}
 		caps.Formats = append(caps.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{}}, Tracks: tracks})
 		for _, container := range []mediav1.ProgressiveSupport_Container{mediav1.ProgressiveSupport_CONTAINER_MP4, mediav1.ProgressiveSupport_CONTAINER_MKV} {
 			caps.Formats = append(caps.Formats, &mediav1.FormatSupport{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: container}}, Tracks: tracks})

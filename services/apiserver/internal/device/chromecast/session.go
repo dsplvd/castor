@@ -212,7 +212,7 @@ func (s *session) Capabilities() *mediav1.Capabilities {
 		for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3, mediav1.AudioCodec_AUDIO_CODEC_MP3} {
 			caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
 				Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: container}},
-				Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
+				Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.H264Support(), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
 				Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
 			})
 		}
@@ -221,13 +221,13 @@ func (s *session) Capabilities() *mediav1.Capabilities {
 	for _, audio := range []mediav1.AudioCodec{mediav1.AudioCodec_AUDIO_CODEC_AAC, mediav1.AudioCodec_AUDIO_CODEC_AC3, mediav1.AudioCodec_AUDIO_CODEC_EAC3, mediav1.AudioCodec_AUDIO_CODEC_MP3} {
 		caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
 			Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{Subtitles: mediav1.HLSSupport_SUBTITLES_WEBVTT}},
-			Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_H264), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
+			Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.H264Support(), Audio: &mediav1.AudioSupport{Codec: audio, MaxChannels: 6}}},
 			Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
 		})
 	}
 	caps.Formats = append(caps.Formats, &mediav1.FormatSupport{
 		Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_WEBM}},
-		Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: device.VideoSupport(mediav1.VideoCodec_VIDEO_CODEC_VP8), Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_VORBIS}}},
+		Tracks:    &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: &mediav1.VideoSupport_Vp8{Vp8: &mediav1.VP8Support{}}}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_VORBIS}}},
 		Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
 	})
 	return caps

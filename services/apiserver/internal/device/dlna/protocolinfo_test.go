@@ -15,7 +15,7 @@ func TestParseSinkProtocolInfo(t *testing.T) {
 	caps, _ := parseSinkProtocolInfo(avcSink)
 	withHEVC, _ := parseSinkProtocolInfo(avcSink + ",http-get:*:video/mp2t:DLNA.ORG_PN=HEVC_TS_MAIN_HD_AAC")
 	if !slices.ContainsFunc(withHEVC.Formats, func(f *mediav1.FormatSupport) bool {
-		return f.GetAv().GetVideo().GetCodec() == mediav1.VideoCodec_VIDEO_CODEC_HEVC
+		return f.GetAv().GetVideo().GetHevc() != nil
 	}) {
 		t.Fatal("HEVC tuple missing")
 	}

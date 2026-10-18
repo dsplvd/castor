@@ -76,10 +76,10 @@ func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Cont
 			captions = append(captions, mediav1.CaptionFormat_CAPTION_FORMAT_VTT)
 		}
 		ct, cok := containerFromMIME(mime)
-		v, vok := codecFromProfile(mime, pn)
+		video := videoFromProfile(mime, pn)
 		a, aok := audioFromProfile(mime, pn)
 		// A separate audio-only profile says nothing about this video container.
-		if !cok || !vok || !aok {
+		if !cok || video == nil || !aok {
 			if cok {
 				if _, exists := sinks[ct]; !exists {
 					sinks[ct] = sinkEntry{mime: fields[2], features: fields[3]}
@@ -87,12 +87,14 @@ func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Cont
 			}
 			continue
 		}
-		video := device.VideoSupport(v)
-		if strings.Contains(pn, "_BL_") {
-			video.Profiles = []mediav1.Profile{mediav1.Profile_PROFILE_BASELINE, mediav1.Profile_PROFILE_CONSTRAINED_BASELINE}
+		if h264 := video.GetH264(); h264 != nil && strings.Contains(pn, "_BL_") {
+			h264.Profiles = []mediav1.H264Support_Profile{mediav1.H264Support_PROFILE_BASELINE, mediav1.H264Support_PROFILE_CONSTRAINED_BASELINE}
 		}
-		if strings.Contains(pn, "_MP_") {
-			video.Profiles = []mediav1.Profile{mediav1.Profile_PROFILE_MAIN}
+		if h264 := video.GetH264(); h264 != nil && strings.Contains(pn, "_MP_") {
+			h264.Profiles = []mediav1.H264Support_Profile{mediav1.H264Support_PROFILE_MAIN}
+		}
+		if hevc := video.GetHevc(); hevc != nil && strings.Contains(pn, "_MP_") {
+			hevc.Profiles = []mediav1.HEVCSupport_Profile{mediav1.HEVCSupport_PROFILE_MAIN}
 		}
 		progressive := mediav1.ProgressiveSupport_CONTAINER_MP4
 		if ct == mediav1.Container_CONTAINER_MPEGTS {
@@ -125,15 +127,18 @@ func parseSinkProtocolInfo(sink string) (*mediav1.Capabilities, map[mediav1.Cont
 
 }
 
-// codecFromProfile reads the DLNA.ORG_PN token (already upper-cased), failing that the MIME type.
-func codecFromProfile(mime, pn string) (mediav1.VideoCodec, bool) {
+// videoFromProfile reads the DLNA.ORG_PN token (already upper-cased), failing that the MIME type.
+func videoFromProfile(mime, pn string) *mediav1.VideoSupport {
 	switch {
 	case strings.Contains(pn, "HEVC") || strings.Contains(pn, "H265") || strings.Contains(mime, "hevc") || strings.Contains(mime, "h265"):
-		return mediav1.VideoCodec_VIDEO_CODEC_HEVC, true
+		return &mediav1.VideoSupport{Codec: &mediav1.VideoSupport_Hevc{Hevc: &mediav1.HEVCSupport{
+			Profiles:  []mediav1.HEVCSupport_Profile{mediav1.HEVCSupport_PROFILE_MAIN, mediav1.HEVCSupport_PROFILE_MAIN_10},
+			BitDepths: []uint32{8, 10},
+		}}}
 	case strings.Contains(pn, "AVC") || strings.Contains(pn, "H264") || strings.Contains(mime, "avc") || strings.Contains(mime, "h264"):
-		return mediav1.VideoCodec_VIDEO_CODEC_H264, true
+		return device.H264Support()
 	}
-	return mediav1.VideoCodec_VIDEO_CODEC_UNSPECIFIED, false
+	return nil
 }
 
 func audioFromProfile(mime, pn string) (mediav1.AudioCodec, bool) {
