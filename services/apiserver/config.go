@@ -111,7 +111,7 @@ func defaults() Config {
 func (c CastConfig) settings() *mediav1.PlaybackSettings {
 	subtitles := &castorv1.SubtitleSelection{}
 	if len(c.Subtitles.Languages) > 0 {
-		subtitles.Mode = &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.SubtitlePreferences{Languages: c.Subtitles.Languages, TranscribeIfMissing: c.Subtitles.TranscribeIfMissing}}
+		subtitles.Mode = &castorv1.SubtitleSelection_Preferences{Preferences: &castorv1.SubtitlePreferences{Languages: c.Subtitles.Languages, TranscribeIfMissing: c.Subtitles.TranscribeIfMissing}}
 	} else {
 		subtitles.Mode = &castorv1.SubtitleSelection_Disabled{Disabled: &emptypb.Empty{}}
 	}

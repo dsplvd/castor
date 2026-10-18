@@ -503,7 +503,7 @@ type SubtitleSelection struct {
 	// Types that are valid to be assigned to Mode:
 	//
 	//	*SubtitleSelection_Disabled
-	//	*SubtitleSelection_PreferredLanguages
+	//	*SubtitleSelection_Preferences
 	Mode          isSubtitleSelection_Mode `protobuf_oneof:"mode"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -555,10 +555,10 @@ func (x *SubtitleSelection) GetDisabled() *emptypb.Empty {
 	return nil
 }
 
-func (x *SubtitleSelection) GetPreferredLanguages() *SubtitlePreferences {
+func (x *SubtitleSelection) GetPreferences() *SubtitlePreferences {
 	if x != nil {
-		if x, ok := x.Mode.(*SubtitleSelection_PreferredLanguages); ok {
-			return x.PreferredLanguages
+		if x, ok := x.Mode.(*SubtitleSelection_Preferences); ok {
+			return x.Preferences
 		}
 	}
 	return nil
@@ -572,13 +572,13 @@ type SubtitleSelection_Disabled struct {
 	Disabled *emptypb.Empty `protobuf:"bytes,1,opt,name=disabled,proto3,oneof"`
 }
 
-type SubtitleSelection_PreferredLanguages struct {
-	PreferredLanguages *SubtitlePreferences `protobuf:"bytes,2,opt,name=preferred_languages,json=preferredLanguages,proto3,oneof"`
+type SubtitleSelection_Preferences struct {
+	Preferences *SubtitlePreferences `protobuf:"bytes,2,opt,name=preferences,proto3,oneof"`
 }
 
 func (*SubtitleSelection_Disabled) isSubtitleSelection_Mode() {}
 
-func (*SubtitleSelection_PreferredLanguages) isSubtitleSelection_Mode() {}
+func (*SubtitleSelection_Preferences) isSubtitleSelection_Mode() {}
 
 type SubtitlePreferences struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -1500,10 +1500,10 @@ const file_castor_v1_cast_proto_rawDesc = "" +
 	"\t_deliveryB\r\n" +
 	"\v_max_height\"H\n" +
 	"\x0eAudioSelection\x126\n" +
-	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\xab\x01\n" +
+	"\tlanguages\x18\x01 \x03(\tB\x18\xbaH\x15\x92\x01\x12\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\"\x9c\x01\n" +
 	"\x11SubtitleSelection\x124\n" +
-	"\bdisabled\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\bdisabled\x12Q\n" +
-	"\x13preferred_languages\x18\x02 \x01(\v2\x1e.castor.v1.SubtitlePreferencesH\x00R\x12preferredLanguagesB\r\n" +
+	"\bdisabled\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\bdisabled\x12B\n" +
+	"\vpreferences\x18\x02 \x01(\v2\x1e.castor.v1.SubtitlePreferencesH\x00R\vpreferencesB\r\n" +
 	"\x04mode\x12\x05\xbaH\x02\b\x01\"\x83\x01\n" +
 	"\x13SubtitlePreferences\x128\n" +
 	"\tlanguages\x18\x01 \x03(\tB\x1a\xbaH\x17\x92\x01\x14\b\x01\"\x10r\x0e2\f^[a-z]{2,3}$R\tlanguages\x122\n" +
@@ -1632,7 +1632,7 @@ var file_castor_v1_cast_proto_depIdxs = []int32{
 	8,  // 10: castor.v1.Preferences.subtitles:type_name -> castor.v1.SubtitleSelection
 	7,  // 11: castor.v1.Preferences.audio:type_name -> castor.v1.AudioSelection
 	28, // 12: castor.v1.SubtitleSelection.disabled:type_name -> google.protobuf.Empty
-	9,  // 13: castor.v1.SubtitleSelection.preferred_languages:type_name -> castor.v1.SubtitlePreferences
+	9,  // 13: castor.v1.SubtitleSelection.preferences:type_name -> castor.v1.SubtitlePreferences
 	12, // 14: castor.v1.WatchResponse.status:type_name -> castor.v1.CastStatus
 	15, // 15: castor.v1.WatchResponse.ended:type_name -> castor.v1.Ended
 	28, // 16: castor.v1.CastStatus.connecting:type_name -> google.protobuf.Empty
@@ -1682,7 +1682,7 @@ func file_castor_v1_cast_proto_init() {
 	file_castor_v1_cast_proto_msgTypes[5].OneofWrappers = []any{}
 	file_castor_v1_cast_proto_msgTypes[7].OneofWrappers = []any{
 		(*SubtitleSelection_Disabled)(nil),
-		(*SubtitleSelection_PreferredLanguages)(nil),
+		(*SubtitleSelection_Preferences)(nil),
 	}
 	file_castor_v1_cast_proto_msgTypes[10].OneofWrappers = []any{
 		(*WatchResponse_Status)(nil),

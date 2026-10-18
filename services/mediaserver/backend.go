@@ -74,10 +74,10 @@ type engine struct {
 
 // subtitles transcribes the selected language with Whisper; delivery chooses a native track or burn-in.
 func (e *engine) subtitles(selection *castorv1.SubtitleSelection, audioLanguage string) execute.Subtitles {
-	if !selection.GetPreferredLanguages().GetTranscribeIfMissing() {
+	if !selection.GetPreferences().GetTranscribeIfMissing() {
 		return nil
 	}
-	preferred := selection.GetPreferredLanguages().GetLanguages()
+	preferred := selection.GetPreferences().GetLanguages()
 	language := transcriptLanguage(preferred, audioLanguage)
 	if language == "" {
 		return nil
@@ -114,7 +114,7 @@ func (e *engine) captions(selection *castorv1.SubtitleSelection) *execute.Captio
 	if selection.GetDisabled() != nil {
 		return nil
 	}
-	return &execute.Captions{Languages: selection.GetPreferredLanguages().GetLanguages(), Client: e.client}
+	return &execute.Captions{Languages: selection.GetPreferences().GetLanguages(), Client: e.client}
 }
 
 // caster ranks and plays one cast as it was asked.
@@ -159,10 +159,10 @@ type subtitleRunner struct {
 
 func (r subtitleRunner) Run(ctx context.Context, attempt recovery.Attempt) recovery.Outcome {
 	r.Cast.Subtitles = r.engine.subtitles(r.selection, attempt.Rendition.AudioLanguage)
-	if r.selection.GetPreferredLanguages().GetTranscribeIfMissing() && r.Cast.Subtitles == nil {
+	if r.selection.GetPreferences().GetTranscribeIfMissing() && r.Cast.Subtitles == nil {
 		slog.WarnContext(ctx, "transcription skipped: selected audio language is not among subtitle preferences",
 			"audio_language", attempt.Rendition.AudioLanguage,
-			"preferred_languages", r.selection.GetPreferredLanguages().GetLanguages())
+			"preferred_languages", r.selection.GetPreferences().GetLanguages())
 	}
 	return r.Cast.Run(ctx, attempt)
 }

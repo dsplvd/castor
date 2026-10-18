@@ -97,7 +97,7 @@ message SubtitleSelection {
   oneof mode {
     option (buf.validate.oneof).required = true;
     google.protobuf.Empty disabled = 1;
-    SubtitlePreferences preferred_languages = 2;
+    SubtitlePreferences preferences = 2;
   }
 }
 

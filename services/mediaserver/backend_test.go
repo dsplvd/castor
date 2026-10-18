@@ -13,12 +13,12 @@ import (
 )
 
 func TestSourceCaptionSelectionDoesNotEnableTranscription(t *testing.T) {
-	selection := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.SubtitlePreferences{Languages: []string{"en"}}}}
+	selection := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Preferences{Preferences: &castorv1.SubtitlePreferences{Languages: []string{"en"}}}}
 	e := &engine{}
 	if got := e.subtitles(selection, "en"); got != nil {
 		t.Fatal("selecting source captions started transcription")
 	}
-	selection.GetPreferredLanguages().TranscribeIfMissing = true
+	selection.GetPreferences().TranscribeIfMissing = true
 	if got := e.subtitles(selection, "en"); got == nil {
 		t.Fatal("explicit transcription did not enable the fallback")
 	}
@@ -36,7 +36,7 @@ func TestSourceCaptionSelectionDoesNotEnableTranscription(t *testing.T) {
 		{false, false},
 		{true, true},
 	} {
-		selected := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_PreferredLanguages{PreferredLanguages: &castorv1.SubtitlePreferences{Languages: []string{"en"}, TranscribeIfMissing: tc.transcribe}}}
+		selected := &castorv1.SubtitleSelection{Mode: &castorv1.SubtitleSelection_Preferences{Preferences: &castorv1.SubtitlePreferences{Languages: []string{"en"}, TranscribeIfMissing: tc.transcribe}}}
 		got := create(&mediav1.PlaybackSettings{Subtitles: selected}).(caster)
 		if enabled := got.engine.subtitles(got.asked.GetSubtitles(), "en") != nil; enabled != tc.want {
 			t.Errorf("transcribe=%v: fallback enabled=%v, want %v", tc.transcribe, enabled, tc.want)
