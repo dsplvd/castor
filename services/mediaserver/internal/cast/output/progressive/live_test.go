@@ -1,10 +1,13 @@
 package progressive
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/output/storage"
 
@@ -86,4 +89,90 @@ func TestLiveHTTPAbortsWhenReaderFallsOutOfWindow(t *testing.T) {
 		}
 	}()
 	stream.handleStream(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example/stream", nil))
+}
+
+func TestLiveByteZeroRangeFollowsProduction(t *testing.T) {
+	for _, initial := range []string{"", "first"} {
+		t.Run("initial="+initial, func(t *testing.T) {
+			spool, _ := liveSpool(t, 64)
+			_, _ = spool.Write([]byte(initial))
+			stream := &Stream{spool: spool}
+			done := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(done)
+				stream.handleStream(w, r)
+			}))
+			defer server.Close()
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+			req.Header.Set("Range", "bytes=0-")
+			response, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != http.StatusOK || response.ContentLength != -1 || response.Header.Get("Content-Range") != "" {
+				t.Fatalf("growing response: status=%d length=%d range=%q", response.StatusCode, response.ContentLength, response.Header.Get("Content-Range"))
+			}
+			prefix := make([]byte, len(initial))
+			if _, err := io.ReadFull(response.Body, prefix); err != nil {
+				t.Fatal(err)
+			}
+			if string(prefix) != initial {
+				t.Fatalf("prefix=%q", prefix)
+			}
+			_, _ = spool.Write([]byte("later"))
+			spool.CloseWrite(nil)
+			rest, err := io.ReadAll(response.Body)
+			if err != nil || string(rest) != "later" {
+				t.Fatalf("rest=%q error=%v", rest, err)
+			}
+			<-done
+		})
+	}
+}
+
+func TestLiveByteZeroRangeCancellation(t *testing.T) {
+	spool, _ := liveSpool(t, 64)
+	stream := &Stream{spool: spool}
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		stream.handleStream(w, r)
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req.Header.Set("Range", "bytes=0-")
+	response, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", response.StatusCode)
+	}
+	// Headers prove admission succeeded while the producer still has no bytes.
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("request did not stop after cancellation")
+	}
+}
+
+func TestCompletedLiveByteZeroRange(t *testing.T) {
+	spool, _ := liveSpool(t, 64)
+	_, _ = spool.Write([]byte("complete"))
+	spool.CloseWrite(nil)
+	stream := &Stream{spool: spool}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://example/stream", nil)
+	req.Header.Set("Range", "bytes=0-")
+	recorder := httptest.NewRecorder()
+	stream.handleStream(recorder, req)
+	if recorder.Code != http.StatusPartialContent || recorder.Body.String() != "complete" || recorder.Header().Get("Content-Range") != "bytes 0-7/8" || recorder.Header().Get("Content-Length") != "8" {
+		t.Fatalf("completed response: status=%d headers=%v body=%q", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
 }
