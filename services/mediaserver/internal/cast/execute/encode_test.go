@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stupside/castor/services/mediaserver/internal/cast/deliver"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output/storage"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
-	"github.com/stupside/castor/services/mediaserver/internal/cast/transcode"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 	"github.com/stupside/castor/services/mediaserver/internal/subtitle"
@@ -26,12 +26,12 @@ func TestTheBurnInsCueReachesTheEncodeThatDrawsIt(t *testing.T) {
 	}
 	s, buf := bufferedCast(t, ffmpegPath, ffprobePath)
 
-	s.cast.Device = &fakeDevice{caps: dlnaLike()}
+	s.capabilities = dlnaLike()
 	opts, err := s.encode(feed{buffered: buf}, subtitle.NewCueFile(filepath.Dir(cuePath), &subtitle.Cues{}))
 	if err != nil {
 		t.Fatalf("building the encode: %v", err)
 	}
-	cmd, err := transcode.EncodeArgs(opts.EncodeOptions)
+	cmd, err := encoding.EncodeArgs(opts.EncodeOptions)
 	if err != nil {
 		t.Fatalf("building the args: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestTheBufferedEncodeIsMeasuredFromTheBufferAndNotTheSource(t *testing.T) {
 	// A source nothing can measure: nothing is listening on that port.
 	s.attempt.Program = programFromStream(t, &source.Stream{URL: &url.URL{Scheme: "http", Host: "127.0.0.1:1", Path: "/gone.mp4"}, ContentType: media.MP4})
 
-	s.cast.Device = &fakeDevice{caps: dlnaLike()}
+	s.capabilities = dlnaLike()
 	opts, err := s.encode(feed{buffered: buf}, nil)
 	if err != nil {
 		t.Fatalf("building the encode: %v", err)
@@ -67,12 +67,12 @@ func TestTheBufferedEncodeIsMeasuredFromTheBufferAndNotTheSource(t *testing.T) {
 }
 
 // bufferedCast is the read-once composition's material for building an encode (empty buffer).
-func bufferedCast(t *testing.T, ffmpegPath, ffprobePath string) (*pipeline, *buffered) {
+func bufferedCast(t *testing.T, ffmpegPath, ffprobePath string) (*preparation, *buffered) {
 	t.Helper()
-	sp, err := deliver.NewSpool(filepath.Join(t.TempDir(), "spool.ts"))
+	sp, err := storage.NewSpool(filepath.Join(t.TempDir(), "spool.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := readingPipeline(t, realCast(&fakeDevice{}, ffmpegPath, ffprobePath), recovery.Attempt{})
+	s := readingAttempt(t, realCast(&fakeDevice{}, ffmpegPath, ffprobePath), recovery.Attempt{})
 	return s, &buffered{reader: &pull{spool: sp, done: make(chan struct{})}}
 }

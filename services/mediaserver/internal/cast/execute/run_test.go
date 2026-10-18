@@ -4,24 +4,26 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/stupside/castor/services/mediaserver/internal/cast/output/adapters"
-	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
+	"github.com/looplab/fsm"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
-// countedListeners is the delivery port a handed-off cast must never reach.
-type countedListeners struct{ asked *atomic.Int64 }
+// countedPublisher is the delivery publisher a handed-off cast must never reach.
+type countedPublisher struct{ asked *atomic.Int64 }
 
-func (a countedListeners) Listen(context.Context) (net.Listener, error) {
+func (a countedPublisher) Publish(context.Context, http.Handler) (output.Publication, error) {
 	a.asked.Add(1)
 	return nil, errors.New("this host has no local route")
 }
@@ -35,7 +37,7 @@ func handoffStream() *source.Stream {
 func TestAHandoffBuildsNoLocalMachinery(t *testing.T) {
 	var asked atomic.Int64
 	dev := &fakeDevice{caps: chromecastLike(media.MP4), ended: true}
-	got := Cast{Timelines: direct{}, Outputs: adapters.Default(), MaxHeight: 1080, Device: dev, Listeners: countedListeners{asked: &asked}}.Run(t.Context(),
+	got := Cast{Timelines: direct{}, Outputs: testOutputs(), MaxHeight: 1080, Device: dev, Publisher: countedPublisher{asked: &asked}}.Run(t.Context(),
 		recovery.Attempt{Program: programFromStream(t, handoffStream())})
 	if got.Err != nil {
 		t.Fatalf("a handoff depended on local relay resources: %v", got.Err)
@@ -69,7 +71,7 @@ func TestADeviceThatRefusesPlayIsBlamed(t *testing.T) {
 func TestEveryAttemptOwnsAFreshWorkDirectoryAndLeavesNoneBehind(t *testing.T) {
 	var dirs []string
 	for range 2 {
-		s := open(t.Context(), Cast{Timelines: direct{}, Outputs: adapters.Default()}, recovery.Attempt{Program: programFromStream(t, handoffStream())})
+		s := testPreparation(t.Context(), Cast{Timelines: direct{}, Outputs: testOutputs()}, recovery.Attempt{Program: programFromStream(t, handoffStream())})
 		work, _, err := s.prepare()
 		if err != nil {
 			t.Fatal(err)
@@ -104,9 +106,16 @@ func TestABufferCopiedWholeIsServedAsItIs(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), castTimeout)
 	defer cancel()
-	s := open(ctx, c, recovery.Attempt{Try: 1, Program: program, Fetch: sourceFetchPlan(t, program, testReadDeadline)})
+	s := testPreparation(ctx, c, recovery.Attempt{Try: 1, Program: program, Fetch: sourceFetchPlan(t, program, testReadDeadline)})
 	t.Cleanup(func() { _ = s.releases.release() })
-	r, err := s.play()
+	p, err := s.preparePresentation()
+	if err == nil {
+		err = hand(s.ctx, dev, p.target, p.contentType, p.captions, p.source)
+	}
+	if err == nil {
+		_, err = superviseFixture(s.ctx, dev, *p.delivery, p.feed)
+	}
+	r := p.reached
 	if err != nil {
 		t.Fatalf("casting a program the device takes as it is: %v", err)
 	}
@@ -129,5 +138,254 @@ func TestABufferCopiedWholeIsServedAsItIs(t *testing.T) {
 	}
 	if copied := evidence(r, nil, false).Copied; !copied.Video || !copied.Audio {
 		t.Errorf("the outcome says the read copied %s, want both halves", copied)
+	}
+}
+
+func TestEachAttemptSelectsItsOwnTranscription(t *testing.T) {
+	var selected []string
+	var started []string
+	c := Cast{Transcription: func(_ context.Context, language string) Subtitles {
+		selected = append(selected, language)
+		return func(context.Context) Transcript {
+			started = append(started, language)
+			return nil
+		}
+	}}
+	first := testPreparation(t.Context(), c, recovery.Attempt{Rendition: source.Rendition{AudioLanguage: "en"}})
+	defer first.releases.release()
+	second := testPreparation(t.Context(), c, recovery.Attempt{Rendition: source.Rendition{AudioLanguage: "fr"}})
+	defer second.releases.release()
+	if len(started) != 0 {
+		t.Fatal("opening an attempt started recognition before a PCM read")
+	}
+	second.subtitles(t.Context())
+	first.subtitles(t.Context())
+	if len(selected) != 2 || selected[0] != "en" || selected[1] != "fr" || len(started) != 2 || started[0] != "fr" || started[1] != "en" {
+		t.Fatalf("attempt selections leaked: selected=%v started=%v", selected, started)
+	}
+}
+
+func reachAttemptState(t *testing.T, m *fsm.FSM, state string) {
+	t.Helper()
+	if state == preparing {
+		return
+	}
+	path := []attemptEvent{presentationReady}
+	if state == playingBack {
+		path = append(path, playbackStarted)
+	}
+	if state == stopping || state == attemptFinished {
+		path = append(path, attemptCancelled)
+	}
+	if state == attemptFinished {
+		path = append(path, cleanupFinished)
+	}
+	for _, event := range path {
+		if err := fireAttempt(t.Context(), m, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !m.Is(state) {
+		t.Fatalf("reached %s, want %s", m.Current(), state)
+	}
+}
+
+func TestCancelledPreparationReleasesLateAcquisitions(t *testing.T) {
+	c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+
+	entered := make(chan struct{})
+	lateFailure := errors.New("preparation failed during cancellation")
+	cleaned := false
+	c.preparation = c.launch(presentationReady, func() error {
+		close(entered)
+		<-c.ctx.Done()
+		c.releases.push(func() error { cleaned = true; return nil })
+		return lateFailure
+	})
+	<-entered
+	c.stop(context.Canceled)
+	c.loop()
+	_, err := c.finish()
+	interrupted, ok := errors.AsType[*recovery.Interrupted](err)
+	if !ok || !errors.Is(interrupted.Cause, context.Canceled) || !errors.Is(interrupted.Failure, lateFailure) {
+		t.Fatalf("interruption lost its separate failure: %v", err)
+	}
+	if !cleaned || !c.machine.Is(attemptFinished) || !errors.Is(err, lateFailure) {
+		t.Fatalf("cleaned=%v state=%v error=%v", cleaned, c.machine.Current(), err)
+	}
+}
+
+type coordinatorDevice struct {
+	fakeDevice
+	start func(context.Context) error
+	wait  func(context.Context) error
+}
+
+func (d *coordinatorDevice) Play(ctx context.Context, _ *url.URL, _ string, _ []media.Caption) error {
+	return d.start(ctx)
+}
+func (d *coordinatorDevice) AwaitEnd(ctx context.Context) error { return d.wait(ctx) }
+
+func TestCancellationDuringPlayJoinsCommandWithoutStartingPlayback(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		entered := make(chan struct{})
+		returned := make(chan struct{})
+		var awaited atomic.Bool
+		d := &coordinatorDevice{
+			start: func(ctx context.Context) error { close(entered); <-ctx.Done(); close(returned); return nil },
+			wait:  func(context.Context) error { awaited.Store(true); return nil },
+		}
+		c := newCoordinator(t.Context(), Cast{Device: d}, recovery.Attempt{})
+
+		c.preparation = c.launch(presentationReady, func() error {
+			c.presentation = presentation{target: &url.URL{Scheme: "https", Host: "example.test"}}
+			return nil
+		})
+		done := make(chan error, 1)
+		go func() { c.loop(); _, err := c.finish(); done <- err }()
+		<-entered
+		c.stop(context.Canceled)
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Fatalf("result=%v", err)
+		}
+		select {
+		case <-returned:
+		default:
+			t.Fatal("Play not joined")
+		}
+		if awaited.Load() {
+			t.Fatal("late Play result started playback observation")
+		}
+		if !c.machine.Is(attemptFinished) {
+			t.Fatalf("state=%v", c.machine.Current())
+		}
+	})
+}
+
+func TestProductionCompletionDoesNotEndPlayingAttempt(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := took(t, blocking)
+		close(p.buf.reader.done)
+		playback := make(chan struct{})
+		p.dev = observedDevice{wait: func(context.Context) error { <-playback; return nil }}
+		c := newCoordinator(t.Context(), Cast{Device: p.dev}, recovery.Attempt{})
+
+		d := p.delivery()
+		reachAttemptState(t, c.machine, playingBack)
+		c.presentation = presentation{delivery: &d, feed: feed{buffered: p.buf}}
+		c.observeProduction()
+		c.observePlayback()
+		done := make(chan error, 1)
+		go func() { c.loop(); _, err := c.finish(); done <- err }()
+		synctest.Wait()
+		select {
+		case err := <-done:
+			t.Fatalf("production ended playback: %v", err)
+		default:
+		}
+		close(playback)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestLateWorkerFailureSurvivesSuccessfulDelivery(t *testing.T) {
+	c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+
+	reachAttemptState(t, c.machine, playingBack)
+	failure := errors.New("device failed while stopping")
+	c.launch(playbackEnded, func() error { <-c.ctx.Done(); return failure })
+	c.launch(deliverySettled, func() error { return nil })
+	c.loop()
+	_, err := c.finish()
+	if !errors.Is(err, failure) {
+		t.Fatalf("late failure lost: %v", err)
+	}
+}
+
+func TestStoppingSignalsAllPublicationsBeforeJoining(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+
+		reachAttemptState(t, c.machine, stopping)
+		second := make(chan struct{})
+		firstJoined := false
+		cleanupFailure := errors.New("storage close failed")
+		c.releases.push(func() error {
+			if !firstJoined {
+				t.Error("storage released before requests joined")
+			}
+			return cleanupFailure
+		})
+		c.releases.publication(func() error { <-second; firstJoined = true; return nil })
+		c.releases.publication(func() error { close(second); return nil })
+		_, err := c.finish()
+		if !c.machine.Is(attemptFinished) || !errors.Is(err, cleanupFailure) {
+			t.Fatalf("state=%v err=%v", c.machine.Current(), err)
+		}
+	})
+}
+
+func TestFailedProductionCannotStartPlayback(t *testing.T) {
+	p := took(t, blocking)
+	failure := errors.New("encoder failed after readiness")
+	p.buf.reader.err = failure
+	close(p.buf.reader.done)
+	var started atomic.Bool
+	dev := &coordinatorDevice{
+		start: func(context.Context) error { started.Store(true); return nil },
+		wait:  blocking,
+	}
+	c := newCoordinator(t.Context(), Cast{Device: dev}, recovery.Attempt{})
+
+	d := p.delivery()
+	c.preparation = c.launch(presentationReady, func() error {
+		c.presentation = presentation{delivery: &d, feed: feed{buffered: p.buf}}
+		return nil
+	})
+	c.loop()
+	_, err := c.finish()
+	if started.Load() {
+		t.Fatal("started playback with a known producer failure")
+	}
+	if !errors.Is(err, failure) {
+		t.Fatalf("lost producer failure: %v", err)
+	}
+}
+
+func TestStorageFailureCancelsPreparationAndJoinsLateAcquisitions(t *testing.T) {
+	c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+	failure := errors.New("storage exhausted during preparation")
+	cleaned := false
+	c.prepare = func() (presentation, error) {
+		p := newPreparation(c.ctx, Cast{}, recovery.Attempt{}, c.releases, c.failures)
+		p.watchStorage(func(context.Context) error { return failure })
+		<-c.ctx.Done()
+		// An acquisition already in progress can finish after cancellation.
+		c.releases.push(func() error { cleaned = true; return nil })
+		return presentation{}, c.ctx.Err()
+	}
+	_, err := c.run()
+	if !errors.Is(err, failure) || !cleaned || !c.machine.Is(attemptFinished) {
+		t.Fatalf("failure=%v cleaned=%v state=%s", err, cleaned, c.machine.Current())
+	}
+}
+
+func TestCancelledAttemptDoesNotSelectPreparationServices(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	selected := false
+	c := newCoordinator(ctx, Cast{Transcription: func(context.Context, string) Subtitles {
+		selected = true
+		return nil
+	}}, recovery.Attempt{})
+	_, err := c.run()
+	interrupted, ok := errors.AsType[*recovery.Interrupted](err)
+	if !ok || interrupted.Failure != nil {
+		t.Fatalf("clean cancellation became a failure: %v", err)
+	}
+	if selected || !errors.Is(err, context.Canceled) {
+		t.Fatalf("selected=%v error=%v", selected, err)
 	}
 }

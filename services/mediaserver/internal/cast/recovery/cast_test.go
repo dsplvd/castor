@@ -341,8 +341,8 @@ func TestCastEndsWithTheCancellationRatherThanAFault(t *testing.T) {
 	}, delivered}}
 
 	err := Cast(ctx, in, run, &fakeProgram{})
-	if _, isFault := errors.AsType[*fault](err); !errors.Is(err, context.Canceled) || isFault || len(run.seen) != 1 {
-		t.Fatalf("Cast error = %v after %d attempts, want the bare cancellation after 1", err, len(run.seen))
+	if _, isFault := errors.AsType[*fault](err); !errors.Is(err, context.Canceled) || isFault || len(run.seen) != 0 {
+		t.Fatalf("Cast error = %v after %d attempts, want cancellation without starting an attempt", err, len(run.seen))
 	}
 }
 
@@ -386,3 +386,54 @@ type unheard struct{}
 
 func (unheard) Attempting(int)          {}
 func (unheard) Revising(Action, string) {}
+
+// A resolver can finish after cancellation; recovery must not start another
+// resolver or an attempt using a late successful result.
+type cancellingResolver struct {
+	cancel  context.CancelCauseFunc
+	cause   error
+	calls   int
+	succeed bool
+}
+
+func (r *cancellingResolver) Resolve(ctx context.Context, s *source.Stream, chosen source.Rendition) (source.Resolution, error) {
+	r.calls++
+	r.cancel(r.cause)
+	if r.succeed {
+		return (&fakeProgram{}).Resolve(ctx, s, chosen)
+	}
+	return source.Resolution{}, ctx.Err()
+}
+func TestCancellationDuringResolutionStartsNoFurtherWork(t *testing.T) {
+	for _, success := range []bool{false, true} {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		cause := errors.New("cast cancelled while resolving")
+		resolver := &cancellingResolver{cancel: cancel, cause: cause, succeed: success}
+		runner := &scriptedRunner{}
+		err := Cast(ctx, Intent{Candidates: candidates(t, "https://example.test/a.mp4", "https://example.test/b.mp4"), Turns: unheard{}}, runner, resolver)
+		cancel(nil)
+		if !errors.Is(err, cause) || resolver.calls != 1 || len(runner.seen) != 0 {
+			t.Fatalf("late success=%v error=%v resolutions=%d attempts=%d", success, err, resolver.calls, len(runner.seen))
+		}
+	}
+}
+
+type runnerFunc func(context.Context, Attempt) Outcome
+
+func (f runnerFunc) Run(ctx context.Context, a Attempt) Outcome { return f(ctx, a) }
+
+func TestCancellationDoesNotEraseAnAttemptsCleanupFailure(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	cause, cleanup := errors.New("cast stopped"), errors.New("storage cleanup failed")
+	calls := 0
+	run := runnerFunc(func(context.Context, Attempt) Outcome {
+		calls++
+		cancel(cause)
+		return Outcome{Err: &Interrupted{Cause: cause, Failure: cleanup}, Evidence: Evidence{Cancelled: true}}
+	})
+	err := Cast(ctx, Intent{Candidates: candidates(t, "https://cdn.example/one.mp4"), Turns: unheard{}}, run, &fakeProgram{})
+	if calls != 1 || !errors.Is(err, cause) || !errors.Is(err, cleanup) {
+		t.Fatalf("attempts=%d result=%v", calls, err)
+	}
+}

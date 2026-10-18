@@ -12,6 +12,20 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/source/timeline"
 )
 
+func TestRepublishedInputsRequireTheirPublicationURL(t *testing.T) {
+	server := serving(t, fragmented("avc1"), labelled)
+	for _, path := range []string{"/primary.m3u8", "/unknown/primary.m3u8", server.base.Path + "wrong/primary.m3u8"} {
+		at := *server.base
+		at.Path = path
+		if status, _ := fetch(t, at.String()); status != http.StatusNotFound {
+			t.Errorf("unpublished path %s answered %d, want 404", path, status)
+		}
+	}
+	if status, body := fetch(t, server.URL("primary").String()); status != http.StatusOK || !strings.HasPrefix(body, "#EXTM3U") {
+		t.Fatalf("published playlist: status %d, body %q", status, body)
+	}
+}
+
 func TestASegmentCastorNoLongerHoldsIsGone(t *testing.T) {
 	server := serving(t, fragmented("avc1"), labelled)
 	fetch(t, server.URL("primary").String())

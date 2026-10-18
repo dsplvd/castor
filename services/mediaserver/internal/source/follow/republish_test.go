@@ -99,7 +99,7 @@ func TestRepublisherStopJoinsOriginCleanup(t *testing.T) {
 	requestDone := make(chan struct{})
 	go func() {
 		defer close(requestDone)
-		response, err := http.Get(input.URL.ResolveReference(&url.URL{Path: "/primary/0"}).String())
+		response, err := http.Get(input.URL.ResolveReference(&url.URL{Path: "primary/0"}).String())
 		if err == nil {
 			_, _ = io.Copy(io.Discard, response.Body)
 			_ = response.Body.Close()

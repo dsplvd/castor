@@ -2,6 +2,7 @@ package follow
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"net"
 	"net/http"
@@ -25,17 +26,20 @@ func serve(feeds ...*feed) (*server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listening for the republished timeline: %w", err)
 	}
+	// FFmpeg fetches these inputs by URL; only its publication names the route.
+	prefix := "/" + rand.Text()
 	mux := http.NewServeMux()
 	for _, feed := range feeds {
-		mux.HandleFunc("GET /"+feed.name+".m3u8", feed.playlist)
-		mux.HandleFunc("GET /"+feed.name+"/{sequence}", feed.segment)
-		mux.HandleFunc("GET /"+feed.name+"/init/{id}", feed.init)
-		mux.HandleFunc("GET /"+feed.name+"/key/{id}", feed.key)
+		base := "GET " + prefix + "/" + feed.name
+		mux.HandleFunc(base+".m3u8", feed.playlist)
+		mux.HandleFunc(base+"/{sequence}", feed.segment)
+		mux.HandleFunc(base+"/init/{id}", feed.init)
+		mux.HandleFunc(base+"/key/{id}", feed.key)
 	}
 	ctx, cancel := context.WithCancel(feeds[0].life)
 	s := &server{
 		cancel: cancel,
-		base:   &url.URL{Scheme: "http", Host: ln.Addr().String()},
+		base:   &url.URL{Scheme: "http", Host: ln.Addr().String(), Path: prefix},
 	}
 	s.http = &http.Server{
 		ReadHeaderTimeout: 5 * time.Second,

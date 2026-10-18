@@ -242,7 +242,7 @@ For a published channel, set `servers.api.devices.roku.app_id` instead; no devel
 
 ## Network and firewall
 
-- **Devices reach castor on one TCP port**: `servers.media.listen` of `castor media-server` (8410). Per-cast listeners are loopback only, relayed through that port. Plain `castor` embeds a media server on a random LAN port each run, so allow the `castor` binary, or run `castor media-server` for a fixed port. `servers.media.advertise` and `servers.media.network.interface` pick the address devices are given.
+- **Devices reach castor on one TCP port**: `servers.media.listen` of `castor media-server` (8410). Published media and captions are served directly through that port. Plain `castor` embeds a media server on a random LAN port each run, so allow the `castor` binary, or run `castor media-server` for a fixed port. `servers.media.advertise` and `servers.media.network.interface` pick the address devices are given.
 - **The API (8411) and scraping (8412) servers are not for devices.** They bind every interface, so set their tokens (see [SECURITY.md](SECURITY.md)).
 - **Discovery** sends SSDP (DLNA, Roku) to UDP 239.255.255.250:1900 and mDNS (Chromecast) to UDP 5353, and expects replies back, so it stays on one subnet unless you pin `host`.
 - **Outbound control**: Chromecast TCP 8009, Roku TCP 8060 (80 for the first sideload), DLNA the port the device advertises. Castor opens no callback port.
