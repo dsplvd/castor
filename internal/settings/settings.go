@@ -80,8 +80,7 @@ func checkOwnedSections(k *koanf.Koanf, typ reflect.Type, parent string) error {
 	if typ.Kind() != reflect.Struct {
 		return nil
 	}
-	for i := range typ.NumField() {
-		field := typ.Field(i)
+	for field := range typ.Fields() {
 		if !field.IsExported() {
 			continue
 		}
