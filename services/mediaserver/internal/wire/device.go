@@ -107,6 +107,14 @@ func FromCapabilities(c *mediav1.Capabilities) media.Capabilities {
 			continue
 		}
 		envelope := media.FormatSupport{Transport: transport}
+		if hls := f.GetHls(); hls != nil {
+			for _, segment := range hls.GetExtraSegmentFormats() {
+				switch segment {
+				case mediav1.HLSSupport_EXTRA_SEGMENT_FORMAT_TIKTIKPX:
+					envelope.ExtraSegments = append(envelope.ExtraSegments, media.HLSExtraSegmentTIKTIKPX)
+				}
+			}
+		}
 		if video != nil {
 			v, ok := fromVideo(video)
 			if !ok {

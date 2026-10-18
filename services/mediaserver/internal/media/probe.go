@@ -8,11 +8,9 @@ import (
 )
 
 type ProbeInfo struct {
-	// SourceUnwrapped records that inspection decoded a source envelope before probing.
-	SourceUnwrapped bool
-	ContentType     string
-	BitRate         int64         // the container's own top-level rate, 0 where ffprobe reports none
-	Duration        time.Duration // the declared runtime, 0 for a live edge and where none is reported
+	ContentType string
+	BitRate     int64         // the container's own top-level rate, 0 where ffprobe reports none
+	Duration    time.Duration // the declared runtime, 0 for a live edge and where none is reported
 
 	VideoCodec    Codec // e.g. CodecH264, CodecHEVC
 	VideoProfile  Profile

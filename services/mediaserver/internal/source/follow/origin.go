@@ -33,11 +33,7 @@ func (f *feed) read(ctx context.Context, s timeline.Segment) ([]byte, error) {
 			return nil, err
 		}
 	}
-	body, wrapped, err := unwrapPixels(b)
-	if wrapped {
-		f.unwrapped.Store(true)
-	}
-	return body, err
+	return unwrapPixels(b)
 }
 
 func (f *feed) initBytes(ctx context.Context, m timeline.Map) ([]byte, error) {

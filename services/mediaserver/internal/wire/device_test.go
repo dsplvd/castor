@@ -10,7 +10,7 @@ func TestCapabilitiesPreserveAtomicTransportAndTracks(t *testing.T) {
 	caps := &mediav1.Capabilities{Formats: []*mediav1.FormatSupport{
 		{Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MP4}}, Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_H264}, Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2}}}, Captions: []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT}},
 		{Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{}}, Tracks: &mediav1.FormatSupport_Audio{Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AC3}}},
-		{Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{Subtitles: mediav1.HLSSupport_SUBTITLES_WEBVTT}}, Tracks: &mediav1.FormatSupport_Video{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, BitDepths: []uint32{10}}}},
+		{Transport: &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{Subtitles: mediav1.HLSSupport_SUBTITLES_WEBVTT, ExtraSegmentFormats: []mediav1.HLSSupport_ExtraSegmentFormat{mediav1.HLSSupport_EXTRA_SEGMENT_FORMAT_TIKTIKPX, 999}}}, Tracks: &mediav1.FormatSupport_Video{Video: &mediav1.VideoSupport{Codec: mediav1.VideoCodec_VIDEO_CODEC_HEVC, BitDepths: []uint32{10}}}},
 	}}
 	got := FromCapabilities(caps)
 	if len(got.Formats) != 3 || got.Formats[0].Transport != media.TransportMP4 || got.Formats[1].Transport != media.TransportHLS || got.Formats[2].Transport != media.TransportHLSWebVTT {
@@ -21,6 +21,9 @@ func TestCapabilitiesPreserveAtomicTransportAndTracks(t *testing.T) {
 	}
 	if got.Formats[1].Video.Codec != "" || got.Formats[1].Audio.Codec != media.CodecAC3 || got.Formats[2].Audio.Codec != "" || got.Formats[2].Video.Codec != media.CodecHEVC {
 		t.Fatalf("single-track variants widened: %+v", got)
+	}
+	if len(got.Formats[1].ExtraSegments) != 0 || len(got.Formats[2].ExtraSegments) != 1 || got.Formats[2].ExtraSegments[0] != media.HLSExtraSegmentTIKTIKPX {
+		t.Fatalf("HLS segment support lost: %+v", got.Formats)
 	}
 	if len(FromCapabilities(nil).Formats) != 0 {
 		t.Fatal("absent capabilities widened")

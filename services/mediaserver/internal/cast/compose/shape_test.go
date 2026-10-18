@@ -9,25 +9,32 @@ import (
 )
 
 func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
-	caps := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{Transport: media.TransportHLS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
+	caps := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{
+		{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}},
+		{Transport: media.TransportHLS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}},
+	}}
 	for _, tt := range []struct {
-		name       string
-		headers    http.Header
-		unmeasured bool
-		height     int
-		maxHeight  media.HeightCap
-		want       bool
+		name        string
+		contentType string
+		headers     http.Header
+		unmeasured  bool
+		height      int
+		maxHeight   media.HeightCap
+		wrappedHLS  bool
+		want        bool
 	}{
-		{name: "a header-free measured source at the ceiling passes through", height: 1080, maxHeight: 1080, want: true},
-		{name: "an unmeasured program is not assumed decodable", unmeasured: true},
-		{name: "a header-gated source is served", headers: http.Header{"Referer": {"https://player.example/"}}},
-		{name: "a source above the ceiling is served, since a hand-off cannot be downscaled", height: 1600, maxHeight: 1080},
+		{name: "a header-free measured file at the ceiling passes through", contentType: media.MP4, height: 1080, maxHeight: 1080, want: true},
+		{name: "an HLS playlist stays local even when the device supports it", contentType: media.HLS, height: 1080, maxHeight: 1080},
+		{name: "a device supporting wrapped segments can fetch HLS directly", contentType: media.HLS, height: 1080, maxHeight: 1080, wrappedHLS: true, want: true},
+		{name: "an unmeasured program is not assumed decodable", contentType: media.MP4, unmeasured: true},
+		{name: "a header-gated source is served", contentType: media.MP4, headers: http.Header{"Referer": {"https://player.example/"}}},
+		{name: "a source above the ceiling is served, since a hand-off cannot be downscaled", contentType: media.MP4, height: 1600, maxHeight: 1080},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			program, err := media.NewProgram(media.Program{
 				Inputs: []media.Input{{
 					ID: media.PrimaryInputID, URL: &url.URL{Scheme: "https", Host: "cdn.example", Path: "/media"},
-					ContentType: media.HLS, Headers: tt.headers,
+					ContentType: tt.contentType, Headers: tt.headers,
 				}},
 				Tracks: []media.TrackRef{
 					{Input: media.PrimaryInputID, Kind: media.TrackVideo, Optional: true},
@@ -42,7 +49,12 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 			if !tt.unmeasured {
 				program.SetMeasurement(media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2})
 			}
-			shape := Shape{Device: caps, Program: program, Height: tt.height, MaxHeight: tt.maxHeight}
+			device := caps
+			device.Formats = append([]media.FormatSupport(nil), caps.Formats...)
+			if tt.wrappedHLS {
+				device.Formats[1].ExtraSegments = []media.HLSExtraSegmentFormat{media.HLSExtraSegmentTIKTIKPX}
+			}
+			shape := Shape{Device: device, Program: program, Height: tt.height, MaxHeight: tt.maxHeight}
 			if got := shape.handoff(); got != tt.want {
 				t.Errorf("handoff() = %v, want %v", got, tt.want)
 			}

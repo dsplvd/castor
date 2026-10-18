@@ -205,17 +205,12 @@ func TestResolveDescribesTheChosenRungFromWhatTheMasterDeclared(t *testing.T) {
 	} {
 		t.Run(tt.codecs, func(t *testing.T) {
 			stream := hlsAt(t, "https://origin.example/master.m3u8")
-			stream.Probe = &media.ProbeInfo{SourceUnwrapped: true, VideoCodec: media.CodecHEVC, VideoProfile: "Main 10", VideoHeight: 2160, VideoBitDepth: 10}
+			stream.Probe = &media.ProbeInfo{VideoCodec: media.CodecHEVC, VideoProfile: "Main 10", VideoHeight: 2160, VideoBitDepth: 10}
 			master := "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS=\"" + tt.codecs + "\"\nvideo.m3u8\n"
 			resolved := resolve(t, &sourcetest.Documents{ByPath: map[string]string{
 				"/master.m3u8": master,
 				"/video.m3u8":  mediaPlaylist,
 			}}, stream)
-			// Replacing the master's measurement with a declaration (or no
-			// measurement) must not forget that the source needs decoding.
-			if resolved.Program.SelfFetchable() {
-				t.Fatal("narrowing discarded the source's relay requirement")
-			}
 			got, measured := resolved.Program.Measurement()
 			if tt.want == nil {
 				if measured {

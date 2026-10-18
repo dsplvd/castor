@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os/exec"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -52,6 +53,7 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 	if err := png.Encode(&ordinary, image.NewRGBA(image.Rect(0, 0, 16, 16))); err != nil {
 		t.Fatal(err)
 	}
+	var wrappedReads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/master.m3u8":
@@ -64,6 +66,8 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsegment.png\n#EXT-X-ENDLIST\n"))
 		case "/plain.m3u8":
 			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nplain.ts\n#EXT-X-ENDLIST\n"))
+		case "/mixed.m3u8":
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nplain.ts\n#EXTINF:1,\nsegment.png\n#EXT-X-ENDLIST\n"))
 		case "/plain.ts":
 			_, _ = w.Write(ts)
 		case "/hidden.m3u8":
@@ -71,6 +75,9 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 		case "/video.m3u8":
 			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsegment.png\n#EXT-X-ENDLIST\n"))
 		case "/segment.png", "/segment.ts":
+			if r.URL.Path == "/segment.png" {
+				wrappedReads.Add(1)
+			}
 			_, _ = w.Write(wrapped.Bytes())
 		case "/image.png":
 			_, _ = w.Write(ordinary.Bytes())
@@ -82,7 +89,7 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 	client := web.New(fetchTimeout)
 	resolver := source.NewResolver(client, 0, nil, formats)
 	timelines := follow.New(client, formats, follow.Repackager("ffmpeg"))
-	for _, path := range []string{"/master.m3u8", "/video.m3u8", "/hidden.m3u8", "/opaque", "/plain.m3u8"} {
+	for _, path := range []string{"/master.m3u8", "/video.m3u8", "/hidden.m3u8", "/opaque", "/plain.m3u8", "/mixed.m3u8"} {
 		t.Run(path, func(t *testing.T) {
 			u, _ := url.Parse(server.URL + path)
 			stream := &source.Stream{URL: u, ContentType: media.HLS}
@@ -103,13 +110,6 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wrapped := path != "/plain.m3u8"
-			if info.SourceUnwrapped != wrapped {
-				t.Fatalf("SourceUnwrapped=%v, want %v", info.SourceUnwrapped, wrapped)
-			}
-			if resolved.Program.SelfFetchable() == wrapped {
-				t.Fatalf("SelfFetchable=%v for wrapped=%v", resolved.Program.SelfFetchable(), wrapped)
-			}
 			program, stop, err := timelines.Republish(t.Context(), resolved.Program)
 			if err != nil {
 				t.Fatal(err)
@@ -123,8 +123,12 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 			args := append([]string{"-v", "error"}, formats.InputArgs(input.ContentType, 0)...)
 			args = append(args, "-i", input.URL.String(), "-f", "null", "-")
 			cmd := exec.CommandContext(t.Context(), "ffmpeg", args...)
+			before := wrappedReads.Load()
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("playback: %v: %s", err, out)
+			}
+			if path == "/mixed.m3u8" && wrappedReads.Load() == before {
+				t.Fatal("playback never read the later wrapped segment")
 			}
 		})
 	}

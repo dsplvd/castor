@@ -26,6 +26,12 @@ func TestCapabilityBoundaryRejectsIncompleteVariants(t *testing.T) {
 		"unknown HLS subtitle mode": func(f *mediav1.FormatSupport) {
 			f.Transport = &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{Subtitles: 999}}
 		},
+		"unspecified HLS segment format": func(f *mediav1.FormatSupport) {
+			f.Transport = &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{ExtraSegmentFormats: []mediav1.HLSSupport_ExtraSegmentFormat{mediav1.HLSSupport_EXTRA_SEGMENT_FORMAT_UNSPECIFIED}}}
+		},
+		"duplicate HLS segment format": func(f *mediav1.FormatSupport) {
+			f.Transport = &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{ExtraSegmentFormats: []mediav1.HLSSupport_ExtraSegmentFormat{mediav1.HLSSupport_EXTRA_SEGMENT_FORMAT_TIKTIKPX, mediav1.HLSSupport_EXTRA_SEGMENT_FORMAT_TIKTIKPX}}}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := proto.CloneOf(valid)
@@ -34,6 +40,11 @@ func TestCapabilityBoundaryRejectsIncompleteVariants(t *testing.T) {
 				t.Fatal("invalid variant accepted")
 			}
 		})
+	}
+	knownFuture := proto.CloneOf(valid)
+	knownFuture.Formats[0].Transport = &mediav1.FormatSupport_Hls{Hls: &mediav1.HLSSupport{ExtraSegmentFormats: []mediav1.HLSSupport_ExtraSegmentFormat{999}}}
+	if err := protovalidate.Validate(knownFuture); err != nil {
+		t.Fatalf("a future HLS segment format was rejected: %v", err)
 	}
 	for name, tracks := range map[string]*mediav1.FormatSupport{
 		"audio only": {Tracks: &mediav1.FormatSupport_Audio{Audio: valid.Formats[0].GetAv().Audio}},

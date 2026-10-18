@@ -18,11 +18,19 @@ import (
 )
 
 // shape is a format whose inputs follow timeline, or are read directly when it is nil.
-type shape struct{ timeline timeline.Source }
+type shape struct {
+	timeline    timeline.Source
+	contentType string
+}
 
-func (shape) Identity() source.Identity { return source.Identity{ContentType: media.HLS} }
-func (shape) Recognize(string) bool     { return false }
-func (shape) InputArgs(int) []string    { return nil }
+func (s shape) Identity() source.Identity {
+	if s.contentType != "" {
+		return source.Identity{ContentType: s.contentType}
+	}
+	return source.Identity{ContentType: media.HLS}
+}
+func (shape) Recognize(string) bool  { return false }
+func (shape) InputArgs(int) []string { return nil }
 func (s shape) Timeline(source.Client, media.Input, media.TrackKind) timeline.Source {
 	return s.timeline
 }
@@ -56,10 +64,31 @@ func TestAnInputWithNoTimelineIsReadDirectly(t *testing.T) {
 	}
 }
 
-func TestATimelineCastorCannotStartStaysFfmpegsToRead(t *testing.T) {
+func TestAnHLSPlaylistCastorCannotFollowIsNotReadDirectly(t *testing.T) {
 	refused := &scripted{replies: []reply{{err: &timeline.Failure{Status: http.StatusForbidden, Err: errors.New("expired")}}}}
-	if got := republished(t, shape{timeline: refused}).String(); got != "https://cdn.example/live/index.m3u8" {
-		t.Errorf("an unreadable timeline reads %s, want the origin's own", got)
+	program, err := source.ProgramFor(&source.Stream{URL: sourcetest.URL(t, "https://cdn.example/live/index.m3u8"), ContentType: media.HLS})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := New(&sourcetest.Document{}, source.Formats{shape{timeline: refused}}, nil).Republish(t.Context(), program); err == nil {
+		t.Fatal("unreadable HLS playlist fell back to direct FFmpeg access")
+	}
+}
+
+func TestAnUnfollowableOtherTimelineCanStillBeReadDirectly(t *testing.T) {
+	refused := &scripted{replies: []reply{{err: &timeline.Failure{Status: http.StatusForbidden, Err: errors.New("expired")}}}}
+	program, err := source.ProgramFor(&source.Stream{URL: sourcetest.URL(t, "https://cdn.example/live/index.mpd"), ContentType: media.DASH})
+	if err != nil {
+		t.Fatal(err)
+	}
+	followed, stop, err := New(&sourcetest.Document{}, source.Formats{shape{timeline: refused, contentType: media.DASH}}, nil).Republish(t.Context(), program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	input, _ := followed.PrimaryInput()
+	if got := input.URL.String(); got != "https://cdn.example/live/index.mpd" {
+		t.Errorf("unreadable timeline reads %s, want the origin's own", got)
 	}
 }
 

@@ -106,6 +106,16 @@ message HLSSupport {
   }
   // Subtitle rendition playlists refreshed alongside the media playlist.
   Subtitles subtitles = 1 [(buf.validate.field).enum.defined_only = true];
+  enum ExtraSegmentFormat {
+    EXTRA_SEGMENT_FORMAT_UNSPECIFIED = 0;
+    EXTRA_SEGMENT_FORMAT_TIKTIKPX = 1; // PNG/gzip/MPEG-TS envelope
+  }
+  // Nonstandard segment formats accepted in addition to ordinary HLS segments.
+  repeated ExtraSegmentFormat extra_segment_formats = 2 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {enum: {not_in: [0]}}
+  }];
 }
 
 message VideoSupport {

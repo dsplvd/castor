@@ -26,36 +26,6 @@ func New(client source.Client, formats source.Formats, repackage Repackage) Repu
 // Republish points each followed input at its republished timeline. The returned
 // function stops and joins serving, then reports any unresolved source refusal.
 func (r Republisher) Republish(parent context.Context, program media.Program) (media.Program, func() error, error) {
-	reading, err := r.republish(parent, program)
-	if err != nil {
-		return media.Program{}, nil, err
-	}
-	return reading.program, reading.close, nil
-}
-
-// Probe scopes inspection to the same reading as playback and retains whether
-// decoding was required. A decoded measurement cannot authorize origin handoff.
-func (r Republisher) Probe(ctx context.Context, program media.Program, inspect func(media.Program) media.Prober) (info media.ProbeInfo, reach media.Reach, err error) {
-	reading, err := r.republish(ctx, program)
-	if err != nil {
-		return info, reach, err
-	}
-	defer func() {
-		err = errors.Join(err, reading.close())
-		for _, feed := range reading.feeds {
-			info.SourceUnwrapped = info.SourceUnwrapped || feed.unwrapped.Load()
-		}
-	}()
-	return inspect(reading.program).Probe(ctx)
-}
-
-type reading struct {
-	program media.Program
-	feeds   []*feed
-	close   func() error
-}
-
-func (r Republisher) republish(parent context.Context, program media.Program) (reading, error) {
 	// Reads ahead of the reader outlive no read: stopping the republish ends them.
 	ctx, cancel := context.WithCancel(parent)
 	var feeds []*feed
@@ -80,10 +50,11 @@ func (r Republisher) republish(parent context.Context, program media.Program) (r
 		feed := newFeed(ctx, string(in.ID), src, repackage)
 		owned = append(owned, feed)
 		if err := feed.start(); err != nil {
-			// A representation has no reading but castor's; a playlist castor cannot follow stays ffmpeg's to read.
-			if in.Representation != "" {
+			// HLS must stay in Castor's reader: FFmpeg cannot unwrap segments from the origin.
+			// A selected representation likewise has no other reader for its presentation.
+			if in.ContentType == media.HLS || in.Representation != "" {
 				stop()
-				return reading{}, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
+				return media.Program{}, nil, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
 			}
 			slog.WarnContext(ctx, "castor could not read this input's timeline, so ffmpeg reads the origin directly",
 				"input", in.ID, "error", err)
@@ -93,12 +64,12 @@ func (r Republisher) republish(parent context.Context, program media.Program) (r
 	}
 	if len(feeds) == 0 {
 		stop()
-		return reading{program: program, close: func() error { return nil }}, nil
+		return program, func() error { return nil }, nil
 	}
 	server, err := serve(feeds...)
 	if err != nil {
 		stop()
-		return reading{}, err
+		return media.Program{}, nil, err
 	}
 	out := program.Clone()
 	for i, in := range out.Inputs {
@@ -108,7 +79,7 @@ func (r Republisher) republish(parent context.Context, program media.Program) (r
 			slog.InfoContext(ctx, "castor follows this input's timeline", "input", in.ID, "origin", in.URL.Redacted(), "republished", out.Inputs[i].URL)
 		}
 	}
-	return reading{program: out, feeds: feeds, close: func() error {
+	return out, func() error {
 		cancel()
 		err := server.Close()
 		stop()
@@ -116,7 +87,17 @@ func (r Republisher) republish(parent context.Context, program media.Program) (r
 			err = errors.Join(err, feed.result().err)
 		}
 		return err
-	}}, nil
+	}, nil
+}
+
+// Probe scopes inspection to the same reading as playback.
+func (r Republisher) Probe(ctx context.Context, program media.Program, inspect func(media.Program) media.Prober) (info media.ProbeInfo, reach media.Reach, err error) {
+	followed, close, err := r.Republish(ctx, program)
+	if err != nil {
+		return info, reach, err
+	}
+	defer func() { err = errors.Join(err, close()) }()
+	return inspect(followed).Probe(ctx)
 }
 
 // reads is the kind of track a program reads from input: the one it requires, the first it names otherwise.

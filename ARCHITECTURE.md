@@ -87,7 +87,7 @@ flowchart LR
 ```
 
 - **Rank:** prefer the tallest stream within `cast.max_height`; unmeasured candidates are last resorts. Media's HLS/DASH readers handle playback, not capture-document parsing.
-- **Compose:** hand off compatible streams to self-fetching devices unless `delivery: serve`; otherwise remux or use a read-once encoding pipeline (e.g. DLNA). `--debug` explains the choice.
+- **Compose:** hand off compatible sources to self-fetching devices unless `delivery: serve`. HLS handoff also requires the device to advertise support for TIKTIKPX PNG/gzip/TS segments, since later segments may use that envelope. Other sources are remuxed or use a read-once encoding pipeline (e.g. DLNA) as needed. `--debug` explains the choice.
 - **Plan/deliver:** copy or encode each track, scale to the ceiling, and show the source's own captions as a native track when it publishes the language asked, else burn Whisper subtitles into read-once casts. Use a working GPU encoder, falling back to software. Deliveries register handlers under random paths on the media server's shared `/media` route. Closing a publication removes its route and joins active requests before its storage is released.
 - **Recover:** detect stalls, slow reads, or stopped fetching; revise the attempt, cheapest first, or try the next candidate.
 

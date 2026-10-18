@@ -10,6 +10,7 @@ import (
 
 func TestTheCompositionADeviceGets(t *testing.T) {
 	selfFetching := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
+	hlsFetching := media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{Transport: media.TransportHLS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	for _, tt := range []struct {
 		name       string
 		device     media.Capabilities
@@ -19,6 +20,7 @@ func TestTheCompositionADeviceGets(t *testing.T) {
 	}{
 		{"a push-only device is read once", media.Capabilities{}, media.MP4, DeliveryAuto, ReadOnce},
 		{"a self-fetching device that accepts the source is handed the URL", selfFetching, media.MP4, DeliveryAuto, Handoff},
+		{"an HLS-capable device reads through Castor", hlsFetching, media.HLS, DeliveryAuto, Remux},
 		{"a rejected container is remuxed", selfFetching, media.MKV, DeliveryAuto, Remux},
 		{"the serve preference relays what could have been handed over", selfFetching, media.MP4, DeliveryServe, Remux},
 	} {

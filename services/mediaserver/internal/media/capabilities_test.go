@@ -57,3 +57,13 @@ func TestAudioOnlyCapabilities(t *testing.T) {
 		t.Fatal("unprobed empty media accepted")
 	}
 }
+
+func TestWrappedHLSRequiresOneCompatibleEnvelope(t *testing.T) {
+	device := Capabilities{Formats: []FormatSupport{
+		{Transport: TransportHLS, Video: VideoSupport{Codec: CodecH264}},
+		{Transport: TransportHLS, Video: VideoSupport{Codec: CodecHEVC}, ExtraSegments: []HLSExtraSegmentFormat{HLSExtraSegmentTIKTIKPX}},
+	}}
+	if device.CanPlayHLSWith(ProbeInfo{VideoCodec: CodecH264, VideoBitDepth: 8}, HLSExtraSegmentTIKTIKPX) {
+		t.Fatal("combined incompatible HLS envelopes")
+	}
+}

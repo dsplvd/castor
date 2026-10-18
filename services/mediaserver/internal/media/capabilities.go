@@ -128,29 +128,44 @@ func (s VideoSupport) accepts(v ProbeInfo) bool {
 
 // FormatSupport is one indivisible playback combination.
 type FormatSupport struct {
-	Transport Transport
-	Video     VideoSupport
-	Audio     AudioSupport
-	Captions  []CaptionFormat
+	Transport     Transport
+	Video         VideoSupport
+	Audio         AudioSupport
+	Captions      []CaptionFormat
+	ExtraSegments []HLSExtraSegmentFormat
+}
+
+type HLSExtraSegmentFormat uint8
+
+const (
+	HLSExtraSegmentTIKTIKPX HLSExtraSegmentFormat = iota + 1
+)
+
+// CanPlayHLSWith checks that one playback envelope accepts the tracks and
+// every nonstandard segment format the source may use.
+func (c Capabilities) CanPlayHLSWith(p ProbeInfo, segments ...HLSExtraSegmentFormat) bool {
+	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool {
+		if f.Transport.ContentType() != HLS || !f.accepts(p, c.Deinterlaces) {
+			return false
+		}
+		for _, segment := range segments {
+			if !slices.Contains(f.ExtraSegments, segment) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (c Capabilities) CanPlayIn(container string, p ProbeInfo) bool {
-	switch {
-	case p.VideoCodec == "" && p.AudioCodec == "":
-		return false
-	case p.VideoInterlaced && !c.Deinterlaces:
-		return false
-	}
 	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool {
-		switch {
-		case f.Transport.ContentType() != container:
-			return false
-		case p.VideoCodec != "" && !f.Video.accepts(p):
-			return false
-		case p.AudioCodec != "" && !f.Audio.accepts(p):
-			return false
-		default:
-			return true
-		}
+		return f.Transport.ContentType() == container && f.accepts(p, c.Deinterlaces)
 	})
+}
+
+func (f FormatSupport) accepts(p ProbeInfo, deinterlaces bool) bool {
+	return (p.VideoCodec != "" || p.AudioCodec != "") &&
+		(!p.VideoInterlaced || deinterlaces) &&
+		(p.VideoCodec == "" || f.Video.accepts(p)) &&
+		(p.AudioCodec == "" || f.Audio.accepts(p))
 }

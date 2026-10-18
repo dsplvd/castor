@@ -89,7 +89,6 @@ func ProgramFor(stream *Stream) (media.Program, error) {
 	}
 	if stream.Probe != nil {
 		program.SetMeasurement(*stream.Probe)
-		program.RequiresRelay = stream.Probe.SourceUnwrapped
 	}
 	return program, nil
 }
@@ -109,9 +108,6 @@ func Narrowed(program media.Program, chosen Rendition, stream *Stream) (media.Pr
 		narrowed.SetMeasurement(measured)
 	case chosen.Declared != nil:
 		narrowed.SetMeasurement(*chosen.Declared)
-	}
-	if stream.Probe != nil {
-		narrowed.RequiresRelay = narrowed.RequiresRelay || stream.Probe.SourceUnwrapped
 	}
 	return narrowed, nil
 }

@@ -38,6 +38,11 @@ func (s Shape) handoff() bool {
 		return false
 	}
 	probe, measured := s.Program.Measurement()
+	// A finite probe cannot establish whether a later HLS segment uses the
+	// nonstandard PNG/gzip/TS envelope. Direct HLS requires explicit support.
+	if primary.ContentType == media.HLS && (!measured || !s.Device.CanPlayHLSWith(probe, media.HLSExtraSegmentTIKTIKPX)) {
+		return false
+	}
 	return s.Device.SelfFetch && s.Program.SelfFetchable() &&
 		s.Device.AcceptsContainer(primary.ContentType) && measured &&
 		canPlay(s.Device, probe) && s.Device.CanPlayIn(primary.ContentType, probe) && s.MaxHeight.Admits(s.Height)

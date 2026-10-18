@@ -54,13 +54,13 @@ func TestPixelSegments(t *testing.T) {
 	ts := bytes.Repeat(append([]byte{0x47}, make([]byte, 187)...), 4)
 	for _, alpha := range []uint8{255, 128, 0} {
 		body := pixelEnvelope(t, compressed(t, ts), alpha)
-		got, _, err := unwrapPixels(body)
+		got, err := unwrapPixels(body)
 		if err != nil || !bytes.Equal(got, ts) {
 			t.Fatalf("alpha %d: %v, decoded %d bytes", alpha, err, len(got))
 		}
 	}
 	t.Run("ordinary media", func(t *testing.T) {
-		got, _, err := unwrapPixels(ts)
+		got, err := unwrapPixels(ts)
 		if err != nil || !bytes.Equal(got, ts) {
 			t.Fatalf("changed plain TS: %v", err)
 		}
@@ -72,7 +72,7 @@ func TestPixelSegments(t *testing.T) {
 		if err := png.Encode(&b, img); err != nil {
 			t.Fatal(err)
 		}
-		got, _, err := unwrapPixels(b.Bytes())
+		got, err := unwrapPixels(b.Bytes())
 		if err != nil || !bytes.Equal(got, b.Bytes()) {
 			t.Fatalf("changed image: %v", err)
 		}
@@ -99,7 +99,7 @@ func TestPixelSegments(t *testing.T) {
 	cases["pixel allocation limit"] = huge
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := unwrapPixels(body); err == nil {
+			if _, err := unwrapPixels(body); err == nil {
 				t.Fatal("accepted malformed envelope")
 			}
 		})
