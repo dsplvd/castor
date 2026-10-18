@@ -67,39 +67,42 @@ type Options struct {
 }
 
 // Start launches the command at path. The process is killed when ctx is cancelled.
-func Start(ctx context.Context, path string, command Command, opts Options) (*Process, error) {
+func Start(ctx context.Context, path string, command Command, opts Options) (p *Process, err error) {
 	// An unread tee blocks ffmpeg once the pipe fills, and a writer with no tee waits forever.
 	if tees := command.ExtraPipes > pcmFD-firstExtraFD; tees != (opts.PCM != nil) {
 		return nil, fmt.Errorf("a PCM tee routed (%t) and a PCM consumer given (%t) disagree", tees, opts.PCM != nil)
 	}
 
 	cmd := exec.CommandContext(ctx, path, slices.Clone(command.Args)...)
-	// Parent copies of inherited writers must close after Start, including failures.
+	var (
+		extra                   []*sideOutput
+		stdout                  io.ReadCloser
+		stderrRead, stderrWrite *os.File
+	)
+	// Start owns every endpoint until launch succeeds. Parent write handles
+	// always close; the process and its drainers take the read ends on success.
 	defer func() {
 		for _, file := range cmd.ExtraFiles {
 			_ = file.Close()
 		}
-	}()
-
-	var (
-		extra       []*sideOutput
-		stderrRead  *os.File
-		stderrWrite *os.File
-	)
-	closeExtra := func() {
-		for _, l := range extra {
-			_ = l.Close()
+		if stderrWrite != nil {
+			_ = stderrWrite.Close()
 		}
-		for _, f := range []*os.File{stderrRead, stderrWrite} {
-			if f != nil {
-				_ = f.Close()
+		if err != nil {
+			for _, output := range extra {
+				_ = output.Close()
+			}
+			if stdout != nil {
+				_ = stdout.Close()
+			}
+			if stderrRead != nil {
+				_ = stderrRead.Close()
 			}
 		}
-	}
+	}()
 	for i := range command.ExtraPipes {
 		output, err := newSideOutput(cmd, firstExtraFD+i)
 		if err != nil {
-			closeExtra()
 			return nil, fmt.Errorf("side output: %w", err)
 		}
 		extra = append(extra, output)
@@ -114,25 +117,21 @@ func Start(ctx context.Context, path string, command Command, opts Options) (*Pr
 	}
 	cmd.Dir = opts.WorkDir
 
-	stdout, err := cmd.StdoutPipe()
+	stdout, err = cmd.StdoutPipe()
 	if err != nil {
-		closeExtra()
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
 	// Our own pipe: os/exec closes it at Wait, losing buffered tail (ffmpeg's error path).
 	stderrRead, stderrWrite, err = os.Pipe()
 	if err != nil {
-		closeExtra()
 		return nil, fmt.Errorf("stderr pipe: %w", err)
 	}
 	cmd.Stderr = stderrWrite
 	if err := cmd.Start(); err != nil {
-		closeExtra()
 		return nil, fmt.Errorf("starting ffmpeg: %w", err)
 	}
-	_ = stderrWrite.Close()
 
-	p := &Process{
+	p = &Process{
 		Stdout:  stdout,
 		cmd:     cmd,
 		input:   input,
