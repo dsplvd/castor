@@ -140,7 +140,7 @@ func scanCommand(local Local) *cli.Command {
 			// Scanning needs only the API endpoint; a device is what it discovers.
 			cfg, err := settings.Load(cmd, struct {
 				Servers struct {
-					API apiConfig `yaml:"api"`
+					API settings.Endpoint `yaml:"api"`
 				} `yaml:"servers"`
 			}{})
 			if err != nil {

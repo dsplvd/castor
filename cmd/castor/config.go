@@ -6,22 +6,17 @@ import (
 	"github.com/stupside/castor/cmd/castor/internal/browse/tmdb"
 	"github.com/stupside/castor/cmd/castor/internal/cast"
 	"github.com/stupside/castor/cmd/castor/internal/sources"
+	"github.com/stupside/castor/internal/settings"
 )
 
 // Config is the command line's sections of castor's configuration.
 type Config struct {
-	Device  cast.Device   `yaml:"device"`
-	Sources sources.Sites `yaml:"sources" validate:"dive"`
-	TMDB    tmdb.Config   `yaml:"tmdb"`
+	Device  cast.Device   `yaml:"device" settings:"strict"`
+	Sources sources.Sites `yaml:"sources" settings:"strict" validate:"dive"`
+	TMDB    tmdb.Config   `yaml:"tmdb" settings:"strict"`
 	Servers struct {
-		API apiConfig `yaml:"api"`
+		API settings.Endpoint `yaml:"api"`
 	} `yaml:"servers"`
-}
-
-// apiConfig is castor's API elsewhere, and the token it asks for; unset, the commands run one in their own process.
-type apiConfig struct {
-	URL   string `yaml:"url" validate:"omitempty,http_url"`
-	Token string `yaml:"token"`
 }
 
 // browsable refuses an interactive cast that has no catalog to browse.
