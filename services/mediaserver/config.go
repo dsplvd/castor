@@ -38,6 +38,6 @@ type NetworkConfig struct {
 func defaults() Config {
 	c := Config{}
 	c.Servers.Media.Listen = ":8410"
-	c.Servers.Media.Resolver = ResolverConfig{Config: rank.Config{ProbeMaxConcurrency: 2}}
+	c.Servers.Media.Resolver = ResolverConfig{ProbeMaxConcurrency: 2}
 	return c
 }

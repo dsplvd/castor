@@ -17,10 +17,9 @@ export const preferences = (f: FormData): MessageInitShape<typeof PreferencesSch
   return {
     delivery: delivery ? Number(delivery) : undefined,
     maxHeight: height ? Number(height) : undefined,
-    subtitles: !subs ? undefined : {
+    subtitles: !subs || subs === "auto" ? undefined : {
       mode: subs === "off" ? { case: "disabled", value: {} }
-        : subs === "auto" ? { case: "autoDetect", value: {} }
-        : { case: "language", value: subs },
+        : { case: "preferences", value: { languages: [subs] } },
     },
   };
 };

@@ -27,7 +27,7 @@ type ScrapingConfig struct {
 
 func defaults() ServiceConfig {
 	c := ServiceConfig{}
-	c.Servers.Scraping = ScrapingConfig{ServerConfig: ServerConfig{Listen: ":8412"}, Config: Defaults()}
+	c.Servers.Scraping = ScrapingConfig{Listen: ":8412", Config: Defaults()}
 	return c
 }
 

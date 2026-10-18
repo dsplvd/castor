@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/setup
       # The real-encode tests need ffmpeg >= 7.1 (allowed_segment_extensions); apt's 6.1 lacks it. tested.sh fails on their skip.
       - run: |
-          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz | sudo tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+          curl -fsSL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz | sudo tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
       - run: |
           eval "$(make env)"
           TEST_CASTOR_CHROME="$(command -v google-chrome)"
