@@ -1,18 +1,19 @@
-//go:build windows
-
 package ffmpeg
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"os/exec"
 	"sync"
+
+	"github.com/Microsoft/go-winio"
+	"golang.org/x/sys/windows"
 )
 
-// Windows cannot pass ExtraFiles through os/exec, so side outputs use loopback TCP.
+// Windows side outputs use local named pipes restricted to the process user.
 type sideOutput struct {
 	// accepted closes once ffmpeg's connection is taken, or accepting was abandoned and conn stays nil.
 	accepted chan struct{}
@@ -21,16 +22,23 @@ type sideOutput struct {
 	stopAccepting func()
 }
 
-// newSideOutput opens a local side output and accepts ffmpeg's connection.
+// newSideOutput assigns a private named pipe to the command's logical output.
 func newSideOutput(cmd *exec.Cmd, fd int) (*sideOutput, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
-		return nil, fmt.Errorf("side output listener: %w", err)
+		return nil, fmt.Errorf("side output owner: %w", err)
 	}
-	// Progress must not wait in Nagle's buffer.
-	address := (&url.URL{Scheme: "tcp", Host: ln.Addr().String(), RawQuery: "tcp_nodelay=1"}).String()
+	path := `\\.\pipe\castor-` + rand.Text()
+	ln, err := winio.ListenPipe(path, &winio.PipeConfig{
+		SecurityDescriptor: "D:P(A;;GA;;;" + user.User.Sid.String() + ")",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("side output pipe: %w", err)
+	}
+	address := "file:" + path
+	logical := pipeURL(fd)
 	for i, arg := range cmd.Args {
-		if arg == pipeURL(fd) {
+		if arg == logical {
 			cmd.Args[i] = address
 		}
 	}

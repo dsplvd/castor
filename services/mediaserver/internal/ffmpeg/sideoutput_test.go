@@ -48,6 +48,8 @@ func TestSideOutputProcessOwnership(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			wait := sync.OnceValue(proc.Wait)
+			t.Cleanup(func() { proc.Kill(); _ = wait() })
 			if mode == "cancel while running" {
 				select {
 				case <-ready:
@@ -57,7 +59,7 @@ func TestSideOutputProcessOwnership(t *testing.T) {
 				}
 			}
 			_, _ = io.Copy(io.Discard, proc.Stdout)
-			err = proc.Wait()
+			err = wait()
 			if mode != "transfer" {
 				if err == nil {
 					t.Fatal("expected process failure")
