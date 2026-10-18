@@ -114,7 +114,11 @@ message HLSSupport {
   repeated ExtraSegmentFormat extra_segment_formats = 2 [(buf.validate.field).repeated = {
     max_items: 16
     unique: true
-    items: {enum: {not_in: [0]}}
+    items: {
+      enum: {
+        not_in: [0]
+      }
+    }
   }];
 }
 
@@ -139,7 +143,12 @@ message H264Support {
   repeated Profile profiles = 1 [(buf.validate.field).repeated = {
     max_items: 4
     unique: true
-    items: {enum: {defined_only: true not_in: [0]}}
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
   }];
   uint32 max_level = 2;
 }
@@ -154,13 +163,26 @@ message HEVCSupport {
   repeated Profile profiles = 1 [(buf.validate.field).repeated = {
     max_items: 2
     unique: true
-    items: {enum: {defined_only: true not_in: [0]}}
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
   }];
   // Empty means 8-bit only.
   repeated uint32 bit_depths = 2 [(buf.validate.field).repeated = {
     max_items: 3
     unique: true
-    items: {uint32: {in: [8, 10, 12]}}
+    items: {
+      uint32: {
+        in: [
+          8,
+          10,
+          12
+        ]
+      }
+    }
   }];
   uint32 max_level = 3;
 }
