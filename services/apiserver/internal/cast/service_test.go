@@ -89,7 +89,7 @@ func TestListedCastsAndDefaultsDoNotExposeTheServicesSnapshots(t *testing.T) {
 	if got := s.asked(nil).GetMaxHeight(); got != 1080 {
 		t.Errorf("changing the caller's defaults changed future casts to height %d", got)
 	}
-	c := newCast("cast-1", &castorv1.Device{Name: "Bedroom"}, &castorv1.Source{Source: &castorv1.Source_Stream{Stream: &castorv1.Stream{Url: "https://media.example/video"}}}, func(error) {})
+	c := newCast("cast-1", &castorv1.Device{Name: "Bedroom"}, &castorv1.CastRequest{Source: &castorv1.Source{Source: &castorv1.Source_Stream{Stream: &castorv1.Stream{Url: "https://media.example/video"}}}}, func(error) {})
 	status := &castorv1.CastStatus{State: &castorv1.CastStatus_Casting{Casting: &castorv1.CastingStatus{Attempt: 1}}}
 	c.show(status)
 	done := make(chan struct{})

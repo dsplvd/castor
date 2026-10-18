@@ -11,6 +11,7 @@ import (
 	castmedia "github.com/vishen/go-chromecast/cast"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
+	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
@@ -29,8 +30,8 @@ type session struct {
 var _ device.Device = (*session)(nil)
 
 // Play returns the receiver's own verdict on the LOAD, so a refused URL fails the hand-off; a dropped connection is gone.
-func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
-	if err := s.play(ctx, streamURL, device.MIME(container), captions); err != nil {
+func (s *session) Play(ctx context.Context, playback device.Playback) error {
+	if err := s.play(ctx, playback.URL, device.MIME(playback.Container), playback.Captions, playback.Info); err != nil {
 		select {
 		case <-s.ch.gone:
 			return &device.Gone{Device: s.name, Observed: "the Cast connection closed before the media loaded", Err: err}
@@ -41,7 +42,7 @@ func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav
 	return nil
 }
 
-func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string, captions []*mediav1.DeviceCommand_Caption) error {
+func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string, captions []*mediav1.DeviceCommand_Caption, info *castorv1.MediaInfo) error {
 	transport, err := s.mediaReceiver(ctx)
 	if err != nil {
 		return fmt.Errorf("starting the chromecast's media receiver: %w", err)
@@ -59,6 +60,10 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 	load := &loadCommand{
 		Type: msgLoad, Autoplay: true,
 		Media: mediaItem{MediaItem: castmedia.MediaItem{ContentId: streamURL.String(), ContentType: contentType, StreamType: "BUFFERED"}},
+	}
+	load.Media.Metadata = castmedia.MediaMetadata{Title: info.GetTitle(), Subtitle: info.GetSynopsis(), ReleaseDate: info.GetReleaseDate()}
+	if imageURL := info.GetImageUrl(); imageURL != "" {
+		load.Media.Metadata.Images = []castmedia.Image{{URL: imageURL}}
 	}
 	load.Media.Tracks, load.ActiveTrackIds = textTracks(captions)
 	reply, err := s.ch.request(ctx, transport, nsMedia, load)

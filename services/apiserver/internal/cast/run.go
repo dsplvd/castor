@@ -105,5 +105,5 @@ func (s *Service) run(ctx context.Context, c *cast, target device.Info, asked *m
 		return nil, ctx.Err()
 	}
 
-	return s.media.Run(ctx, c.id, source, asked, lent, c.show)
+	return s.media.Run(ctx, c.id, source, asked, lent, c.mediaInfo, c.show)
 }

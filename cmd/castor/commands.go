@@ -53,7 +53,7 @@ func castCommand(local Local) *cli.Command {
 				return cast.DryRun(ctx, api.casts, pages(urls))
 			}
 			fmt.Printf("Casting: %s\n", sel.Title)
-			return cast.Run(ctx, api.casts, to, pages(urls))
+			return cast.Run(ctx, api.casts, to, pages(urls), &castorv1.MediaInfo{Title: sel.Title, Synopsis: sel.Synopsis, ImageUrl: sel.ImageURL, ReleaseDate: sel.ReleaseDate})
 		},
 		Commands: []*cli.Command{
 			urlCommand(local),
@@ -129,7 +129,7 @@ func castSource(ctx context.Context, cmd *cli.Command, local Local, source func(
 	if err != nil {
 		return err
 	}
-	return cast.Run(ctx, api.casts, to, source(cfg))
+	return cast.Run(ctx, api.casts, to, source(cfg), nil)
 }
 
 func scanCommand(local Local) *cli.Command {

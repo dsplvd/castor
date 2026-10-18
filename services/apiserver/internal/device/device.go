@@ -14,10 +14,18 @@ import (
 // Type names a device family in configuration and inside the registry.
 type Type string
 
+// Playback describes the media to hand to a receiver.
+type Playback struct {
+	URL       *url.URL
+	Container mediav1.Container
+	Captions  []*mediav1.DeviceCommand_Caption
+	Info      *castorv1.MediaInfo
+}
+
 // Device is a connected device, ready to play; whoever connected it closes it.
 type Device interface {
-	// Play points the device at streamURL, packaged as container.
-	Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error
+	// Play points the device at the requested media.
+	Play(ctx context.Context, playback Playback) error
 
 	AwaitEnd(ctx context.Context) error
 

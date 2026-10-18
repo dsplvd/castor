@@ -19,6 +19,7 @@ import (
 	castmedia "github.com/vishen/go-chromecast/cast"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
+	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
@@ -88,11 +89,28 @@ func TestADevicesAnswersAreReadAsItSendsThem(t *testing.T) {
 			jsontext.Value(`{"type":"MEDIA_STATUS","status":[{"mediaSessionId":1,"playbackRate":1,"playerState":"IDLE","currentTime":596.4,"supportedMediaCommands":12303,"volume":{"level":1,"muted":false},"currentItemId":1,"idleReason":"FINISHED","extendedStatus":null}],"requestId":0}`),
 		}
 	})
-	if err := dev.Play(t.Context(), stream, mediav1.Container_CONTAINER_MP4, nil); err != nil {
+	if err := dev.Play(t.Context(), device.Playback{URL: stream, Container: mediav1.Container_CONTAINER_MP4}); err != nil {
 		t.Fatal(err)
 	}
 	if err := dev.AwaitEnd(t.Context()); err != nil {
 		t.Errorf("AwaitEnd = %v, want the device's finish read as a clean end", err)
+	}
+}
+
+func TestChromecastLoadIncludesSelectedMovieDetails(t *testing.T) {
+	info := &castorv1.MediaInfo{Title: "The Matrix", Synopsis: "A hacker learns the truth.", ImageUrl: "https://image.tmdb.org/t/p/w500/matrix.jpg", ReleaseDate: "1999-03-31"}
+	loaded := make(chan castmedia.MediaMetadata, 1)
+	dev := receiverAnswering(t, func(id int, load castmedia.MediaItem) []any {
+		loaded <- load.Metadata
+		return []any{mediaStatus(id, load.ContentId, "BUFFERING", "")}
+	})
+	stream := &url.URL{Scheme: "http", Host: "media.test", Path: "/movie.mp4"}
+	if err := dev.Play(t.Context(), device.Playback{URL: stream, Container: mediav1.Container_CONTAINER_MP4, Info: info}); err != nil {
+		t.Fatal(err)
+	}
+	got := <-loaded
+	if got.Title != info.Title || got.Subtitle != info.Synopsis || got.ReleaseDate != info.ReleaseDate || len(got.Images) != 1 || got.Images[0].URL != info.ImageUrl {
+		t.Errorf("LOAD metadata = %+v, want %+v", got, info)
 	}
 }
 
@@ -121,7 +139,7 @@ func TestChromecastPlayReturnsTheReceiversVerdictOnTheLoad(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dev := receiverAnswering(t, tt.answer)
-			err := dev.Play(t.Context(), stream, mediav1.Container_CONTAINER_HLS, nil)
+			err := dev.Play(t.Context(), device.Playback{URL: stream, Container: mediav1.Container_CONTAINER_HLS})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Play = %v, want error %v", err, tt.wantErr)
 			}
@@ -135,7 +153,7 @@ func TestALoadNamesItsContainerAsAReceiverKnowsIt(t *testing.T) {
 		loaded <- load.ContentType
 		return []any{mediaStatus(id, load.ContentId, "BUFFERING", "")}
 	})
-	if err := dev.Play(t.Context(), &url.URL{Scheme: "http", Host: "media.test", Path: "/stream.m3u8"}, mediav1.Container_CONTAINER_HLS, nil); err != nil {
+	if err := dev.Play(t.Context(), device.Playback{URL: &url.URL{Scheme: "http", Host: "media.test", Path: "/stream.m3u8"}, Container: mediav1.Container_CONTAINER_HLS}); err != nil {
 		t.Fatal(err)
 	}
 	if got := <-loaded; got != "application/x-mpegURL" {
@@ -152,10 +170,10 @@ func TestAPlayRetriedAfterARefusedOneIsAwaitedToItsOwnEnd(t *testing.T) {
 		}
 		return []any{mediaStatus(id, load.ContentId, "PLAYING", ""), mediaStatus(0, load.ContentId, "IDLE", "FINISHED")}
 	})
-	if err := dev.Play(t.Context(), refused, mediav1.Container_CONTAINER_MP4, nil); err == nil {
+	if err := dev.Play(t.Context(), device.Playback{URL: refused, Container: mediav1.Container_CONTAINER_MP4}); err == nil {
 		t.Fatal("the receiver refused the first load, yet Play accepted it")
 	}
-	if err := dev.Play(t.Context(), retried, mediav1.Container_CONTAINER_MP4, nil); err != nil {
+	if err := dev.Play(t.Context(), device.Playback{URL: retried, Container: mediav1.Container_CONTAINER_MP4}); err != nil {
 		t.Fatal(err)
 	}
 	if err := dev.AwaitEnd(t.Context()); err != nil {
@@ -176,9 +194,11 @@ func TestAPlayAbandonedForANewerOneLeavesTheNewerOneWatched(t *testing.T) {
 	})
 	ctx, abandon := context.WithCancel(t.Context())
 	first := make(chan error, 1)
-	go func() { first <- dev.Play(ctx, abandoned, mediav1.Container_CONTAINER_MP4, nil) }()
+	go func() {
+		first <- dev.Play(ctx, device.Playback{URL: abandoned, Container: mediav1.Container_CONTAINER_MP4})
+	}()
 	<-loading
-	if err := dev.Play(t.Context(), current, mediav1.Container_CONTAINER_MP4, nil); err != nil {
+	if err := dev.Play(t.Context(), device.Playback{URL: current, Container: mediav1.Container_CONTAINER_MP4}); err != nil {
 		t.Fatal(err)
 	}
 	abandon()
@@ -199,7 +219,7 @@ func TestAPlayOnADroppedConnectionIsGone(t *testing.T) {
 	t.Cleanup(func() { _ = dev.Close() })
 	_ = far.Close()
 	<-dev.ch.gone
-	if _, gone := errors.AsType[*device.Gone](dev.Play(t.Context(), &url.URL{Scheme: "http", Host: "media.test"}, mediav1.Container_CONTAINER_MP4, nil)); !gone {
+	if _, gone := errors.AsType[*device.Gone](dev.Play(t.Context(), device.Playback{URL: &url.URL{Scheme: "http", Host: "media.test"}, Container: mediav1.Container_CONTAINER_MP4})); !gone {
 		t.Error("a Play on a connection the receiver dropped is not reported gone, so its lender never connects again")
 	}
 }
@@ -214,7 +234,7 @@ func TestChromecastClosesWhileTheReceiverKeepsTalking(t *testing.T) {
 			}
 			return answers
 		})
-		if err := dev.Play(t.Context(), stream, mediav1.Container_CONTAINER_MP4, nil); err != nil {
+		if err := dev.Play(t.Context(), device.Playback{URL: stream, Container: mediav1.Container_CONTAINER_MP4}); err != nil {
 			t.Fatalf("Play = %v", err)
 		}
 		if err := dev.Close(); err != nil {

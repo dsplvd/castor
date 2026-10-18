@@ -7,7 +7,6 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -89,11 +88,11 @@ type connection struct {
 	gone bool
 }
 
-func (c *connection) Play(_ context.Context, u *url.URL, _ mediav1.Container, _ []*mediav1.DeviceCommand_Caption) error {
+func (c *connection) Play(_ context.Context, playback device.Playback) error {
 	if c.gone {
 		return &device.Gone{Device: "Bedroom", Observed: "the connection closed"}
 	}
-	c.f.played <- u.String()
+	c.f.played <- playback.URL.String()
 	return nil
 }
 

@@ -2,17 +2,17 @@ package mediaclient
 
 import (
 	"context"
-	"net/url"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
+	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
 type waitingDevice struct{ started chan struct{} }
 
-func (*waitingDevice) Play(context.Context, *url.URL, mediav1.Container, []*mediav1.DeviceCommand_Caption) error {
+func (*waitingDevice) Play(context.Context, device.Playback) error {
 	return nil
 }
 func (*waitingDevice) Capabilities() *mediav1.Capabilities {

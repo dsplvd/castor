@@ -88,7 +88,7 @@ type session struct {
 
 // Run owns one remote cast's control protocol, including reconciliation when
 // Start's response is lost. It returns only after releasing every device borrower.
-func (c *Client) Run(parent context.Context, id string, source *mediav1.Source, asked *mediav1.PlaybackSettings, lent device.Device, status func(*castorv1.CastStatus)) (*castorv1.Ended, error) {
+func (c *Client) Run(parent context.Context, id string, source *mediav1.Source, asked *mediav1.PlaybackSettings, lent device.Device, info *castorv1.MediaInfo, status func(*castorv1.CastStatus)) (*castorv1.Ended, error) {
 	if cause := context.Cause(parent); cause != nil {
 		return nil, cause
 	}
@@ -103,7 +103,7 @@ func (c *Client) Run(parent context.Context, id string, source *mediav1.Source, 
 		s.move(sessionFailed)
 	} else {
 		s.move(remoteStarted)
-		s.observe(parent, lent, status)
+		s.observe(parent, lent, info, status)
 		s.loop(parent)
 	}
 	return s.finish()
@@ -119,7 +119,7 @@ func (s *session) move(event sessionEvent) {
 	}
 }
 
-func (s *session) observe(parent context.Context, lent device.Device, status func(*castorv1.CastStatus)) {
+func (s *session) observe(parent context.Context, lent device.Device, info *castorv1.MediaInfo, status func(*castorv1.CastStatus)) {
 	watched := make(chan watchResult, 1)
 	s.watching = watched
 	s.workers.Go(func() {
@@ -130,7 +130,7 @@ func (s *session) observe(parent context.Context, lent device.Device, status fun
 		driven := make(chan error, 1)
 		s.driving = driven
 		s.workers.Go(func() {
-			err := s.client.Drive(s.ctx, s.id, lent)
+			err := s.client.Drive(s.ctx, s.id, lent, info)
 			if s.ctx.Err() != nil {
 				err = nil
 			}

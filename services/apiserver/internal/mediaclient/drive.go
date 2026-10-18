@@ -12,15 +12,16 @@ import (
 	"connectrpc.com/connect"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
+	castorv1 "github.com/stupside/castor/gen/castor/v1"
 	"github.com/stupside/castor/services/apiserver/internal/device"
 )
 
 // Drive lends lent, to cast id for the whole cast, playing what the media server asks until the cast ends or ctx does.
-func (c *Client) Drive(parent context.Context, id string, lent device.Device) error {
+func (c *Client) Drive(parent context.Context, id string, lent device.Device, info *castorv1.MediaInfo) error {
 	// Leaving ends the stream and every call on the device; the cast plays on without it.
 	ctx, leave := context.WithCancelCause(parent)
 	defer leave(nil)
-	d := &driver{ctx: ctx, leave: leave, c: c, castID: id, device: lent, running: map[string]context.CancelFunc{}}
+	d := &driver{ctx: ctx, leave: leave, c: c, castID: id, device: lent, mediaInfo: info, running: map[string]context.CancelFunc{}}
 	defer d.release()
 	stream, err := c.devices.Drive(ctx, &mediav1.DriveRequest{CastId: id, Capabilities: lent.Capabilities()})
 	if err != nil {
@@ -43,11 +44,12 @@ func (c *Client) Drive(parent context.Context, id string, lent device.Device) er
 
 // driver runs the media server's calls on the lent device, each concurrently, for one drive.
 type driver struct {
-	ctx    context.Context
-	leave  context.CancelCauseFunc
-	c      *Client
-	castID string
-	device device.Device
+	ctx       context.Context
+	leave     context.CancelCauseFunc
+	c         *Client
+	castID    string
+	device    device.Device
+	mediaInfo *castorv1.MediaInfo
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -101,7 +103,7 @@ func (d *driver) exec(ctx context.Context, cmd *mediav1.DeviceCommand_Call) *med
 		if err != nil {
 			return failure(err)
 		}
-		return outcome(d.device.Play(ctx, target, c.Play.GetContainer(), c.Play.GetCaptions()))
+		return outcome(d.device.Play(ctx, device.Playback{URL: target, Container: c.Play.GetContainer(), Captions: c.Play.GetCaptions(), Info: d.mediaInfo}))
 	case *mediav1.DeviceCommand_Call_AwaitEnd:
 		return outcome(d.device.AwaitEnd(ctx))
 	case *mediav1.DeviceCommand_Call_Pause:

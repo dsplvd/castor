@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file castor/v1/cast.proto.
  */
 export const file_castor_v1_cast: GenFile = /*@__PURE__*/
-  fileDesc("ChRjYXN0b3IvdjEvY2FzdC5wcm90bxIJY2FzdG9yLnYxIpABCgtDYXN0UmVxdWVzdBIpCgZ0YXJnZXQYASABKAsyES5jYXN0b3IudjEuVGFyZ2V0Qga6SAPIAQESKQoGc291cmNlGAIgASgLMhEuY2FzdG9yLnYxLlNvdXJjZUIGukgDyAEBEisKC3ByZWZlcmVuY2VzGAMgASgLMhYuY2FzdG9yLnYxLlByZWZlcmVuY2VzIigKDENhc3RSZXNwb25zZRIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABImgKDlJlc29sdmVSZXF1ZXN0EikKBnNvdXJjZRgBIAEoCzIRLmNhc3Rvci52MS5Tb3VyY2VCBrpIA8gBARIrCgtwcmVmZXJlbmNlcxgCIAEoCzIWLmNhc3Rvci52MS5QcmVmZXJlbmNlcyI6Cg9SZXNvbHZlUmVzcG9uc2USJwoGcmFua2VkGAEgAygLMhcuY2FzdG9yLnYxLlJhbmtlZFN0cmVhbSKSAwoGU291cmNlEiMKBnN0cmVhbRgBIAEoCzIRLmNhc3Rvci52MS5TdHJlYW1IABIoCgVwYWdlcxgCIAEoCzIXLmNhc3Rvci52MS5Tb3VyY2UuUGFnZXNIABI0CgdzdHJlYW1zGAMgASgLMiEuY2FzdG9yLnYxLlNvdXJjZS5SZXNvbHZlZFN0cmVhbXNIABqkAQoFUGFnZXMSmgEKBHVybHMYASADKAlCiwG6SIcBkgGDAQgBEBAifboBdQoIdXJsLmh0dHASHG11c3QgYmUgYW4gaHR0cCBvciBodHRwcyBVUkwaS3RoaXMuaXNVcmkoKSAmJiAodGhpcy5zdGFydHNXaXRoKCdodHRwOi8vJykgfHwgdGhpcy5zdGFydHNXaXRoKCdodHRwczovLycpKXIDGIBAGksKD1Jlc29sdmVkU3RyZWFtcxI4CgdzdHJlYW1zGAEgAygLMhouY2FzdG9yLnYxLlN0cmVhbUNhbmRpZGF0ZUILukgIkgEFCAEQwAxCDwoGc291cmNlEgW6SAIIASLeAQoLUHJlZmVyZW5jZXMSNgoIZGVsaXZlcnkYASABKA4yEy5jYXN0b3IudjEuRGVsaXZlcnlCCrpIB4IBBBABIABIAIgBARIgCgptYXhfaGVpZ2h0GAIgASgNQge6SAQqAigCSAGIAQESLwoJc3VidGl0bGVzGAMgASgLMhwuY2FzdG9yLnYxLlN1YnRpdGxlU2VsZWN0aW9uEigKBWF1ZGlvGAQgASgLMhkuY2FzdG9yLnYxLkF1ZGlvU2VsZWN0aW9uQgsKCV9kZWxpdmVyeUINCgtfbWF4X2hlaWdodCI9Cg5BdWRpb1NlbGVjdGlvbhIrCglsYW5ndWFnZXMYASADKAlCGLpIFZIBEiIQcg4yDF5bYS16XXsyLDN9JCKFAQoRU3VidGl0bGVTZWxlY3Rpb24SKgoIZGlzYWJsZWQYASABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABI1CgtwcmVmZXJlbmNlcxgCIAEoCzIeLmNhc3Rvci52MS5TdWJ0aXRsZVByZWZlcmVuY2VzSABCDQoEbW9kZRIFukgCCAEiYwoTU3VidGl0bGVQcmVmZXJlbmNlcxItCglsYW5ndWFnZXMYASADKAlCGrpIF5IBFAgBIhByDjIMXlthLXpdezIsM30kEh0KFXRyYW5zY3JpYmVfaWZfbWlzc2luZxgCIAEoCCIoCgxXYXRjaFJlcXVlc3QSGAoHY2FzdF9pZBgBIAEoCUIHukgEcgIQASJsCg1XYXRjaFJlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIVLmNhc3Rvci52MS5DYXN0U3RhdHVzSAASIQoFZW5kZWQYAiABKAsyEC5jYXN0b3IudjEuRW5kZWRIAEIPCgZ1cGRhdGUSBbpIAggBItYBCgpDYXN0U3RhdHVzEiwKCmNvbm5lY3RpbmcYASABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABIsCgpleHRyYWN0aW5nGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAASLwoJbWVhc3VyaW5nGAMgASgLMhouY2FzdG9yLnYxLk1lYXN1cmluZ1N0YXR1c0gAEisKB2Nhc3RpbmcYBCABKAsyGC5jYXN0b3IudjEuQ2FzdGluZ1N0YXR1c0gAQg4KBXN0YXRlEgW6SAIIASJGCg9NZWFzdXJpbmdTdGF0dXMSDwoHc3RyZWFtcxgBIAEoDRIVCghjYXN0YWJsZRgCIAEoDUgAiAEBQgsKCV9jYXN0YWJsZSJzCg1DYXN0aW5nU3RhdHVzEg8KB3N0cmVhbXMYASABKA0SEAoIY2FzdGFibGUYAiABKA0SGAoHYXR0ZW1wdBgDIAEoDUIHukgEKgIoARIlCghyZXZpc2lvbhgEIAEoCzITLmNhc3Rvci52MS5SZXZpc2lvbiKWAQoFRW5kZWQSKwoJY29tcGxldGVkGAEgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAASKQoHc3RvcHBlZBgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUgAEiQKBmZhaWxlZBgDIAEoCzISLmNhc3Rvci52MS5GYWlsdXJlSABCDwoGcmVzdWx0EgW6SAIIASJVCgdGYWlsdXJlEjAKBGNvZGUYASABKA4yFi5jYXN0b3IudjEuRmFpbHVyZUNvZGVCCrpIB4IBBBABIAASGAoHbWVzc2FnZRgCIAEoCUIHukgEcgIQASInCgtTdG9wUmVxdWVzdBIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABIg4KDFN0b3BSZXNwb25zZSISChBMaXN0Q2FzdHNSZXF1ZXN0IjMKEUxpc3RDYXN0c1Jlc3BvbnNlEh4KBWNhc3RzGAEgAygLMg8uY2FzdG9yLnYxLkNhc3QifwoEQ2FzdBIKCgJpZBgBIAEoCRIhCgZkZXZpY2UYAiABKAsyES5jYXN0b3IudjEuRGV2aWNlEiEKBnNvdXJjZRgDIAEoCzIRLmNhc3Rvci52MS5Tb3VyY2USJQoGc3RhdHVzGAQgASgLMhUuY2FzdG9yLnYxLkNhc3RTdGF0dXMq0wEKC0ZhaWx1cmVDb2RlEhwKGEZBSUxVUkVfQ09ERV9VTlNQRUNJRklFRBAAEiAKHEZBSUxVUkVfQ09ERV9QTEFZQkFDS19GQUlMRUQQARIjCh9GQUlMVVJFX0NPREVfREVWSUNFX1VOUkVBQ0hBQkxFEAISIgoeRkFJTFVSRV9DT0RFX0VYVFJBQ1RJT05fRkFJTEVEEAMSIAocRkFJTFVSRV9DT0RFX1NFUlZFUl9TSFVURE9XThAEEhkKFUZBSUxVUkVfQ09ERV9JTlRFUk5BTBAFMscCCgtDYXN0U2VydmljZRI3CgRDYXN0EhYuY2FzdG9yLnYxLkNhc3RSZXF1ZXN0GhcuY2FzdG9yLnYxLkNhc3RSZXNwb25zZRJACgdSZXNvbHZlEhkuY2FzdG9yLnYxLlJlc29sdmVSZXF1ZXN0GhouY2FzdG9yLnYxLlJlc29sdmVSZXNwb25zZRI8CgVXYXRjaBIXLmNhc3Rvci52MS5XYXRjaFJlcXVlc3QaGC5jYXN0b3IudjEuV2F0Y2hSZXNwb25zZTABEjcKBFN0b3ASFi5jYXN0b3IudjEuU3RvcFJlcXVlc3QaFy5jYXN0b3IudjEuU3RvcFJlc3BvbnNlEkYKCUxpc3RDYXN0cxIbLmNhc3Rvci52MS5MaXN0Q2FzdHNSZXF1ZXN0GhwuY2FzdG9yLnYxLkxpc3RDYXN0c1Jlc3BvbnNlYgZwcm90bzM", [file_buf_validate_validate, file_castor_v1_device, file_castor_v1_revision, file_castor_v1_stream, file_google_protobuf_empty]);
+  fileDesc("ChRjYXN0b3IvdjEvY2FzdC5wcm90bxIJY2FzdG9yLnYxIroBCgtDYXN0UmVxdWVzdBIpCgZ0YXJnZXQYASABKAsyES5jYXN0b3IudjEuVGFyZ2V0Qga6SAPIAQESKQoGc291cmNlGAIgASgLMhEuY2FzdG9yLnYxLlNvdXJjZUIGukgDyAEBEisKC3ByZWZlcmVuY2VzGAMgASgLMhYuY2FzdG9yLnYxLlByZWZlcmVuY2VzEigKCm1lZGlhX2luZm8YBCABKAsyFC5jYXN0b3IudjEuTWVkaWFJbmZvInwKCU1lZGlhSW5mbxIXCgV0aXRsZRgBIAEoCUIIukgFcgMYgAISGgoIc3lub3BzaXMYAiABKAlCCLpIBXIDGIAgEhsKCWltYWdlX3VybBgDIAEoCUIIukgFcgMYgEASHQoMcmVsZWFzZV9kYXRlGAQgASgJQge6SARyAhgKIigKDENhc3RSZXNwb25zZRIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABImgKDlJlc29sdmVSZXF1ZXN0EikKBnNvdXJjZRgBIAEoCzIRLmNhc3Rvci52MS5Tb3VyY2VCBrpIA8gBARIrCgtwcmVmZXJlbmNlcxgCIAEoCzIWLmNhc3Rvci52MS5QcmVmZXJlbmNlcyI6Cg9SZXNvbHZlUmVzcG9uc2USJwoGcmFua2VkGAEgAygLMhcuY2FzdG9yLnYxLlJhbmtlZFN0cmVhbSKSAwoGU291cmNlEiMKBnN0cmVhbRgBIAEoCzIRLmNhc3Rvci52MS5TdHJlYW1IABIoCgVwYWdlcxgCIAEoCzIXLmNhc3Rvci52MS5Tb3VyY2UuUGFnZXNIABI0CgdzdHJlYW1zGAMgASgLMiEuY2FzdG9yLnYxLlNvdXJjZS5SZXNvbHZlZFN0cmVhbXNIABqkAQoFUGFnZXMSmgEKBHVybHMYASADKAlCiwG6SIcBkgGDAQgBEBAifboBdQoIdXJsLmh0dHASHG11c3QgYmUgYW4gaHR0cCBvciBodHRwcyBVUkwaS3RoaXMuaXNVcmkoKSAmJiAodGhpcy5zdGFydHNXaXRoKCdodHRwOi8vJykgfHwgdGhpcy5zdGFydHNXaXRoKCdodHRwczovLycpKXIDGIBAGksKD1Jlc29sdmVkU3RyZWFtcxI4CgdzdHJlYW1zGAEgAygLMhouY2FzdG9yLnYxLlN0cmVhbUNhbmRpZGF0ZUILukgIkgEFCAEQwAxCDwoGc291cmNlEgW6SAIIASLeAQoLUHJlZmVyZW5jZXMSNgoIZGVsaXZlcnkYASABKA4yEy5jYXN0b3IudjEuRGVsaXZlcnlCCrpIB4IBBBABIABIAIgBARIgCgptYXhfaGVpZ2h0GAIgASgNQge6SAQqAigCSAGIAQESLwoJc3VidGl0bGVzGAMgASgLMhwuY2FzdG9yLnYxLlN1YnRpdGxlU2VsZWN0aW9uEigKBWF1ZGlvGAQgASgLMhkuY2FzdG9yLnYxLkF1ZGlvU2VsZWN0aW9uQgsKCV9kZWxpdmVyeUINCgtfbWF4X2hlaWdodCI9Cg5BdWRpb1NlbGVjdGlvbhIrCglsYW5ndWFnZXMYASADKAlCGLpIFZIBEiIQcg4yDF5bYS16XXsyLDN9JCKFAQoRU3VidGl0bGVTZWxlY3Rpb24SKgoIZGlzYWJsZWQYASABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABI1CgtwcmVmZXJlbmNlcxgCIAEoCzIeLmNhc3Rvci52MS5TdWJ0aXRsZVByZWZlcmVuY2VzSABCDQoEbW9kZRIFukgCCAEiYwoTU3VidGl0bGVQcmVmZXJlbmNlcxItCglsYW5ndWFnZXMYASADKAlCGrpIF5IBFAgBIhByDjIMXlthLXpdezIsM30kEh0KFXRyYW5zY3JpYmVfaWZfbWlzc2luZxgCIAEoCCIoCgxXYXRjaFJlcXVlc3QSGAoHY2FzdF9pZBgBIAEoCUIHukgEcgIQASJsCg1XYXRjaFJlc3BvbnNlEicKBnN0YXR1cxgBIAEoCzIVLmNhc3Rvci52MS5DYXN0U3RhdHVzSAASIQoFZW5kZWQYAiABKAsyEC5jYXN0b3IudjEuRW5kZWRIAEIPCgZ1cGRhdGUSBbpIAggBItYBCgpDYXN0U3RhdHVzEiwKCmNvbm5lY3RpbmcYASABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABIsCgpleHRyYWN0aW5nGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAASLwoJbWVhc3VyaW5nGAMgASgLMhouY2FzdG9yLnYxLk1lYXN1cmluZ1N0YXR1c0gAEisKB2Nhc3RpbmcYBCABKAsyGC5jYXN0b3IudjEuQ2FzdGluZ1N0YXR1c0gAQg4KBXN0YXRlEgW6SAIIASJGCg9NZWFzdXJpbmdTdGF0dXMSDwoHc3RyZWFtcxgBIAEoDRIVCghjYXN0YWJsZRgCIAEoDUgAiAEBQgsKCV9jYXN0YWJsZSJzCg1DYXN0aW5nU3RhdHVzEg8KB3N0cmVhbXMYASABKA0SEAoIY2FzdGFibGUYAiABKA0SGAoHYXR0ZW1wdBgDIAEoDUIHukgEKgIoARIlCghyZXZpc2lvbhgEIAEoCzITLmNhc3Rvci52MS5SZXZpc2lvbiKWAQoFRW5kZWQSKwoJY29tcGxldGVkGAEgASgLMhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5SAASKQoHc3RvcHBlZBgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUgAEiQKBmZhaWxlZBgDIAEoCzISLmNhc3Rvci52MS5GYWlsdXJlSABCDwoGcmVzdWx0EgW6SAIIASJVCgdGYWlsdXJlEjAKBGNvZGUYASABKA4yFi5jYXN0b3IudjEuRmFpbHVyZUNvZGVCCrpIB4IBBBABIAASGAoHbWVzc2FnZRgCIAEoCUIHukgEcgIQASInCgtTdG9wUmVxdWVzdBIYCgdjYXN0X2lkGAEgASgJQge6SARyAhABIg4KDFN0b3BSZXNwb25zZSISChBMaXN0Q2FzdHNSZXF1ZXN0IjMKEUxpc3RDYXN0c1Jlc3BvbnNlEh4KBWNhc3RzGAEgAygLMg8uY2FzdG9yLnYxLkNhc3QifwoEQ2FzdBIKCgJpZBgBIAEoCRIhCgZkZXZpY2UYAiABKAsyES5jYXN0b3IudjEuRGV2aWNlEiEKBnNvdXJjZRgDIAEoCzIRLmNhc3Rvci52MS5Tb3VyY2USJQoGc3RhdHVzGAQgASgLMhUuY2FzdG9yLnYxLkNhc3RTdGF0dXMq0wEKC0ZhaWx1cmVDb2RlEhwKGEZBSUxVUkVfQ09ERV9VTlNQRUNJRklFRBAAEiAKHEZBSUxVUkVfQ09ERV9QTEFZQkFDS19GQUlMRUQQARIjCh9GQUlMVVJFX0NPREVfREVWSUNFX1VOUkVBQ0hBQkxFEAISIgoeRkFJTFVSRV9DT0RFX0VYVFJBQ1RJT05fRkFJTEVEEAMSIAocRkFJTFVSRV9DT0RFX1NFUlZFUl9TSFVURE9XThAEEhkKFUZBSUxVUkVfQ09ERV9JTlRFUk5BTBAFMscCCgtDYXN0U2VydmljZRI3CgRDYXN0EhYuY2FzdG9yLnYxLkNhc3RSZXF1ZXN0GhcuY2FzdG9yLnYxLkNhc3RSZXNwb25zZRJACgdSZXNvbHZlEhkuY2FzdG9yLnYxLlJlc29sdmVSZXF1ZXN0GhouY2FzdG9yLnYxLlJlc29sdmVSZXNwb25zZRI8CgVXYXRjaBIXLmNhc3Rvci52MS5XYXRjaFJlcXVlc3QaGC5jYXN0b3IudjEuV2F0Y2hSZXNwb25zZTABEjcKBFN0b3ASFi5jYXN0b3IudjEuU3RvcFJlcXVlc3QaFy5jYXN0b3IudjEuU3RvcFJlc3BvbnNlEkYKCUxpc3RDYXN0cxIbLmNhc3Rvci52MS5MaXN0Q2FzdHNSZXF1ZXN0GhwuY2FzdG9yLnYxLkxpc3RDYXN0c1Jlc3BvbnNlYgZwcm90bzM", [file_buf_validate_validate, file_castor_v1_device, file_castor_v1_revision, file_castor_v1_stream, file_google_protobuf_empty]);
 
 /**
  * @generated from message castor.v1.CastRequest
@@ -39,6 +39,11 @@ export type CastRequest = Message<"castor.v1.CastRequest"> & {
    * @generated from field: castor.v1.Preferences preferences = 3;
    */
   preferences?: Preferences | undefined;
+
+  /**
+   * @generated from field: castor.v1.MediaInfo media_info = 4;
+   */
+  mediaInfo?: MediaInfo | undefined;
 };
 
 /**
@@ -47,6 +52,40 @@ export type CastRequest = Message<"castor.v1.CastRequest"> & {
  */
 export const CastRequestSchema: GenMessage<CastRequest> = /*@__PURE__*/
   messageDesc(file_castor_v1_cast, 0);
+
+/**
+ * MediaInfo describes the selected movie or episode on the receiver's playback screen.
+ *
+ * @generated from message castor.v1.MediaInfo
+ */
+export type MediaInfo = Message<"castor.v1.MediaInfo"> & {
+  /**
+   * @generated from field: string title = 1;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string synopsis = 2;
+   */
+  synopsis: string;
+
+  /**
+   * @generated from field: string image_url = 3;
+   */
+  imageUrl: string;
+
+  /**
+   * @generated from field: string release_date = 4;
+   */
+  releaseDate: string;
+};
+
+/**
+ * Describes the message castor.v1.MediaInfo.
+ * Use `create(MediaInfoSchema)` to create a new message.
+ */
+export const MediaInfoSchema: GenMessage<MediaInfo> = /*@__PURE__*/
+  messageDesc(file_castor_v1_cast, 1);
 
 /**
  * @generated from message castor.v1.CastResponse
@@ -65,7 +104,7 @@ export type CastResponse = Message<"castor.v1.CastResponse"> & {
  * Use `create(CastResponseSchema)` to create a new message.
  */
 export const CastResponseSchema: GenMessage<CastResponse> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 1);
+  messageDesc(file_castor_v1_cast, 2);
 
 /**
  * @generated from message castor.v1.ResolveRequest
@@ -87,7 +126,7 @@ export type ResolveRequest = Message<"castor.v1.ResolveRequest"> & {
  * Use `create(ResolveRequestSchema)` to create a new message.
  */
 export const ResolveRequestSchema: GenMessage<ResolveRequest> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 2);
+  messageDesc(file_castor_v1_cast, 3);
 
 /**
  * @generated from message castor.v1.ResolveResponse
@@ -106,7 +145,7 @@ export type ResolveResponse = Message<"castor.v1.ResolveResponse"> & {
  * Use `create(ResolveResponseSchema)` to create a new message.
  */
 export const ResolveResponseSchema: GenMessage<ResolveResponse> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 3);
+  messageDesc(file_castor_v1_cast, 4);
 
 /**
  * Source is a direct stream, pages to resolve, or already-resolved candidates to rank.
@@ -143,7 +182,7 @@ export type Source = Message<"castor.v1.Source"> & {
  * Use `create(SourceSchema)` to create a new message.
  */
 export const SourceSchema: GenMessage<Source> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 4);
+  messageDesc(file_castor_v1_cast, 5);
 
 /**
  * @generated from message castor.v1.Source.Pages
@@ -160,7 +199,7 @@ export type Source_Pages = Message<"castor.v1.Source.Pages"> & {
  * Use `create(Source_PagesSchema)` to create a new message.
  */
 export const Source_PagesSchema: GenMessage<Source_Pages> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 4, 0);
+  messageDesc(file_castor_v1_cast, 5, 0);
 
 /**
  * @generated from message castor.v1.Source.ResolvedStreams
@@ -177,7 +216,7 @@ export type Source_ResolvedStreams = Message<"castor.v1.Source.ResolvedStreams">
  * Use `create(Source_ResolvedStreamsSchema)` to create a new message.
  */
 export const Source_ResolvedStreamsSchema: GenMessage<Source_ResolvedStreams> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 4, 1);
+  messageDesc(file_castor_v1_cast, 5, 1);
 
 /**
  * Preferences are what one cast asks; each unset field takes the server's configuration.
@@ -217,7 +256,7 @@ export type Preferences = Message<"castor.v1.Preferences"> & {
  * Use `create(PreferencesSchema)` to create a new message.
  */
 export const PreferencesSchema: GenMessage<Preferences> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 5);
+  messageDesc(file_castor_v1_cast, 6);
 
 /**
  * @generated from message castor.v1.AudioSelection
@@ -234,7 +273,7 @@ export type AudioSelection = Message<"castor.v1.AudioSelection"> & {
  * Use `create(AudioSelectionSchema)` to create a new message.
  */
 export const AudioSelectionSchema: GenMessage<AudioSelection> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 6);
+  messageDesc(file_castor_v1_cast, 7);
 
 /**
  * @generated from message castor.v1.SubtitleSelection
@@ -263,7 +302,7 @@ export type SubtitleSelection = Message<"castor.v1.SubtitleSelection"> & {
  * Use `create(SubtitleSelectionSchema)` to create a new message.
  */
 export const SubtitleSelectionSchema: GenMessage<SubtitleSelection> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 7);
+  messageDesc(file_castor_v1_cast, 8);
 
 /**
  * @generated from message castor.v1.SubtitlePreferences
@@ -287,7 +326,7 @@ export type SubtitlePreferences = Message<"castor.v1.SubtitlePreferences"> & {
  * Use `create(SubtitlePreferencesSchema)` to create a new message.
  */
 export const SubtitlePreferencesSchema: GenMessage<SubtitlePreferences> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 8);
+  messageDesc(file_castor_v1_cast, 9);
 
 /**
  * @generated from message castor.v1.WatchRequest
@@ -304,7 +343,7 @@ export type WatchRequest = Message<"castor.v1.WatchRequest"> & {
  * Use `create(WatchRequestSchema)` to create a new message.
  */
 export const WatchRequestSchema: GenMessage<WatchRequest> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 9);
+  messageDesc(file_castor_v1_cast, 10);
 
 /**
  * @generated from message castor.v1.WatchResponse
@@ -333,7 +372,7 @@ export type WatchResponse = Message<"castor.v1.WatchResponse"> & {
  * Use `create(WatchResponseSchema)` to create a new message.
  */
 export const WatchResponseSchema: GenMessage<WatchResponse> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 10);
+  messageDesc(file_castor_v1_cast, 11);
 
 /**
  * CastStatus is where a cast stands, for people to read.
@@ -376,7 +415,7 @@ export type CastStatus = Message<"castor.v1.CastStatus"> & {
  * Use `create(CastStatusSchema)` to create a new message.
  */
 export const CastStatusSchema: GenMessage<CastStatus> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 11);
+  messageDesc(file_castor_v1_cast, 12);
 
 /**
  * @generated from message castor.v1.MeasuringStatus
@@ -400,7 +439,7 @@ export type MeasuringStatus = Message<"castor.v1.MeasuringStatus"> & {
  * Use `create(MeasuringStatusSchema)` to create a new message.
  */
 export const MeasuringStatusSchema: GenMessage<MeasuringStatus> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 12);
+  messageDesc(file_castor_v1_cast, 13);
 
 /**
  * @generated from message castor.v1.CastingStatus
@@ -432,7 +471,7 @@ export type CastingStatus = Message<"castor.v1.CastingStatus"> & {
  * Use `create(CastingStatusSchema)` to create a new message.
  */
 export const CastingStatusSchema: GenMessage<CastingStatus> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 13);
+  messageDesc(file_castor_v1_cast, 14);
 
 /**
  * @generated from message castor.v1.Ended
@@ -469,7 +508,7 @@ export type Ended = Message<"castor.v1.Ended"> & {
  * Use `create(EndedSchema)` to create a new message.
  */
 export const EndedSchema: GenMessage<Ended> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 14);
+  messageDesc(file_castor_v1_cast, 15);
 
 /**
  * @generated from message castor.v1.Failure
@@ -491,7 +530,7 @@ export type Failure = Message<"castor.v1.Failure"> & {
  * Use `create(FailureSchema)` to create a new message.
  */
 export const FailureSchema: GenMessage<Failure> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 15);
+  messageDesc(file_castor_v1_cast, 16);
 
 /**
  * @generated from message castor.v1.StopRequest
@@ -508,7 +547,7 @@ export type StopRequest = Message<"castor.v1.StopRequest"> & {
  * Use `create(StopRequestSchema)` to create a new message.
  */
 export const StopRequestSchema: GenMessage<StopRequest> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 16);
+  messageDesc(file_castor_v1_cast, 17);
 
 /**
  * @generated from message castor.v1.StopResponse
@@ -521,7 +560,7 @@ export type StopResponse = Message<"castor.v1.StopResponse"> & {
  * Use `create(StopResponseSchema)` to create a new message.
  */
 export const StopResponseSchema: GenMessage<StopResponse> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 17);
+  messageDesc(file_castor_v1_cast, 18);
 
 /**
  * @generated from message castor.v1.ListCastsRequest
@@ -534,7 +573,7 @@ export type ListCastsRequest = Message<"castor.v1.ListCastsRequest"> & {
  * Use `create(ListCastsRequestSchema)` to create a new message.
  */
 export const ListCastsRequestSchema: GenMessage<ListCastsRequest> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 18);
+  messageDesc(file_castor_v1_cast, 19);
 
 /**
  * @generated from message castor.v1.ListCastsResponse
@@ -551,7 +590,7 @@ export type ListCastsResponse = Message<"castor.v1.ListCastsResponse"> & {
  * Use `create(ListCastsResponseSchema)` to create a new message.
  */
 export const ListCastsResponseSchema: GenMessage<ListCastsResponse> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 19);
+  messageDesc(file_castor_v1_cast, 20);
 
 /**
  * @generated from message castor.v1.Cast
@@ -587,7 +626,7 @@ export type Cast = Message<"castor.v1.Cast"> & {
  * Use `create(CastSchema)` to create a new message.
  */
 export const CastSchema: GenMessage<Cast> = /*@__PURE__*/
-  messageDesc(file_castor_v1_cast, 20);
+  messageDesc(file_castor_v1_cast, 21);
 
 /**
  * @generated from enum castor.v1.FailureCode

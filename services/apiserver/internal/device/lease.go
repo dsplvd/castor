@@ -153,8 +153,8 @@ func (l *lease) command(ctx context.Context, fn func(context.Context, Device) er
 	}
 	return fn(ctx, l.device)
 }
-func (l *lease) Play(ctx context.Context, u *url.URL, c mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
-	return l.command(ctx, func(ctx context.Context, d Device) error { return d.Play(ctx, u, c, captions) })
+func (l *lease) Play(ctx context.Context, playback Playback) error {
+	return l.command(ctx, func(ctx context.Context, d Device) error { return d.Play(ctx, playback) })
 }
 func (l *lease) Stop(ctx context.Context) error {
 	return l.command(ctx, func(ctx context.Context, d Device) error { return d.Stop(ctx) })

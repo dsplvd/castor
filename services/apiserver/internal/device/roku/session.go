@@ -40,9 +40,9 @@ func get(ctx context.Context, hc *http.Client, u *url.URL, limit int64) ([]byte,
 	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }
 
-func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav1.Container, captions []*mediav1.DeviceCommand_Caption) error {
+func (s *session) Play(ctx context.Context, playback device.Playback) error {
 	var format string
-	switch container {
+	switch playback.Container {
 	case mediav1.Container_CONTAINER_MP4:
 		format = "mp4"
 	case mediav1.Container_CONTAINER_MKV:
@@ -50,10 +50,10 @@ func (s *session) Play(ctx context.Context, streamURL *url.URL, container mediav
 	case mediav1.Container_CONTAINER_HLS:
 		format = "hls"
 	default:
-		return fmt.Errorf("roku does not support container %v", container)
+		return fmt.Errorf("roku does not support container %v", playback.Container)
 	}
 	q := url.Values{}
-	q.Set(paramURL, streamURL.String())
+	q.Set(paramURL, playback.URL.String())
 	q.Set(paramFormat, format)
 
 	u := s.ecp.JoinPath("launch", s.appID)

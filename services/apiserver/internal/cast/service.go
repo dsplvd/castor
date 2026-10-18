@@ -91,7 +91,7 @@ func (s *Service) Cast(ctx context.Context, req *castorv1.CastRequest) (*castorv
 	asked := s.asked(req.GetPreferences())
 	id := castid.New()
 	run, stop := context.WithCancelCause(castid.With(telemetry.WithTrace(s.ctx, ctx), id))
-	c := newCast(id, target.Public(), proto.CloneOf(req.GetSource()), stop)
+	c := newCast(id, target.Public(), req, stop)
 	done := make(chan struct{})
 	if err := s.casts.Add(c.id, c, done); err != nil {
 		stop(nil)

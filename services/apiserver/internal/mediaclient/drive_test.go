@@ -97,19 +97,21 @@ func serve(t *testing.T, commands ...*mediav1.DeviceCommand) (*mediaclient.Clien
 type lentDevice struct {
 	played  chan *url.URL
 	as      chan mediav1.Container
+	info    chan *castorv1.MediaInfo
 	refusal error
 }
 
 func newLentDevice() *lentDevice {
-	return &lentDevice{played: make(chan *url.URL, 1), as: make(chan mediav1.Container, 1)}
+	return &lentDevice{played: make(chan *url.URL, 1), as: make(chan mediav1.Container, 1), info: make(chan *castorv1.MediaInfo, 1)}
 }
 
-func (s *lentDevice) Play(_ context.Context, u *url.URL, container mediav1.Container, _ []*mediav1.DeviceCommand_Caption) error {
+func (s *lentDevice) Play(_ context.Context, playback device.Playback) error {
 	if s.refusal != nil {
 		return s.refusal
 	}
-	s.played <- u
-	s.as <- container
+	s.played <- playback.URL
+	s.as <- playback.Container
+	s.info <- playback.Info
 	return nil
 }
 
@@ -132,19 +134,35 @@ type watching struct {
 
 // cast starts a cast of one stream, lends it device and watches it to its end, returning what the watch saw and what the drive returned.
 func cast(t *testing.T, c *mediaclient.Client, lent device.Device) (watching, error) {
+	return castWithInfo(t, c, lent, nil)
+}
+
+func castWithInfo(t *testing.T, c *mediaclient.Client, lent device.Device, info *castorv1.MediaInfo) (watching, error) {
 	t.Helper()
 	err := c.Start(t.Context(), castID, &mediav1.Source{Source: &mediav1.Source_Stream{Stream: &castorv1.Stream{Url: "https://cdn.example/direct"}}}, asked)
 	if err != nil {
 		t.Fatal(err)
 	}
 	driven := make(chan error, 1)
-	go func() { driven <- c.Drive(t.Context(), castID, lent) }()
+	go func() { driven <- c.Drive(t.Context(), castID, lent, info) }()
 	var w watching
 	w.ended, err = c.Watch(t.Context(), castID, func(s *castorv1.CastStatus) { w.shown = append(w.shown, s) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	return w, <-driven
+}
+
+func TestDriveHandsCastMetadataToTheDevice(t *testing.T) {
+	c, _ := serve(t, play("https://cdn.example/direct", mediav1.Container_CONTAINER_HLS))
+	lent := newLentDevice()
+	info := &castorv1.MediaInfo{Title: "The Matrix", ImageUrl: "https://image.tmdb.org/t/p/w500/matrix.jpg"}
+	if _, err := castWithInfo(t, c, lent, info); err != nil {
+		t.Fatal(err)
+	}
+	if got := taken(t, lent.info); !proto.Equal(got, info) {
+		t.Errorf("device info = %+v, want %+v", got, info)
+	}
 }
 
 // taken is what ch already holds, failing t when it holds nothing: once a cast has ended, nothing more comes.
