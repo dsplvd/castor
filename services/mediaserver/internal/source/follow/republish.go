@@ -3,6 +3,7 @@ package follow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -22,7 +23,8 @@ func New(client source.Client, formats source.Formats, repackage Repackage) Repu
 	return Republisher{client: client, formats: formats, repackage: repackage}
 }
 
-// Republish points each followed input at its republished timeline; the func stops serving them.
+// Republish points each followed input at its republished timeline. The returned
+// function stops and joins serving, then reports any unresolved source refusal.
 func (r Republisher) Republish(parent context.Context, program media.Program) (media.Program, func() error, error) {
 	// Reads ahead of the reader outlive no read: stopping the republish ends them.
 	ctx, cancel := context.WithCancel(parent)
@@ -80,6 +82,9 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 		cancel()
 		err := server.Close()
 		stop()
+		for _, feed := range feeds {
+			err = errors.Join(err, feed.result().err)
+		}
 		return err
 	}, nil
 }

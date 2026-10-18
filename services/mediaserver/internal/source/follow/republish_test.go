@@ -3,6 +3,7 @@ package follow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -167,4 +168,49 @@ func TestServerCloseJoinsPlaylistHandler(t *testing.T) {
 		t.Fatal("server did not join completed handler")
 	}
 	<-requestDone
+}
+
+func TestRepublisherRetainsPlaylistRefusalUntilRecovery(t *testing.T) {
+	for _, status := range []int{401, 403, 404, 410} {
+		for _, recover := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%d/recover=%t", status, recover), func(t *testing.T) {
+				refused := &timeline.Failure{Status: status, Err: errors.New("playlist refused")}
+				window := timeline.Window{Segments: []timeline.Segment{{URI: "https://origin.example/0.ts", Duration: time.Second}}}
+				origin := &scripted{replies: []reply{{window: window}, {err: refused}, {err: errors.New("temporary failure")}, {window: window}}}
+				program, err := media.NewProgram(media.Program{
+					Inputs:     []media.Input{{ID: media.PrimaryInputID, URL: sourcetest.URL(t, "https://origin.example/index.m3u8"), ContentType: media.HLS}},
+					Tracks:     []media.TrackRef{{Input: media.PrimaryInputID, Kind: media.TrackVideo}},
+					ClockInput: media.PrimaryInputID, EndPolicy: media.EndAtLongest,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				followed, stop, err := New(&sourcetest.Document{}, source.Formats{shape{timeline: origin}}, nil).Republish(t.Context(), program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = stop() })
+				input, _ := followed.PrimaryInput()
+				if got, _ := fetch(t, input.URL.String()); got != status {
+					t.Fatalf("refusal status=%d", got)
+				}
+				// A transient failure cannot republish a playlist the origin refused.
+				if got, _ := fetch(t, input.URL.String()); got != status {
+					t.Fatalf("unresolved refusal status=%d", got)
+				}
+				if recover {
+					if got, _ := fetch(t, input.URL.String()); got != http.StatusOK {
+						t.Fatalf("recovery status=%d", got)
+					}
+				}
+				err = stop()
+				if recover && err != nil {
+					t.Fatalf("recovered feed failed: %v", err)
+				}
+				if !recover && !errors.Is(err, refused) {
+					t.Fatalf("lost playlist refusal: %v", err)
+				}
+			})
+		}
+	}
 }

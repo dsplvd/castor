@@ -88,7 +88,8 @@ type burnRenderer interface {
 	Writer(ctx context.Context) func(media.Progress)
 }
 
-// Timelines republishes a program's followed inputs for one read; the func stops serving them.
+// Timelines republishes a program's followed inputs for one read. The returned
+// function joins serving and reports its final outcome, even if the reader succeeded.
 type Timelines interface {
 	Republish(ctx context.Context, program media.Program) (media.Program, func() error, error)
 }

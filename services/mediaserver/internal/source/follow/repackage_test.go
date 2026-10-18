@@ -166,11 +166,14 @@ func TestNothingIsListedBeforeCastorKnowsHowToServeIt(t *testing.T) {
 	init := m.resources["https://origin.example/init.mp4"]
 	delete(m.resources, "https://origin.example/init.mp4")
 	feed := newFeed(t.Context(), "primary", m, labelled)
-	if err := feed.refresh(t.Context()); err == nil || feed.render != nil {
-		t.Fatalf("rendered %q before the init section deciding its addressing could be read", feed.render)
+	result, err := feed.refresh(t.Context())
+	if err == nil || result.body != nil || refusal(result.err) != http.StatusNotFound {
+		t.Fatalf("missing init: result=%+v error=%v", result, err)
 	}
 	m.resources["https://origin.example/init.mp4"] = init
-	if err := feed.refresh(t.Context()); err != nil || !strings.Contains(string(feed.render), "primary/0.ts") {
-		t.Errorf("once the init was read, render = %q (%v), want castor's MPEG-TS", feed.render, err)
+	result, err = feed.refresh(t.Context())
+	if err != nil || result.err != nil || !strings.Contains(string(result.body), "primary/0.ts") {
+		t.Errorf("once the init was read, result=%+v error=%v, want castor's MPEG-TS", result, err)
 	}
+
 }
