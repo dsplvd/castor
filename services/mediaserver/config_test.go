@@ -11,6 +11,33 @@ import (
 	"github.com/stupside/castor/internal/settings"
 )
 
+func TestDesktopToolPathsStillUseInstalledNames(t *testing.T) {
+	want := FFmpegConfig{Path: "ffmpeg", ProbePath: "ffprobe"}
+	if got := defaults().Servers.Media.FFmpeg; got != want {
+		t.Fatalf("default tool paths = %#v, want %#v", got, want)
+	}
+}
+
+func TestConfiguredToolPaths(t *testing.T) {
+	want := FFmpegConfig{Path: "/opt/castor/ffmpeg", ProbePath: "/opt/castor/ffprobe"}
+	t.Setenv("CASTOR_SERVERS__MEDIA__FFMPEG__PATH", want.Path)
+	t.Setenv("CASTOR_SERVERS__MEDIA__FFMPEG__PROBE_PATH", want.ProbePath)
+	cmd := &cli.Command{Flags: []cli.Flag{settings.Flag}}
+	cmd.Action = func(_ context.Context, cmd *cli.Command) error {
+		got, err := settings.Load(cmd, defaults())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Servers.Media.FFmpeg != want {
+			t.Fatalf("tool paths = %#v, want %#v", got.Servers.Media.FFmpeg, want)
+		}
+		return nil
+	}
+	if err := cmd.Run(t.Context(), []string{"media"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWhisperConfigBelongsToMediaServer(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("servers:\n  media:\n    whisper:\n      model_path: /models/from-file.bin\n    resolver:\n      probe_max_concurrency: 3\n    network:\n      interface: eth0\n"), 0o600); err != nil {

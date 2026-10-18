@@ -29,8 +29,6 @@ import (
 var formats = source.Formats{hls.Format{}, dash.Format{}}
 
 const (
-	ffmpegBinary  = "ffmpeg"
-	ffprobeBinary = "ffprobe"
 	// fetchTimeout bounds each playlist fetch and each probe.
 	fetchTimeout = 30 * time.Second
 	// readDeadline is the mid-read stall bound every fetch plan is derived with.
@@ -39,6 +37,7 @@ const (
 
 // backend is the machinery the media server casts with, bound to c.
 func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
+	ffmpegBinary, ffprobeBinary := c.Servers.Media.FFmpeg.Path, c.Servers.Media.FFmpeg.ProbePath
 	shared := engine{
 		cfg: *c,
 		machinery: execute.Machinery{

@@ -13,6 +13,12 @@ type Config struct {
 	} `yaml:"servers" validate:"required"`
 }
 
+// FFmpegConfig names the installed media tools.
+type FFmpegConfig struct {
+	Path      string `yaml:"path" validate:"required"`
+	ProbePath string `yaml:"probe_path" validate:"required"`
+}
+
 // ResolverConfig is how found streams are ranked.
 type ResolverConfig struct {
 	rank.Config `yaml:",inline"`
@@ -24,6 +30,8 @@ type ServerConfig struct {
 	Listen            string `yaml:"listen" validate:"required,hostname_port|startswith=:"`
 	// Advertise is where devices reach this server from outside its network.
 	Advertise string `yaml:"advertise" validate:"omitempty,http_url"`
+	// FFmpeg names the tools installed on this host.
+	FFmpeg FFmpegConfig `yaml:"ffmpeg" validate:"required"`
 	// Whisper configures transcription performed by this media server.
 	Whisper  whisper.Config `yaml:"whisper"`
 	Resolver ResolverConfig `yaml:"resolver" validate:"required"`
@@ -37,6 +45,7 @@ type NetworkConfig struct {
 
 func defaults() Config {
 	c := Config{}
+	c.Servers.Media.FFmpeg = FFmpegConfig{Path: "ffmpeg", ProbePath: "ffprobe"}
 	c.Servers.Media.Listen = ":8410"
 	c.Servers.Media.Resolver = ResolverConfig{ProbeMaxConcurrency: 2}
 	return c

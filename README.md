@@ -101,6 +101,8 @@ Castor reads `config.yaml` (or `--config <path>`), then overlays git-ignored `co
 
 Service settings are grouped under `servers.api`, `servers.media`, and `servers.scraping`. For example, set `CASTOR_SERVERS__SCRAPING__BROWSER__CHROME_PATH` to choose Chrome. Move older top-level `api`, `server`, and `scraping` sections to those paths, renaming `server` to `media`; move top-level `browser` and `capture` to `servers.scraping`, and `whisper` to `servers.media`. Each command rejects unknown keys in the sections it owns when it loads them. Top-level `sources` holds the CLI's title-to-page templates; top-level `cast` holds playback defaults that an API request may override.
 
+Set `servers.media.ffmpeg.path` and `servers.media.ffmpeg.probe_path` when the media tools are installed outside `PATH`; they default to `ffmpeg` and `ffprobe`.
+
 ### Logs
 
 Every log line of a cast carries `cast_id`, the same in all three services, so one cast can be filtered from the rest. Set `telemetry.endpoint` (or `CASTOR_TELEMETRY__ENDPOINT`) on a server to also export its logs over OTLP/HTTP, such as `http://localhost:4318`; unset, logs stay on stderr and in `castor.log`.
