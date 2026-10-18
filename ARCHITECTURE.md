@@ -72,7 +72,9 @@ Buf generates Go and TypeScript Connect clients from `proto/`. RPC edges validat
 
 Every call a cast makes carries its ID in the `Castor-Cast-Id` header, and every log line logged under a cast gets `cast_id`, in all three services and in the CLI, so one ID follows a cast through the logs.
 
-Stopping during extraction cancels scraping and releases the device without creating a media cast. Once media starts, API retries stop until accepted. Shutdown drains each service's own work.
+Stopping during extraction cancels scraping and releases the device without creating a media cast. Once media starts, API reconciles stop requests and waits for remote completion within a bounded grace period, then joins its Watch and Drive workers before releasing the device. Shutdown drains each service's own work.
+
+Four small state machines validate cast progress, attempt execution, playback health, and the API's remote session. Each owner accepts its own typed events. Callbacks record evidence and diagnostics; the owners run operations and join workers. An attempt joins producers and active delivery requests before releasing storage, and recovery waits for that cleanup before starting another attempt.
 
 ## Inside the media engine
 
@@ -86,7 +88,7 @@ flowchart LR
 
 - **Rank:** prefer the tallest stream within `cast.max_height`; unmeasured candidates are last resorts. Media's HLS/DASH readers handle playback, not capture-document parsing.
 - **Compose:** hand off compatible streams to self-fetching devices unless `delivery: serve`; otherwise remux or use a read-once encoding pipeline (e.g. DLNA). `--debug` explains the choice.
-- **Plan/deliver:** copy or encode each track, scale to the ceiling, and show the source's own captions as a native track when it publishes the language asked, else burn Whisper subtitles into read-once casts. Use a working GPU encoder, falling back to software. Internal delivery listens on loopback behind `/media`.
+- **Plan/deliver:** copy or encode each track, scale to the ceiling, and show the source's own captions as a native track when it publishes the language asked, else burn Whisper subtitles into read-once casts. Use a working GPU encoder, falling back to software. Deliveries register handlers under random paths on the media server's shared `/media` route. Closing a publication removes its route and joins active requests before its storage is released.
 - **Recover:** detect stalls, slow reads, or stopped fetching; revise the attempt, cheapest first, or try the next candidate.
 
 ## Trust boundary
