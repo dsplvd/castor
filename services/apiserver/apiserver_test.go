@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -35,9 +36,10 @@ import (
 
 // family is the one device on the network: each connection to it plays what it is handed until its cast lets it go.
 type family struct {
-	played  chan string
-	closed  chan int
-	devices []device.Info
+	closeErr error
+	played   chan string
+	closed   chan int
+	devices  []device.Info
 	// stops counts the stops the device was sent.
 	stops atomic.Int32
 	// unreachable is a device that answers no connection.
@@ -106,7 +108,7 @@ func (*connection) Capabilities() *mediav1.Capabilities {
 
 func (c *connection) Close() error {
 	c.f.closed <- c.n
-	return nil
+	return c.f.closeErr
 }
 
 // media is the media server at its contract: a cast plays its best stream on the lent device, then ends unless held, until it is stopped.
@@ -1075,3 +1077,241 @@ func (c *connection) Stop(context.Context) error {
 
 func (*connection) Pause(context.Context) error  { return nil }
 func (*connection) Resume(context.Context) error { return nil }
+
+func TestCastJoinsRemoteStopBeforeReleasingDevice(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFamily()
+		m := newMedia(true)
+		stopping, release := make(chan struct{}), make(chan struct{})
+		unblock := sync.OnceFunc(func() { close(release) })
+		defer unblock()
+		guard := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != mediav1connect.CastServiceStopProcedure {
+					next.ServeHTTP(w, r)
+					return
+				}
+				response := httptest.NewRecorder()
+				next.ServeHTTP(response, r)
+				close(stopping)
+				<-release
+				maps.Copy(w.Header(), response.Header())
+				w.WriteHeader(response.Code)
+				_, _ = w.Write(response.Body.Bytes())
+			})
+		}
+		c := serve(t, setup{media: m, family: f, guard: guard})
+		id := cast(t, c, streamOf("https://cdn.example/direct"))
+		<-f.played
+		if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: id}); err != nil {
+			t.Fatal(err)
+		}
+		<-stopping
+		synctest.Wait()
+		select {
+		case <-f.closed:
+			t.Error("device released while remote stop callback was running")
+		default:
+		}
+		unblock()
+		if w := watch(t, c, id); w.ended.GetStopped() == nil {
+			t.Fatalf("cast ended %v", w.ended)
+		}
+	})
+}
+
+func TestLostStartResponseStopsAcceptedMediaCast(t *testing.T) {
+	f := newFamily()
+	m := newMedia(true)
+	guard := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != mediav1connect.CastServiceStartProcedure {
+				next.ServeHTTP(w, r)
+				return
+			}
+			response := httptest.NewRecorder()
+			next.ServeHTTP(response, r)
+			http.Error(w, "start response lost", http.StatusBadGateway)
+		})
+	}
+	c := serve(t, setup{media: m, family: f, guard: guard})
+	id := cast(t, c, streamOf("https://cdn.example/direct"))
+	if w := watch(t, c, id); w.ended.GetFailed() == nil {
+		t.Fatalf("cast ended %v", w.ended)
+	}
+	select {
+	case <-m.stopped:
+	default:
+		t.Fatal("accepted media cast was abandoned after its start response was lost")
+	}
+}
+
+func TestDeviceCleanupFailureReachesTheCastWatcher(t *testing.T) {
+	for _, stopped := range []bool{false, true} {
+		name := "completed"
+		if stopped {
+			name = "stopped"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newFamily()
+			f.closeErr = errors.New("receiver final STOP failed")
+			c := serve(t, setup{media: newMedia(stopped), family: f})
+			id := cast(t, c, streamOf("https://cdn.example/direct"))
+			<-f.played
+			if stopped {
+				if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: id}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := watch(t, c, id).ended
+			if failure := result.GetFailed(); failure == nil || !strings.Contains(failure.Message, f.closeErr.Error()) {
+				t.Fatalf("cleanup failure hidden by %s outcome: %v", name, result)
+			}
+			select {
+			case <-f.closed:
+			default:
+				t.Fatal("published outcome before device cleanup")
+			}
+		})
+	}
+}
+
+func TestStopDuringStartReconcilesBeforeReleasingDevice(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f, m := newFamily(), newMedia(true)
+		started, release := make(chan struct{}), make(chan struct{})
+		unblock := sync.OnceFunc(func() { close(release) })
+		defer unblock()
+		guard := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != mediav1connect.CastServiceStartProcedure {
+					next.ServeHTTP(w, r)
+					return
+				}
+				response := httptest.NewRecorder()
+				next.ServeHTTP(response, r)
+				close(started)
+				<-release
+				maps.Copy(w.Header(), response.Header())
+				w.WriteHeader(response.Code)
+				_, _ = w.Write(response.Body.Bytes())
+			})
+		}
+		c := serve(t, setup{media: m, family: f, guard: guard})
+		id := cast(t, c, streamOf("https://cdn.example/direct"))
+		<-started
+		if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: id}); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		select {
+		case <-f.closed:
+			t.Fatal("device released while Start was unresolved")
+		default:
+		}
+		unblock()
+		if w := watch(t, c, id); w.ended.GetStopped() == nil {
+			t.Fatalf("cast ended %v", w.ended)
+		}
+		select {
+		case <-m.stopped:
+		default:
+			t.Fatal("accepted Start was not reconciled")
+		}
+		select {
+		case <-f.played:
+			t.Fatal("started driving after caller cancellation")
+		default:
+		}
+	})
+}
+
+func TestLostWatchStopsRemoteCastBeforeReleasingDevice(t *testing.T) {
+	f, m := newFamily(), newMedia(true)
+	guard := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == mediav1connect.CastServiceWatchProcedure {
+				http.Error(w, "watch connection lost", http.StatusBadGateway)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	c := serve(t, setup{media: m, family: f, guard: guard})
+	id := cast(t, c, streamOf("https://cdn.example/direct"))
+	if w := watch(t, c, id); w.ended.GetFailed() == nil {
+		t.Fatalf("lost watch reported as remote completion: %v", w.ended)
+	}
+	select {
+	case <-m.stopped:
+	default:
+		t.Fatal("remote cast abandoned after losing Watch")
+	}
+	select {
+	case <-f.closed:
+	default:
+		t.Fatal("outcome published before device release")
+	}
+}
+
+func TestReplacementWaitsForOldSessionAndIgnoresStaleStop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f, m := newFamily(), newMedia(true)
+		stopping, release := make(chan struct{}), make(chan struct{})
+		unblock := sync.OnceFunc(func() { close(release) })
+		defer unblock()
+		var stops atomic.Int32
+		guard := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == mediav1connect.CastServiceStopProcedure && stops.Add(1) == 1 {
+					close(stopping)
+					<-release
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
+		c := serve(t, setup{media: m, family: f, guard: guard})
+		first := cast(t, c, streamOf("https://cdn.example/first"))
+		<-f.played
+		if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: first}); err != nil {
+			t.Fatal(err)
+		}
+		<-stopping
+		busy := cast(t, c, streamOf("https://cdn.example/too-early"))
+		if w := watch(t, c, busy); w.ended.GetFailed().GetCode() != castorv1.FailureCode_FAILURE_CODE_PLAYBACK_FAILED {
+			t.Fatalf("overlapping cast accepted: %v", w.ended)
+		}
+		if f.connections() != 1 {
+			t.Fatal("replacement connected before old session joined")
+		}
+		unblock()
+		if w := watch(t, c, first); w.ended.GetStopped() == nil {
+			t.Fatalf("first cast ended %v", w.ended)
+		}
+		if closed := <-f.closed; closed != 1 {
+			t.Fatalf("closed connection %d, want first", closed)
+		}
+		next := cast(t, c, streamOf("https://cdn.example/next"))
+		if played := <-f.played; played != "https://cdn.example/next" {
+			t.Fatalf("replacement played %q", played)
+		}
+		if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: first}); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if stops.Load() != 1 || f.connections() != 2 {
+			t.Fatalf("stale stop affected replacement: stops=%d connections=%d", stops.Load(), f.connections())
+		}
+		select {
+		case <-f.closed:
+			t.Fatal("stale cleanup closed replacement's device")
+		default:
+		}
+		if _, err := c.casts.Stop(t.Context(), &castorv1.StopRequest{CastId: next}); err != nil {
+			t.Fatal(err)
+		}
+		if w := watch(t, c, next); w.ended.GetStopped() == nil {
+			t.Fatalf("replacement ended %v", w.ended)
+		}
+	})
+}

@@ -117,3 +117,86 @@ func TestBusyReceiverReportsActionablePlaybackFailure(t *testing.T) {
 		t.Fatalf("ended=%v", ended)
 	}
 }
+
+type cancelingResolver struct {
+	started  chan struct{}
+	canceled chan struct{}
+	release  chan struct{}
+}
+
+func (r cancelingResolver) ResolvePages(ctx context.Context, _ []string) ([]*castorv1.StreamCandidate, error) {
+	close(r.started)
+	<-ctx.Done()
+	close(r.canceled)
+	<-r.release
+	return nil, ctx.Err()
+}
+
+func TestDrainCancelsAndJoinsResolution(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := cancelingResolver{make(chan struct{}), make(chan struct{}), make(chan struct{})}
+		s := New(&mediav1.PlaybackSettings{}, nil, nil, r)
+		resolved := make(chan error, 1)
+		go func() {
+			_, err := s.Resolve(t.Context(), &castorv1.ResolveRequest{Source: &castorv1.Source{Source: &castorv1.Source_Pages_{Pages: &castorv1.Source_Pages{Urls: []string{"https://example.test"}}}}})
+			resolved <- err
+		}()
+		<-r.started
+		drained := make(chan struct{})
+		go func() { s.Drain(t.Context()); close(drained) }()
+		<-r.canceled
+		synctest.Wait()
+		select {
+		case <-drained:
+			t.Fatal("drain returned before resolver cleanup")
+		default:
+		}
+		close(r.release)
+		<-drained
+		if err := <-resolved; !errors.Is(err, context.Canceled) {
+			t.Fatalf("resolution = %v", err)
+		}
+		if _, err := s.Resolve(t.Context(), &castorv1.ResolveRequest{}); connect.CodeOf(err) != connect.CodeUnavailable {
+			t.Fatalf("resolution accepted after shutdown: %v", err)
+		}
+	})
+}
+
+type cleaningTarget struct {
+	interruptedTarget
+	started  chan struct{}
+	canceled chan struct{}
+	release  chan struct{}
+}
+
+func (d cleaningTarget) Target(ctx context.Context, _ *castorv1.Target) (device.Info, error) {
+	close(d.started)
+	<-ctx.Done()
+	close(d.canceled)
+	<-d.release
+	return device.Info{}, ctx.Err()
+}
+
+func TestDrainJoinsTargetDiscoveryCleanup(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		d := cleaningTarget{started: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{})}
+		s := New(&mediav1.PlaybackSettings{}, d, nil, nil)
+		result := make(chan error, 1)
+		go func() { _, err := s.Cast(t.Context(), &castorv1.CastRequest{}); result <- err }()
+		<-d.started
+		drained := make(chan struct{})
+		go func() { s.Drain(t.Context()); close(drained) }()
+		<-d.canceled
+		synctest.Wait()
+		select {
+		case <-drained:
+			t.Error("drain returned while target discovery was cleaning up")
+		default:
+		}
+		close(d.release)
+		<-drained
+		if err := <-result; connect.CodeOf(err) != connect.CodeUnavailable {
+			t.Fatalf("cast = %v", err)
+		}
+	})
+}

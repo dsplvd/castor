@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -270,4 +271,51 @@ func TestLeaseCloseCancelsOwnedCommandsBeforeFinalCleanup(t *testing.T) {
 	if err := l.Resume(t.Context()); !errors.Is(err, errLeaseClosed) {
 		t.Fatalf("closed lease accepted command: %v", err)
 	}
+}
+
+type observedDevice struct {
+	idle
+	started  chan struct{}
+	canceled chan struct{}
+	release  chan struct{}
+	closed   chan struct{}
+}
+
+func (d *observedDevice) AwaitEnd(ctx context.Context) error {
+	close(d.started)
+	<-ctx.Done()
+	close(d.canceled)
+	<-d.release
+	return context.Cause(ctx)
+}
+func (d *observedDevice) Close() error { close(d.closed); return nil }
+
+func TestLeaseCloseCancelsAndJoinsObservers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dev := &observedDevice{started: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{})}
+		l := newLease(directoryWithFamilies(Registry{}))
+		l.device = dev
+		result := make(chan error, 1)
+		go func() { result <- l.AwaitEnd(t.Context()) }()
+		<-dev.started
+		finished := make(chan error, 1)
+		go func() { finished <- l.Close() }()
+		<-dev.canceled
+		synctest.Wait()
+		select {
+		case <-dev.closed:
+			t.Fatal("device closed while observer was running")
+		default:
+		}
+		close(dev.release)
+		if err := <-finished; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-result; !errors.Is(err, errLeaseClosed) {
+			t.Fatalf("observation lost cancellation cause: %v", err)
+		}
+		if err := l.AwaitEnd(t.Context()); !errors.Is(err, errLeaseClosed) {
+			t.Fatalf("closed lease accepted observer: %v", err)
+		}
+	})
 }
