@@ -93,4 +93,6 @@ flowchart LR
 
 ## Trust boundary
 
+On Unix platforms (including Android), FFmpeg progress and PCM side outputs use anonymous pipes inherited through `exec.Cmd.ExtraFiles`. The parent closes its copies of the write ends after process startup and drains the read ends through child exit. Windows uses loopback TCP because Go does not support `ExtraFiles` there.
+
 Services use independent bearer tokens; health checks and device-facing `/media` are open. Invalid downstream credentials are API misconfiguration, not caller authentication failures. Replay headers reach media but are stripped from public listings. See [SECURITY.md](SECURITY.md).

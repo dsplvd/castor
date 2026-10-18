@@ -31,7 +31,7 @@ type Process struct {
 	input *observedInput
 
 	// extra are the side outputs in pipe order, starting at firstExtraFD.
-	extra []*loopback
+	extra []*sideOutput
 
 	tail    *ringTail
 	markers *markerWatch
@@ -73,8 +73,16 @@ func Start(ctx context.Context, path string, command Command, opts Options) (*Pr
 		return nil, fmt.Errorf("a PCM tee routed (%t) and a PCM consumer given (%t) disagree", tees, opts.PCM != nil)
 	}
 
+	cmd := exec.CommandContext(ctx, path, slices.Clone(command.Args)...)
+	// Parent copies of inherited writers must close after Start, including failures.
+	defer func() {
+		for _, file := range cmd.ExtraFiles {
+			_ = file.Close()
+		}
+	}()
+
 	var (
-		extra       []*loopback
+		extra       []*sideOutput
 		stderrRead  *os.File
 		stderrWrite *os.File
 	)
@@ -88,23 +96,15 @@ func Start(ctx context.Context, path string, command Command, opts Options) (*Pr
 			}
 		}
 	}
-	args := slices.Clone(command.Args)
 	for i := range command.ExtraPipes {
-		l, err := newLoopback()
+		output, err := newSideOutput(cmd, firstExtraFD+i)
 		if err != nil {
 			closeExtra()
-			return nil, err
+			return nil, fmt.Errorf("side output: %w", err)
 		}
-		extra = append(extra, l)
-		// A side output is routed to its pipe number in the argv, and travels over the loopback instead.
-		for j, arg := range args {
-			if arg == pipeURL(firstExtraFD+i) {
-				args[j] = l.url
-			}
-		}
+		extra = append(extra, output)
 	}
 
-	cmd := exec.CommandContext(ctx, path, args...)
 	stopped, scanned := new(atomic.Bool), make(chan struct{})
 	cmd.Cancel = sync.OnceValue(func() error { return kill(cmd.Process, scanned, stopped) })
 	var input *observedInput
@@ -210,10 +210,8 @@ func (p *Process) Wait() error {
 	err := p.cmd.Wait()
 	// Publish exit status for Evidence reads from other goroutines.
 	p.status.Store(int64(p.exitStatus()))
-	// An ffmpeg that died before opening a side output never will, so its reader is released to EOF.
-	for _, l := range p.extra {
-		l.stopAccepting()
-	}
+	// Release any platform transport still waiting for the exited child.
+	finishSideOutputs(p.extra)
 	// Then join progress (last sample still in pipe); step writes to work dir caller will remove.
 	<-p.drained
 	// And join stderr drain (ffmpeg's error path is still in the pipe).

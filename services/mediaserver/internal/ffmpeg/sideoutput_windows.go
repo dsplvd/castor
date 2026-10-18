@@ -1,3 +1,5 @@
+//go:build windows
+
 package ffmpeg
 
 import (
@@ -6,14 +8,12 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"os/exec"
 	"sync"
 )
 
-// loopback is one of ffmpeg's side outputs, carried over a local socket because os/exec passes no extra fds on Windows.
-// Like the pipe it replaces, ffmpeg's writes block while castor is not reading, and the reader sees EOF once ffmpeg exits.
-type loopback struct {
-	url string
-
+// Windows cannot pass ExtraFiles through os/exec, so side outputs use loopback TCP.
+type sideOutput struct {
 	// accepted closes once ffmpeg's connection is taken, or accepting was abandoned and conn stays nil.
 	accepted chan struct{}
 	conn     net.Conn
@@ -21,15 +21,20 @@ type loopback struct {
 	stopAccepting func()
 }
 
-// newLoopback listens on an ephemeral loopback port and takes the first connection as ffmpeg's.
-func newLoopback() (*loopback, error) {
+// newSideOutput opens a local side output and accepts ffmpeg's connection.
+func newSideOutput(cmd *exec.Cmd, fd int) (*sideOutput, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("side output listener: %w", err)
 	}
-	l := &loopback{
-		// The -progress feed places burned-in cues every 0.1s, so it must not wait in Nagle's buffer.
-		url:           (&url.URL{Scheme: "tcp", Host: ln.Addr().String(), RawQuery: "tcp_nodelay=1"}).String(),
+	// Progress must not wait in Nagle's buffer.
+	address := (&url.URL{Scheme: "tcp", Host: ln.Addr().String(), RawQuery: "tcp_nodelay=1"}).String()
+	for i, arg := range cmd.Args {
+		if arg == pipeURL(fd) {
+			cmd.Args[i] = address
+		}
+	}
+	l := &sideOutput{
 		accepted:      make(chan struct{}),
 		stopAccepting: sync.OnceFunc(func() { _ = ln.Close() }),
 	}
@@ -45,7 +50,7 @@ func newLoopback() (*loopback, error) {
 }
 
 // Read waits for ffmpeg to connect; an ffmpeg that exits without ever opening the output reads as EOF.
-func (l *loopback) Read(p []byte) (int, error) {
+func (l *sideOutput) Read(p []byte) (int, error) {
 	<-l.accepted
 	if l.conn == nil {
 		return 0, io.EOF
@@ -57,7 +62,7 @@ func (l *loopback) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (l *loopback) Close() error {
+func (l *sideOutput) Close() error {
 	l.stopAccepting()
 	<-l.accepted
 	if l.conn == nil {
@@ -67,4 +72,11 @@ func (l *loopback) Close() error {
 		return err
 	}
 	return nil
+}
+
+// finishSideOutputs releases readers whose connection was never opened.
+func finishSideOutputs(outputs []*sideOutput) {
+	for _, output := range outputs {
+		output.stopAccepting()
+	}
 }
