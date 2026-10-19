@@ -86,7 +86,9 @@ func (p Program) SameBindings(other Program) bool {
 	}
 	for i, input := range p.Inputs {
 		against := other.Inputs[i]
-		if input.ID != against.ID || urlString(input.URL) != urlString(against.URL) || input.Representation != against.Representation {
+		if input.ID != against.ID || urlString(input.URL) != urlString(against.URL) ||
+			input.Representation != against.Representation ||
+			!maps.EqualFunc(input.Headers, against.Headers, slices.Equal) {
 			return false
 		}
 	}

@@ -177,6 +177,27 @@ func TestUnreadableLinksAreMovedPastInRankOrder(t *testing.T) {
 	}
 }
 
+func TestRecoveryTriesSameURLWithDifferentReplayHeaders(t *testing.T) {
+	first := link(t, "https://cdn.example/movie.m3u8")
+	first.Headers.Set("Referer", "https://one.example/")
+	second := link(t, first.URL.String())
+	second.Headers.Set("Referer", "https://two.example/")
+	in := Intent{Turns: unheard{}, Candidates: []*source.Stream{first, second}, Deadline: 30 * time.Second}
+	run := &scriptedRunner{outcomes: []Outcome{judged(health.Dead, health.Reading, health.Vitals{}), delivered}}
+	if err := Cast(t.Context(), in, run, &fakeProgram{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(run.seen) != 2 || run.seen[0].candidate != 0 || run.seen[1].candidate != 1 {
+		t.Fatalf("attempts = %+v, want each same-URL candidate", run.seen)
+	}
+	if got := primaryInput(t, run.seen[0].Program).Headers.Get("Referer"); got != "https://one.example/" {
+		t.Errorf("first request Referer = %q", got)
+	}
+	if got := primaryInput(t, run.seen[1].Program).Headers.Get("Referer"); got != "https://two.example/" {
+		t.Errorf("second request Referer = %q", got)
+	}
+}
+
 func TestATimelineCastorCouldNotReadMovesToTheNextLink(t *testing.T) {
 	in := Intent{Turns: unheard{}, Candidates: candidates(t, "https://cdn.example/one.mpd", "https://other.example/two.m3u8"), Deadline: 30 * time.Second}
 	unread := errors.New("HTTP 503")
