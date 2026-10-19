@@ -1,8 +1,9 @@
-package follow
+package hls
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
@@ -118,13 +119,9 @@ func TestEncryptedPixelSegmentIsUnwrappedAfterDecryption(t *testing.T) {
 	}
 	sealed := make([]byte, len(padded))
 	cipher.NewCBCEncrypter(block, iv).CryptBlocks(sealed, padded)
-	origin := &stored{resources: map[string][]byte{"segment": sealed, "key": secret}}
-	f := newFeed(t.Context(), "primary", origin, nil)
-	got, err := f.read(t.Context(), timeline.Segment{URI: "segment", Key: timeline.Key{Method: aes128, URI: "key", IV: fmt.Sprintf("0x%x", iv)}})
-	if err != nil || !bytes.Equal(got, ts) {
+	got, unwrapped, err := (Decoder{}).Segment(t.Context(), timeline.Segment{URI: "segment", Key: timeline.Key{Method: aes128, URI: "key", IV: fmt.Sprintf("0x%x", iv)}}, sealed,
+		func(_ context.Context, uri string) ([]byte, error) { return secret, nil })
+	if err != nil || !bytes.Equal(got, ts) || !unwrapped {
 		t.Fatalf("decrypted envelope: %v, decoded %d bytes", err, len(got))
-	}
-	if !f.unwrapped.Load() {
-		t.Fatal("decrypted envelope was not recorded")
 	}
 }

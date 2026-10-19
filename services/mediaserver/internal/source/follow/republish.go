@@ -52,21 +52,23 @@ func (r Republisher) republish(parent context.Context, program media.Program) (r
 	}
 	followed := map[media.InputID]bool{}
 	for _, in := range program.Inputs {
-		src := r.formats.Claiming(in.ContentType).Timeline(r.client, in, reads(program, in.ID))
-		if src == nil {
+		formatReading := r.formats.Claiming(in.ContentType).Timeline(r.client, in, reads(program, in.ID))
+		if formatReading.Source == nil {
 			continue
+		}
+		if formatReading.Decoder == nil {
+			stop()
+			return reading{}, fmt.Errorf("reading the %s input's presentation: format supplied no resource decoder", in.ID)
 		}
 		// Only a timeline that restarts at its seams needs its fragments made MPEG-TS; others are relayed as the origin sent them.
 		repackage := r.repackage
 		if fetch := in.Fetching(); !fetch.Live && !fetch.Spliced {
 			repackage = nil
 		}
-		feed := newFeed(ctx, string(in.ID), src, repackage)
+		feed := newFeed(ctx, string(in.ID), formatReading, repackage)
 		owned = append(owned, feed)
 		if err := feed.start(); err != nil {
-			// HLS must stay in Castor's reader: FFmpeg cannot unwrap segments from the origin.
-			// A selected representation likewise has no other reader for its presentation.
-			if in.ContentType == media.HLS || in.Representation != "" {
+			if !formatReading.DirectFallback {
 				stop()
 				return reading{}, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
 			}

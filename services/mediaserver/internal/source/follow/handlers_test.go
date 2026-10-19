@@ -23,7 +23,7 @@ func TestRepublishedVODFramesLargeHTTPBodies(t *testing.T) {
 	for _, s := range window.Segments {
 		origin.resources[s.URI] = segment
 	}
-	feed := newFeed(t.Context(), "primary", origin, nil)
+	feed := testFeed(t.Context(), "primary", origin, nil)
 	t.Cleanup(feed.wait)
 
 	playlist := httptest.NewRecorder()
@@ -42,7 +42,7 @@ func TestRepublishedVODFramesLargeHTTPBodies(t *testing.T) {
 
 	fragments := fragmented("avc1")
 	fragments.resources["https://origin.example/0.m4s"] = segment
-	repackaged := newFeed(t.Context(), "primary", fragments, labelled)
+	repackaged := testFeed(t.Context(), "primary", fragments, labelled)
 	t.Cleanup(repackaged.wait)
 	if err := repackaged.start(); err != nil {
 		t.Fatal(err)

@@ -52,7 +52,7 @@ func (f *feed) segment(w http.ResponseWriter, r *http.Request) {
 // repackaged serves an fMP4 fragment as MPEG-TS, its init section ahead of it.
 func (f *feed) repackaged(ctx context.Context, w http.ResponseWriter, s timeline.Segment, fragment []byte) {
 	carries, err := f.carries(ctx, *s.Map)
-	if err == nil && (!carries || (s.Key != timeline.Key{} && !decryptable(s.Key))) {
+	if err == nil && (!carries || (s.Key != timeline.Key{} && !f.decoder.ConsumesKey(s.Key))) {
 		// The playlist already names it as MPEG-TS, so a segment that cannot become one is a loss to report.
 		err = errors.New("the segment's tracks or encryption cannot be carried as MPEG-TS")
 	}

@@ -57,7 +57,9 @@ func selectAudioTrack(tracks []media.AudioTrack, languages []string) (index int,
 	return 0, false
 }
 
-func (opaque) Timeline(Client, media.Input, media.TrackKind) timeline.Source { return nil }
+func (opaque) Timeline(Client, media.Input, media.TrackKind) timeline.Reading {
+	return timeline.Reading{}
+}
 
 func (opaque) InputArgs(int) []string { return nil }
 

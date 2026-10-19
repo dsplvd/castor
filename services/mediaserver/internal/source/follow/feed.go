@@ -22,6 +22,7 @@ type feed struct {
 	unwrapped atomic.Bool
 	name      string
 	source    timeline.Source
+	decoder   timeline.Decoder
 	repackage Repackage
 
 	// refreshing serialises origin reads, so a slow reload never holds up a segment the reader asks for meanwhile.
@@ -57,8 +58,8 @@ type playlistResult struct {
 }
 
 // newFeed follows source under name; repackage, when set, serves fMP4 as MPEG-TS.
-func newFeed(ctx context.Context, name string, source timeline.Source, repackage Repackage) *feed {
-	return &feed{name: name, source: source, repackage: repackage, carriage: map[timeline.Map]bool{}, slots: map[int64]*slot{}, reached: -1, life: ctx}
+func newFeed(ctx context.Context, name string, reading timeline.Reading, repackage Repackage) *feed {
+	return &feed{name: name, source: reading.Source, decoder: reading.Decoder, repackage: repackage, carriage: map[timeline.Map]bool{}, slots: map[int64]*slot{}, reached: -1, life: ctx}
 }
 
 // refresh reads and merges one window, returning its published result before another reload can replace it.
@@ -174,7 +175,7 @@ func (f *feed) view(s timeline.Segment, sequence int64) timeline.Segment {
 		seen.Map = &timeline.Map{URI: fmt.Sprintf("%s/init/%d", f.name, f.inits.id(*s.Map))}
 	}
 	// Castor decrypts what it can; any other key it relays, for the reader to apply.
-	if s.Key != (timeline.Key{}) && !decryptable(s.Key) {
+	if s.Key != (timeline.Key{}) && !f.decoder.ConsumesKey(s.Key) {
 		seen.Key = s.Key
 		seen.Key.URI = fmt.Sprintf("%s/key/%d", f.name, f.keys.id(s.Key.URI))
 	}
