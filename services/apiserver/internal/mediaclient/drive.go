@@ -42,6 +42,10 @@ func (c *Client) Drive(parent context.Context, id string, lent device.Device, in
 	return nil
 }
 
+// A drive normally has only a few calls in flight. Bound a broken peer before it
+// can leave an unbounded number of device operations waiting for cancellation.
+const maxDeviceCalls = 64
+
 // driver runs the media server's calls on the lent device, each concurrently, for one drive.
 type driver struct {
 	ctx       context.Context
@@ -75,6 +79,11 @@ func (d *driver) run(envelope *mediav1.DeviceCommand) error {
 		d.mu.Unlock()
 		cancel()
 		return fmt.Errorf("media server reused running device command ID %q", cmd.GetId())
+	}
+	if len(d.running) >= maxDeviceCalls {
+		d.mu.Unlock()
+		cancel()
+		return fmt.Errorf("media server exceeded %d concurrent device commands", maxDeviceCalls)
 	}
 	d.running[cmd.GetId()] = cancel
 	d.mu.Unlock()

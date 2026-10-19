@@ -2,6 +2,8 @@ package mediaclient
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -44,6 +46,23 @@ func TestDuplicateCommandIDsDoNotLoseCancellationOfTheFirstCall(t *testing.T) {
 			t.Fatal("duplicate IDs lost the first call's cancellation and wedged device release")
 		}
 	})
+}
+
+func TestDriveRejectsTooManyOutstandingDeviceCalls(t *testing.T) {
+	ctx, leave := context.WithCancelCause(t.Context())
+	defer leave(nil)
+	d := &driver{ctx: ctx, leave: leave, device: &waitingDevice{started: make(chan struct{}, maxDeviceCalls)}, running: map[string]context.CancelFunc{}}
+	for i := range maxDeviceCalls + 1 {
+		cmd := &mediav1.DeviceCommand{Command: &mediav1.DeviceCommand_Call_{Call: &mediav1.DeviceCommand_Call{Id: fmt.Sprintf("await-%d", i), Operation: &mediav1.DeviceCommand_Call_AwaitEnd{AwaitEnd: &mediav1.DeviceCommand_AwaitEnd{}}}}}
+		err := d.run(cmd)
+		if i < maxDeviceCalls && err != nil {
+			t.Fatalf("command %d refused below the limit: %v", i, err)
+		}
+		if i == maxDeviceCalls && (err == nil || !strings.Contains(err.Error(), "concurrent device commands")) {
+			t.Fatalf("command %d = %v, want the drive to reject excessive calls", i, err)
+		}
+	}
+	d.release()
 }
 
 func (*waitingDevice) Stop(context.Context) error   { return nil }
