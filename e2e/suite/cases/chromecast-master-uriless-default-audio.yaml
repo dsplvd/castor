@@ -1,4 +1,4 @@
-# Wowza-style multi-language master: the DEFAULT English track is muxed in the variant (no URI) and Spanish is a URI'd alternate; the default must win, so the variant alone is handed over.
+# Wowza-style multi-language master: the DEFAULT English track is muxed in the variant (no URI) and Spanish is a URI'd alternate; Castor serves the default.
 stream:
   packaging: hls-ts
   video: {codec: h264, ladder: [240, 360]}
@@ -8,5 +8,5 @@ origin:
 receiver:
   device: chromecast
 expect:
-  delivery: passthrough
+  delivery: served
   video: copied
