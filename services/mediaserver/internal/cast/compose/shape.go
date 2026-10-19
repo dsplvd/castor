@@ -38,9 +38,8 @@ func (s Shape) handoff() bool {
 		return false
 	}
 	probe, measured := s.Program.Measurement()
-	// A finite probe cannot establish whether a later HLS segment uses the
-	// nonstandard PNG/gzip/TS envelope. Direct HLS requires explicit support.
-	if primary.ContentType == media.HLS && (!measured || !s.Device.CanPlayHLSWith(probe, media.HLSExtraSegmentTIKTIKPX)) {
+	// A receiver without the observed segment envelope must read Castor's output.
+	if primary.ContentType == media.HLS && probe.SourceUnwrapped && !s.Device.CanPlayHLSWith(probe, media.HLSExtraSegmentTIKTIKPX) {
 		return false
 	}
 	return s.Device.SelfFetch && s.Program.SelfFetchable() &&

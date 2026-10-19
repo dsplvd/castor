@@ -26,6 +26,11 @@ func New(client source.Client, formats source.Formats, repackage Repackage) Repu
 // Republish points each followed input at its republished timeline. The returned
 // function stops and joins serving, then reports any unresolved source refusal.
 func (r Republisher) Republish(parent context.Context, program media.Program) (media.Program, func() error, error) {
+	followed, _, close, err := r.republish(parent, program)
+	return followed, close, err
+}
+
+func (r Republisher) republish(parent context.Context, program media.Program) (media.Program, []*feed, func() error, error) {
 	// Reads ahead of the reader outlive no read: stopping the republish ends them.
 	ctx, cancel := context.WithCancel(parent)
 	var feeds []*feed
@@ -54,7 +59,7 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 			// A selected representation likewise has no other reader for its presentation.
 			if in.ContentType == media.HLS || in.Representation != "" {
 				stop()
-				return media.Program{}, nil, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
+				return media.Program{}, nil, nil, fmt.Errorf("reading the %s input's presentation: %w", in.ID, err)
 			}
 			slog.WarnContext(ctx, "castor could not read this input's timeline, so ffmpeg reads the origin directly",
 				"input", in.ID, "error", err)
@@ -64,12 +69,12 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 	}
 	if len(feeds) == 0 {
 		stop()
-		return program, func() error { return nil }, nil
+		return program, nil, func() error { return nil }, nil
 	}
 	server, err := serve(feeds...)
 	if err != nil {
 		stop()
-		return media.Program{}, nil, err
+		return media.Program{}, nil, nil, err
 	}
 	out := program.Clone()
 	for i, in := range out.Inputs {
@@ -79,7 +84,7 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 			slog.InfoContext(ctx, "castor follows this input's timeline", "input", in.ID, "origin", in.URL.Redacted(), "republished", out.Inputs[i].URL)
 		}
 	}
-	return out, func() error {
+	return out, feeds, func() error {
 		cancel()
 		err := server.Close()
 		stop()
@@ -92,11 +97,16 @@ func (r Republisher) Republish(parent context.Context, program media.Program) (m
 
 // Probe scopes inspection to the same reading as playback.
 func (r Republisher) Probe(ctx context.Context, program media.Program, inspect func(media.Program) media.Prober) (info media.ProbeInfo, reach media.Reach, err error) {
-	followed, close, err := r.Republish(ctx, program)
+	followed, feeds, close, err := r.republish(ctx, program)
 	if err != nil {
 		return info, reach, err
 	}
-	defer func() { err = errors.Join(err, close()) }()
+	defer func() {
+		err = errors.Join(err, close())
+		for _, feed := range feeds {
+			info.SourceUnwrapped = info.SourceUnwrapped || feed.unwrapped.Load()
+		}
+	}()
 	return inspect(followed).Probe(ctx)
 }
 

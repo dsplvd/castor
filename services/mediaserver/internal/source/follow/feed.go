@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -17,6 +18,8 @@ import (
 
 // feed is one source's ledger, merged each time its playlist is asked for; castor reads every resource it lists.
 type feed struct {
+	// unwrapped records a segment decoded during this reading.
+	unwrapped atomic.Bool
 	name      string
 	source    timeline.Source
 	repackage Repackage

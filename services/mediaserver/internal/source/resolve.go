@@ -109,5 +109,11 @@ func Narrowed(program media.Program, chosen Rendition, stream *Stream) (media.Pr
 	case chosen.Declared != nil:
 		narrowed.SetMeasurement(*chosen.Declared)
 	}
+	if stream.Probe != nil && stream.Probe.SourceUnwrapped {
+		if measured, ok := narrowed.Measurement(); ok {
+			measured.SourceUnwrapped = true
+			narrowed.SetMeasurement(measured)
+		}
+	}
 	return narrowed, nil
 }

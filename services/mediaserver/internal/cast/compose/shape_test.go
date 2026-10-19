@@ -14,18 +14,21 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 		{Transport: media.TransportHLS, Video: media.VideoSupport{Codec: media.CodecH264}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}},
 	}}
 	for _, tt := range []struct {
-		name        string
-		contentType string
-		headers     http.Header
-		unmeasured  bool
-		height      int
-		maxHeight   media.HeightCap
-		wrappedHLS  bool
-		want        bool
+		name          string
+		contentType   string
+		headers       http.Header
+		unmeasured    bool
+		height        int
+		maxHeight     media.HeightCap
+		wrappedHLS    bool
+		sourceWrapped bool
+		want          bool
 	}{
 		{name: "a header-free measured file at the ceiling passes through", contentType: media.MP4, height: 1080, maxHeight: 1080, want: true},
-		{name: "an HLS playlist stays local even when the device supports it", contentType: media.HLS, height: 1080, maxHeight: 1080},
+		{name: "ordinary HLS passes through", contentType: media.HLS, height: 1080, maxHeight: 1080, want: true},
+		{name: "observed wrapped HLS stays local", contentType: media.HLS, height: 1080, maxHeight: 1080, sourceWrapped: true},
 		{name: "a device supporting wrapped segments can fetch HLS directly", contentType: media.HLS, height: 1080, maxHeight: 1080, wrappedHLS: true, want: true},
+		{name: "a device supporting wrapped segments can fetch observed wrapped HLS", contentType: media.HLS, height: 1080, maxHeight: 1080, wrappedHLS: true, sourceWrapped: true, want: true},
 		{name: "an unmeasured program is not assumed decodable", contentType: media.MP4, unmeasured: true},
 		{name: "a header-gated source is served", contentType: media.MP4, headers: http.Header{"Referer": {"https://player.example/"}}},
 		{name: "a source above the ceiling is served, since a hand-off cannot be downscaled", contentType: media.MP4, height: 1600, maxHeight: 1080},
@@ -47,7 +50,7 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !tt.unmeasured {
-				program.SetMeasurement(media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2})
+				program.SetMeasurement(media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2, SourceUnwrapped: tt.sourceWrapped})
 			}
 			device := caps
 			device.Formats = append([]media.FormatSupport(nil), caps.Formats...)
