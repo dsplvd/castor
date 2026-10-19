@@ -1,4 +1,4 @@
-# max_height selects the richest rendition within it, which Castor serves to the Chromecast.
+# max_height selects the richest rendition within it, and that rendition is handed over as it is.
 stream:
   packaging: hls-ts
   video: {codec: h264, ladder: [240, 480, 720]}
@@ -9,5 +9,5 @@ castor:
   cast:
     max_height: 480
 expect:
-  delivery: served
+  delivery: passthrough
   video: copied

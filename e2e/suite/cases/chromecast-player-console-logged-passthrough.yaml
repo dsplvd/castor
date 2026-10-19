@@ -1,4 +1,4 @@
-# Castor finds and serves a stream a page only names in its console.
+# A stream a page only names in its console is handed to a Chromecast as is, since no request of the page's ever carried it.
 command:
   player:
     stream: {logged: '[hls] attaching source %s'}
@@ -10,5 +10,5 @@ stream:
 receiver:
   device: chromecast
 expect:
-  delivery: served
+  delivery: passthrough
   video: copied

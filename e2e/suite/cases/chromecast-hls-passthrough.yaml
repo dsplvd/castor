@@ -1,4 +1,4 @@
-# Castor serves even a plain HLS source because later segments may use an unsupported envelope.
+# A plain HLS source the Chromecast can fetch and decode is handed over, and castor serves nothing.
 stream:
   packaging: hls-ts
   video: {codec: h264, height: 360}
@@ -6,5 +6,5 @@ stream:
 receiver:
   device: chromecast
 expect:
-  delivery: served
+  delivery: passthrough
   video: copied
