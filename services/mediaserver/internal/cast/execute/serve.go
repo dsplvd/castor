@@ -49,7 +49,16 @@ func (s *preparation) validateOutput(d delivery, opts encodePlan) error {
 	}
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
-	return encoding.ValidateOutput(ctx, s.Probes.File(path), opts.delivery.Capabilities, opts.Format.ContentType, opts.Probe, d.output.Done())
+	expected := opts.Probe
+	if known, ok := s.attempt.Program.Measurement(); ok {
+		if expected.VideoCodec == "" {
+			expected.VideoCodec = known.VideoCodec
+		}
+		if expected.AudioCodec == "" {
+			expected.AudioCodec = known.AudioCodec
+		}
+	}
+	return encoding.ValidateOutput(ctx, s.Probes.File(path), opts.delivery.Capabilities, opts.Format.ContentType, expected, d.output.Done())
 }
 
 func (s *preparation) produce(work string, f feed, opts encodePlan, burn burnRenderer) (delivery, error) {

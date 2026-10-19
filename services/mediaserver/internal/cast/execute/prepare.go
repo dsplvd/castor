@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/compose"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
@@ -86,6 +88,12 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 		if err := gate(s.ctx, buf); err != nil {
 			return p, err
 		}
+		ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
+		err = encoding.ValidateTracks(ctx, s.Probes.File(buf.reader.spool.ProbePath()), buf.expected, buf.reader.Done())
+		cancel()
+		if err != nil {
+			return p, fmt.Errorf("validating buffered read: %w", err)
+		}
 		p.feed = feed{buffered: buf}
 		if _, native := s.nativeOutput(p.feed); buf.transcript != nil && !native {
 			burn = subtitle.NewCueFile(work, buf.transcript.Cues())
@@ -104,12 +112,8 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 	if err := awaitArtifact(s.ctx, d); err != nil {
 		return p, err
 	}
-	_, videoEncoded := opts.Video.Encode()
-	_, audioEncoded := opts.Audio.Encode()
-	if videoEncoded || audioEncoded {
-		if err := s.validateOutput(d, opts); err != nil {
-			return p, err
-		}
+	if err := s.validateOutput(d, opts); err != nil {
+		return p, err
 	}
 	p.target, p.contentType = d.URL(), opts.Format.ContentType
 	return p, nil

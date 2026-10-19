@@ -30,7 +30,7 @@ func (a countedPublisher) Publish(context.Context, http.Handler) (output.Publica
 
 func handoffStream() *source.Stream {
 	c := &source.Stream{URL: &url.URL{Scheme: "https", Host: "cdn.example", Path: "/movie.mp4"}, ContentType: media.MP4}
-	c.Probe = &media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2}
+	c.Probe = &media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 360, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2}
 	return c
 }
 

@@ -11,6 +11,20 @@ import (
 // ValidateOutput checks a growing encoded artifact against receiver capabilities.
 // It observes production completion without owning or cancelling the producer.
 func ValidateOutput(ctx context.Context, prober media.Prober, caps media.Capabilities, contentType string, expected media.ProbeInfo, done <-chan struct{}) error {
+	return validateTracks(ctx, prober, expected, done, func(measured media.ProbeInfo) error {
+		if !caps.CanPlayIn(contentType, measured) {
+			return fmt.Errorf("encoded output does not satisfy receiver capabilities: video=%s profile=%s level=%d audio=%s", measured.VideoCodec, measured.VideoProfile, measured.VideoLevel, measured.AudioCodec)
+		}
+		return nil
+	})
+}
+
+// ValidateTracks checks that a growing read still carries the tracks measured at its source.
+func ValidateTracks(ctx context.Context, prober media.Prober, expected media.ProbeInfo, done <-chan struct{}) error {
+	return validateTracks(ctx, prober, expected, done, nil)
+}
+
+func validateTracks(ctx context.Context, prober media.Prober, expected media.ProbeInfo, done <-chan struct{}, accept func(media.ProbeInfo) error) error {
 	completed := false
 	for {
 		if err := ctx.Err(); err != nil {
@@ -29,9 +43,10 @@ func ValidateOutput(ctx context.Context, prober media.Prober, caps media.Capabil
 			switch {
 			case incomplete:
 				err = fmt.Errorf("encoded artifact does not yet contain video codec parameters")
-			case !caps.CanPlayIn(contentType, measured):
-				return fmt.Errorf("encoded output does not satisfy receiver capabilities: video=%s profile=%s level=%d audio=%s", measured.VideoCodec, measured.VideoProfile, measured.VideoLevel, measured.AudioCodec)
 			default:
+				if accept != nil {
+					return accept(measured)
+				}
 				return nil
 			}
 		}

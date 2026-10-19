@@ -133,3 +133,16 @@ func TestCompletedHeaderWithoutVideoParametersIsRejected(t *testing.T) {
 		t.Fatal("header-only output was accepted")
 	}
 }
+
+func TestBufferedReadMustRetainTheSourcesVideo(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	expected := media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC}
+	spool := media.ProbeInfo{AudioCodec: media.CodecAAC}
+	if err := ValidateTracks(t.Context(), outputProbe{info: spool}, expected, done); err == nil {
+		t.Fatal("audio-only spool accepted after source video disappeared")
+	}
+	if err := ValidateTracks(t.Context(), outputProbe{info: spool}, media.ProbeInfo{AudioCodec: media.CodecAAC}, done); err != nil {
+		t.Fatalf("valid audio-only spool rejected: %v", err)
+	}
+}

@@ -3,6 +3,8 @@ package mediaserver
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"time"
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
@@ -51,7 +53,7 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 	return func(asked *mediav1.PlaybackSettings) cast.Caster {
 		client := web.New(fetchTimeout)
 		timelines := follow.New(client, formats, follow.Repackager(ffmpegBinary))
-		resolver := source.NewResolver(client, media.HeightCap(asked.GetMaxHeight()), asked.GetAudio().GetLanguages(), formats)
+		resolver := resolverWithProbe(client, media.HeightCap(asked.GetMaxHeight()), asked.GetAudio().GetLanguages(), machinery.Probes)
 		return caster{
 			Ranker: rank.New(resolverConfig, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
 				return candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: machinery.Probes}
@@ -139,5 +141,13 @@ func (k caster) Play(ctx context.Context, device execute.Device, publisher outpu
 		Deadline:   readDeadline,
 		Delivery:   wire.FromDelivery(k.asked.GetDelivery()),
 		Turns:      turns,
-	}, run, source.NewResolver(k.client, run.MaxHeight, k.asked.GetAudio().GetLanguages(), formats))
+	}, run, resolverWithProbe(k.client, run.MaxHeight, k.asked.GetAudio().GetLanguages(), k.machinery.Probes))
+}
+
+func resolverWithProbe(client source.Client, height media.HeightCap, languages []string, binary probe.FFprobe) *source.Resolver {
+	measure := func(ctx context.Context, u *url.URL, h http.Header) (media.ProbeInfo, error) {
+		info, _, err := binary.Link(probe.Link{URL: u, Headers: h, InputArgs: formats.InputArgs(media.HLS, 0)}, fetchTimeout).Probe(ctx)
+		return info, err
+	}
+	return source.NewResolver(client, height, languages, source.Formats{hls.Format{ProbeRendition: measure}, dash.Format{}})
 }

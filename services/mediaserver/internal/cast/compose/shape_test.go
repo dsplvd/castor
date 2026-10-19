@@ -32,6 +32,7 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 		{name: "an unmeasured program is not assumed decodable", contentType: media.MP4, unmeasured: true},
 		{name: "a header-gated source is served", contentType: media.MP4, headers: http.Header{"Referer": {"https://player.example/"}}},
 		{name: "a source above the ceiling is served, since a hand-off cannot be downscaled", contentType: media.MP4, height: 1600, maxHeight: 1080},
+		{name: "a source of unknown video height is served when capped", contentType: media.HLS, maxHeight: 480},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			program, err := media.NewProgram(media.Program{

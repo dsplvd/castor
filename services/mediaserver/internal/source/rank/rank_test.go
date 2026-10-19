@@ -100,3 +100,19 @@ func TestCancellationDoesNotAdmitAProbeFailureAsAFallback(t *testing.T) {
 		t.Errorf("Measure = %v, want cancellation", err)
 	}
 }
+
+func TestWebMNameDisambiguatesMatroskaProbe(t *testing.T) {
+	const webm = "https://origin.example/movie.webm"
+	const mkv = "https://origin.example/movie.mkv"
+	measurer := &scripted{answers: map[string]*media.ProbeInfo{
+		webm: {ContentType: media.MKV, VideoCodec: media.CodecVP8, AudioCodec: media.CodecVorbis},
+		mkv:  {ContentType: media.MKV, VideoCodec: media.CodecVP8, AudioCodec: media.CodecVorbis},
+	}}
+	r := New(testConfig, 1080, measurer.Probe)
+	for _, tc := range []struct{ url, want string }{{webm, media.WebM}, {mkv, media.MKV}} {
+		got, err := r.Measure(t.Context(), candidateAt(t, "", tc.url))
+		if err != nil || got.ContentType != tc.want {
+			t.Errorf("Measure(%s) = %q, %v; want %q", tc.url, got.ContentType, err, tc.want)
+		}
+	}
+}

@@ -17,6 +17,7 @@ import (
 type buffered struct {
 	reader     *pull
 	transcript Transcript
+	expected   media.ProbeInfo
 	// captionVideoOffset locates the first video sample on the PCM timeline.
 	// An unknown clock cannot safely carry separately timed generated captions.
 	captionVideoOffset *time.Duration
@@ -89,7 +90,13 @@ func (s *preparation) read(work string, program media.Program) (*buffered, error
 		offset := *facts.probe.VideoStartOffset + program.Offsets[track.Input]
 		videoOffset = &offset
 	}
-	return &buffered{reader: reader, transcript: transcript, captionVideoOffset: videoOffset, live: live}, nil
+	expected := facts.probe
+	if !facts.measured {
+		if known, ok := program.Measurement(); ok {
+			expected = known
+		}
+	}
+	return &buffered{reader: reader, transcript: transcript, expected: expected, captionVideoOffset: videoOffset, live: live}, nil
 }
 
 // transcription reads sound once; native subtitles and burn-in consume the same cues.

@@ -61,7 +61,7 @@ func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) (rankedStre
 	order := ranked(pool, r.maxHeight)
 	best := order[0]
 	slog.InfoContext(ctx, "best stream selected", "url", best.URL.String(),
-		"bitrate", int64(best.Bitrate()), "height", height(best), "last_resort", best.LastResort,
+		"bitrate", int64(best.Bitrate()), "height", height(best, r.maxHeight), "last_resort", best.LastResort,
 		"alternatives", len(order)-1)
 	return order, nil
 }
@@ -78,7 +78,7 @@ func (r *Ranker) Measure(ctx context.Context, stream *source.Stream) (measured *
 	verdict := admit(one)
 	one.LastResort = verdict.lastResort
 	slog.InfoContext(ctx, "direct link measured", "url", one.URL.String(),
-		"bitrate", int64(one.Bitrate()), "height", height(one.Stream),
+		"bitrate", int64(one.Bitrate()), "height", height(one.Stream, r.maxHeight),
 		"reason", string(verdict.reason), "last_resort", one.LastResort)
 	return one.Stream, nil
 }
@@ -130,8 +130,14 @@ func (r *Ranker) measureAll(ctx context.Context, streams []*source.Stream) []mea
 				slog.WarnContext(ctx, "probe failed", "url", s.URL, "reach", reach, "error", err)
 			} else {
 				next.Probe = &info
+				// ffprobe reports WebM and Matroska under the same format name.
+				// A .webm link disambiguates that measurement for device handoff.
+				identified := info.ContentType
+				if identified == media.MKV && (source.Formats{}).ContentTypeOf(next.URL, "") == media.WebM {
+					identified = media.WebM
+				}
 				// A container the URL did not name is one the probe just established.
-				next.ContentType = cmp.Or(next.ContentType, info.ContentType)
+				next.ContentType = cmp.Or(next.ContentType, identified)
 			}
 			out[i] = measured{Stream: &next, reach: reach}
 		})
