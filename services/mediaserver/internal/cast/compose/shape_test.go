@@ -70,7 +70,8 @@ func TestAHandedOverProgramIsOneTheDevicePlaysWhole(t *testing.T) {
 		want bool
 	}{
 		{"supported video without audio", media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8}, true},
-		{"unknown video is not evidence of compatibility", media.ProbeInfo{AudioCodec: media.CodecAAC, AudioChannels: 2}, false},
+		{"supported audio without video", media.ProbeInfo{AudioCodec: media.CodecAAC, AudioChannels: 2}, true},
+		{"no measured tracks", media.ProbeInfo{}, false},
 		{"unsupported audio", media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecEAC3, AudioChannels: 6}, false},
 		{"HDR is never assumed safe", media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoHDR: true}, false},
 	} {
@@ -79,5 +80,30 @@ func TestAHandedOverProgramIsOneTheDevicePlaysWhole(t *testing.T) {
 				t.Errorf("canPlay = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMeasuredAudioOnlySourceCanPassThrough(t *testing.T) {
+	program, err := media.NewProgram(media.Program{
+		Inputs: []media.Input{{
+			ID: media.PrimaryInputID, URL: &url.URL{Scheme: "https", Host: "cdn.example", Path: "/audio.mp4"},
+			ContentType: media.MP4,
+		}},
+		Tracks:     []media.TrackRef{{Input: media.PrimaryInputID, Kind: media.TrackAudio}},
+		ClockInput: media.PrimaryInputID,
+		EndPolicy:  media.EndAtLongest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program.SetMeasurement(media.ProbeInfo{AudioCodec: media.CodecAAC, AudioChannels: 2})
+	shape := Shape{
+		Device: media.Capabilities{SelfFetch: true, Formats: []media.FormatSupport{{
+			Transport: media.TransportMP4, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2},
+		}}},
+		Program: program,
+	}
+	if !shape.handoff() {
+		t.Fatal("compatible audio-only source was not handed directly to the receiver")
 	}
 }

@@ -50,7 +50,7 @@ func (s Shape) handoff() bool {
 
 // canPlay reports whether the whole measured program is safe to hand over: HDR is never assumed to engage.
 func canPlay(r media.Capabilities, p media.ProbeInfo) bool {
-	if p.VideoCodec == "" || p.VideoHDR {
+	if p.VideoHDR {
 		return false
 	}
 	for _, f := range r.Formats {

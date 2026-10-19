@@ -20,6 +20,9 @@ func Floor(ctx context.Context, in Inputs) (Plan, error) {
 
 // Video half: stream copy or floor codec under VBV cap, scaled to ceiling.
 func floorVideoTrack(ctx context.Context, in Inputs) (Track[VideoEncode], []Reason, error) {
+	if in.Measured && in.Probe.VideoCodec == "" {
+		return CopyVideo(), nil, nil
+	}
 	refused := refuse(videoCarriageRefusals, in)
 	if len(refused) == 0 {
 		return CopyVideo(), nil, nil
@@ -47,6 +50,9 @@ func floorVideoTrack(ctx context.Context, in Inputs) (Track[VideoEncode], []Reas
 
 // Audio half: stream copy, else surround kept in the buffer's surround codec and stereo in AAC; cannot fail.
 func floorAudioTrack(in Inputs) (Track[AudioEncode], []Reason) {
+	if in.Measured && in.Probe.AudioCodec == "" {
+		return CopyAudio(), nil
+	}
 	refused := refuse(audioCarriageRefusals, in)
 	if len(refused) == 0 {
 		return CopyAudio(), nil
