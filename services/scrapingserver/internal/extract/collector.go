@@ -338,8 +338,8 @@ func (c *collector) captureFor(reqID network.RequestID) int {
 	}
 	// A redirect's final hop owns the response body even if the response URL
 	// event has not arrived yet.
-	for i := len(c.captures) - 1; i >= 0; i-- {
-		if c.captures[i].reqID == reqID {
+	for i, cp := range slices.Backward(c.captures) {
+		if cp.reqID == reqID {
 			return i
 		}
 	}
