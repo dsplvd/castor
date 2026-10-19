@@ -3,7 +3,6 @@ package dlna
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -27,27 +26,56 @@ type sinkEntry struct {
 	features string
 }
 
-// negotiateCaps asks the device what it accepts over ConnectionManager GetProtocolInfo, refusing a device that does not say.
+// negotiateCaps asks the device what it accepts over ConnectionManager GetProtocolInfo.
+// Renderers without usable answers retain the conservative MPEG-TS path from 1.9.x.
 func negotiateCaps(ctx context.Context, loc *goupnp.RootDevice, u *url.URL) (*mediav1.Capabilities, map[mediav1.Container]sinkEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	manager, err := findService(loc, u, "ConnectionManager")
 	if err != nil {
-		return nil, nil, fmt.Errorf("the device cannot say what it plays: %w", err)
+		slog.WarnContext(ctx, "DLNA ConnectionManager unavailable; using conservative capabilities", "error", err)
+		caps, sinks := fallbackCaps()
+		return caps, sinks, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, capsTimeout)
+	queryCtx, cancel := context.WithTimeout(ctx, capsTimeout)
 	defer cancel()
 
 	response := &struct{ Source, Sink string }{}
 	if err := manager.SOAPClient.PerformActionCtx(
-		ctx, manager.Service.ServiceType, "GetProtocolInfo", nil, response); err != nil {
-		return nil, nil, fmt.Errorf("asking the device what it plays: %w", err)
+		queryCtx, manager.Service.ServiceType, "GetProtocolInfo", nil, response); err != nil {
+		if ctx.Err() != nil {
+			return nil, nil, fmt.Errorf("asking the device what it plays: %w", err)
+		}
+		slog.WarnContext(ctx, "DLNA GetProtocolInfo failed; using conservative capabilities", "error", err)
+		caps, sinks := fallbackCaps()
+		return caps, sinks, nil
 	}
 	caps, sinks := parseSinkProtocolInfo(response.Sink)
 	if len(caps.Formats) == 0 {
-		return nil, nil, errors.New("the device advertises no complete supported playback envelope in its sink")
+		slog.WarnContext(ctx, "DLNA sink contains no supported playback envelope; using conservative capabilities")
+		caps, sinks := fallbackCaps()
+		return caps, sinks, nil
 	}
 	slog.InfoContext(ctx, "negotiated device capabilities", "formats", len(caps.Formats))
 
 	return caps, sinks, nil
+}
+
+// fallbackCaps provides one valid stream for renderers whose sink cannot be
+// queried. It deliberately omits receiver-specific headers and captions.
+func fallbackCaps() (*mediav1.Capabilities, map[mediav1.Container]sinkEntry) {
+	const container = mediav1.Container_CONTAINER_MPEGTS
+	return &mediav1.Capabilities{
+		Provenance: "DLNA compatibility fallback: MPEG-TS, H.264 and stereo AAC (receiver support unverified)",
+		Formats: []*mediav1.FormatSupport{{
+			Transport: &mediav1.FormatSupport_Progressive{Progressive: &mediav1.ProgressiveSupport{Container: mediav1.ProgressiveSupport_CONTAINER_MPEGTS}},
+			Tracks: &mediav1.FormatSupport_Av{Av: &mediav1.AVSupport{
+				Video: device.H264Support(),
+				Audio: &mediav1.AudioSupport{Codec: mediav1.AudioCodec_AUDIO_CODEC_AAC, MaxChannels: 2},
+			}},
+		}},
+	}, map[mediav1.Container]sinkEntry{container: {mime: device.MIME(container), features: "*"}}
 }
 
 // audioSupportFor builds the copy envelope for an audio codec.
