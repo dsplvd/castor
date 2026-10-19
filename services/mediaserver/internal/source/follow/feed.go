@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -191,6 +192,7 @@ func (f *feed) playlist(w http.ResponseWriter, r *http.Request) {
 			"input", f.name, "error", err)
 	}
 	w.Header().Set("Content-Type", media.HLS)
+	w.Header().Set("Content-Length", strconv.Itoa(len(result.body)))
 	_, _ = w.Write(result.body)
 }
 
