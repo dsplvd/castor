@@ -27,15 +27,15 @@ type encodePlan struct {
 
 // encode decides codecs within the envelope accepted by the output adapter.
 func (s *preparation) encode(f feed, burn burnRenderer) (encodePlan, error) {
-	selected, native := s.nativeOutput(f)
-	if !native || burn != nil {
-		var err error
-		selected, err = s.Outputs.Select(s.playbackCapabilities(), nil)
-		if err != nil {
-			return encodePlan{}, err
-		}
+	_, native := s.nativeOutput(f)
+	var captions *output.Captions
+	if native && burn == nil {
+		captions = &output.Captions{Cues: f.buffered.transcript.Cues(), VideoOffset: *f.buffered.captionVideoOffset}
 	}
-	into := selected.Plan.Format()
+	selections := s.Outputs.Selections(s.playbackCapabilities(), captions)
+	if len(selections) == 0 {
+		return encodePlan{}, fmt.Errorf("no delivery adapter accepts the requested playback envelopes")
+	}
 
 	var burnIn string
 	if burn != nil {
@@ -45,22 +45,24 @@ func (s *preparation) encode(f feed, burn burnRenderer) (encodePlan, error) {
 		}
 	}
 
-	pace := selected.Plan.Pace(burnIn != "")
-	facts, input, err := s.input(f, pace)
-	if err != nil {
-		return encodePlan{}, err
+	var planningErr error
+	for _, selected := range selections {
+		into := selected.Plan.Format()
+		pace := selected.Plan.Pace(burnIn != "")
+		facts, input, err := s.input(f, pace)
+		if err != nil {
+			return encodePlan{}, err
+		}
+		decided, err := s.decide(selected.Capabilities, into, facts, burnIn, f.spliced())
+		if err != nil {
+			planningErr = errors.Join(planningErr, fmt.Errorf("%s: %w", into.ContentType, err))
+			continue
+		}
+		return encodePlan{delivery: selected,
+			Input: input, Format: into, Probe: facts.probe,
+			Video: decided.Video, Audio: decided.Audio}, nil
 	}
-
-	decided, err := s.decide(selected.Capabilities, into, facts, burnIn, f.spliced())
-	if err != nil {
-		return encodePlan{}, err
-	}
-	return encodePlan{delivery: selected,
-		Input:  input,
-		Format: into,
-		Probe:  facts.probe,
-		Video:  decided.Video,
-		Audio:  decided.Audio}, nil
+	return encodePlan{}, fmt.Errorf("no usable playback envelope: %w", planningErr)
 }
 
 // input is what the encoder reads from f, measured where it reads it: the spool as it grows, or the source itself.

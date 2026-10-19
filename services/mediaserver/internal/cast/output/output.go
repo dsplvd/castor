@@ -76,17 +76,36 @@ type Selection struct {
 }
 
 func (f Factory) Select(caps media.Capabilities, captions *Captions) (Selection, error) {
+	selections := f.Selections(caps, captions)
+	if len(selections) > 0 {
+		return selections[0], nil
+	}
+	return Selection{}, fmt.Errorf("no delivery adapter accepts the requested playback envelopes")
+}
+
+// Selections returns adapter-supported envelopes in receiver preference order.
+// The codec planner can then try the next delivery when the host cannot encode
+// for the first one. Each selection retains only tuples for its transport.
+func (f Factory) Selections(caps media.Capabilities, captions *Captions) []Selection {
+	var selections []Selection
+	seen := make(map[media.Transport]bool)
 	for _, envelope := range caps.Formats {
+		if seen[envelope.Transport] {
+			continue
+		}
 		for _, adapter := range f {
 			plan, ok := adapter.Select(envelope, captions)
 			if !ok {
 				continue
 			}
-			caps.Formats = slices.DeleteFunc(slices.Clone(caps.Formats), func(other media.FormatSupport) bool { return other.Transport != envelope.Transport })
-			return Selection{Plan: plan, Capabilities: caps}, nil
+			selected := caps
+			selected.Formats = slices.DeleteFunc(slices.Clone(caps.Formats), func(other media.FormatSupport) bool { return other.Transport != envelope.Transport })
+			selections = append(selections, Selection{Plan: plan, Capabilities: selected})
+			seen[envelope.Transport] = true
+			break
 		}
 	}
-	return Selection{}, fmt.Errorf("no delivery adapter accepts the requested playback envelopes")
+	return selections
 }
 
 // Artifact is what a delivery hands the device, which the watch that opens it waits on.
