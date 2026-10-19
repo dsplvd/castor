@@ -79,8 +79,8 @@ func TestAHandedOverProgramIsOneTheDevicePlaysWhole(t *testing.T) {
 		{"HDR is never assumed safe", media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoHDR: true}, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := canPlay(r, tt.info); got != tt.want {
-				t.Errorf("canPlay = %v, want %v", got, tt.want)
+			if got := r.CanPlaySourceIn(media.MP4, tt.info); got != tt.want {
+				t.Errorf("CanPlaySourceIn = %v, want %v", got, tt.want)
 			}
 		})
 	}

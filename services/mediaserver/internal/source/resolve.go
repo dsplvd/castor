@@ -103,17 +103,16 @@ func Narrowed(program media.Program, chosen Rendition, stream *Stream) (media.Pr
 	if err != nil {
 		return media.Program{}, err
 	}
-	switch measured, ok := published.Measurement(); {
+	var measured media.ProbeInfo
+	switch sourceMeasurement, ok := published.Measurement(); {
 	case ok && published.SameBindings(narrowed):
-		narrowed.SetMeasurement(measured)
+		measured = sourceMeasurement
 	case chosen.Declared != nil:
-		narrowed.SetMeasurement(*chosen.Declared)
+		measured = *chosen.Declared
+	default:
+		return narrowed, nil
 	}
-	if stream.Probe != nil && stream.Probe.SourceUnwrapped {
-		if measured, ok := narrowed.Measurement(); ok {
-			measured.SourceUnwrapped = true
-			narrowed.SetMeasurement(measured)
-		}
-	}
+	measured.SourceUnwrapped = measured.SourceUnwrapped || (stream.Probe != nil && stream.Probe.SourceUnwrapped)
+	narrowed.SetMeasurement(measured)
 	return narrowed, nil
 }

@@ -63,7 +63,16 @@ func TestWrappedHLSRequiresOneCompatibleEnvelope(t *testing.T) {
 		{Transport: TransportHLS, Video: VideoSupport{Codec: CodecH264}},
 		{Transport: TransportHLS, Video: VideoSupport{Codec: CodecHEVC}, ExtraSegments: []HLSExtraSegmentFormat{HLSExtraSegmentTIKTIKPX}},
 	}}
-	if device.CanPlayHLSWith(ProbeInfo{VideoCodec: CodecH264, VideoBitDepth: 8}, HLSExtraSegmentTIKTIKPX) {
+	plain := ProbeInfo{VideoCodec: CodecH264, VideoBitDepth: 8}
+	if !device.CanPlaySourceIn(HLS, plain) {
+		t.Fatal("ordinary HLS rejected")
+	}
+	plain.SourceUnwrapped = true
+	if device.CanPlaySourceIn(HLS, plain) {
 		t.Fatal("combined incompatible HLS envelopes")
+	}
+	wrappedHEVC := ProbeInfo{VideoCodec: CodecHEVC, VideoBitDepth: 8, SourceUnwrapped: true}
+	if !device.CanPlaySourceIn(HLS, wrappedHEVC) {
+		t.Fatal("wrapped HLS rejected by a compatible envelope")
 	}
 }

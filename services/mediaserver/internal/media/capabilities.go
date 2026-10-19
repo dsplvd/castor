@@ -75,11 +75,6 @@ type AudioSupport struct {
 	MaxChannels int
 }
 
-// AcceptsContainer reports whether the device plays contentType directly (the pass-through decision).
-func (c Capabilities) AcceptsContainer(contentType string) bool {
-	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool { return f.Transport.ContentType() == contentType })
-}
-
 // PlaybackSampleRate is the highest audio sample rate any device castor serves plays.
 const PlaybackSampleRate = 48000
 
@@ -141,9 +136,9 @@ const (
 	HLSExtraSegmentTIKTIKPX HLSExtraSegmentFormat = iota + 1
 )
 
-// CanPlayHLSWith checks that one playback envelope accepts the tracks and
-// every nonstandard segment format the source may use.
-func (c Capabilities) CanPlayHLSWith(p ProbeInfo, segments ...HLSExtraSegmentFormat) bool {
+// canPlayHLSWith checks that one playback envelope accepts the tracks and
+// all of the supplied nonstandard segment formats.
+func (c Capabilities) canPlayHLSWith(p ProbeInfo, segments ...HLSExtraSegmentFormat) bool {
 	return slices.ContainsFunc(c.Formats, func(f FormatSupport) bool {
 		if f.Transport.ContentType() != HLS || !f.accepts(p, c.Deinterlaces) {
 			return false
@@ -155,6 +150,19 @@ func (c Capabilities) CanPlayHLSWith(p ProbeInfo, segments ...HLSExtraSegmentFor
 		}
 		return true
 	})
+}
+
+// CanPlaySourceIn checks the source's observed HLS segment envelope as well as
+// its tracks. Served output uses CanPlayIn because Castor has already unwrapped it.
+func (c Capabilities) CanPlaySourceIn(container string, p ProbeInfo) bool {
+	// The destination's HDR mode is not established by its codec capability.
+	if p.VideoHDR {
+		return false
+	}
+	if container == HLS && p.SourceUnwrapped {
+		return c.canPlayHLSWith(p, HLSExtraSegmentTIKTIKPX)
+	}
+	return c.CanPlayIn(container, p)
 }
 
 func (c Capabilities) CanPlayIn(container string, p ProbeInfo) bool {

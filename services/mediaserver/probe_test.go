@@ -104,11 +104,26 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 			if err != nil || reach != media.ReachOpened || info.VideoCodec != "mpeg2video" || info.VideoHeight != 96 {
 				t.Fatalf("probe: %+v, reach=%v, err=%v", info, reach, err)
 			}
+			if path != "/mixed.m3u8" {
+				wantWrapped := path != "/plain.m3u8"
+				if info.SourceUnwrapped != wantWrapped {
+					t.Fatalf("observed wrapped source = %t, want %t", info.SourceUnwrapped, wantWrapped)
+				}
+			}
 			stream.Probe = &info
 			stream.ContentType = info.ContentType
 			resolved, err := resolver.Resolve(t.Context(), stream, source.Rendition{})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if path == "/plain.m3u8" || path == "/hidden.m3u8" {
+				measured, ok := resolved.Program.Measurement()
+				if !ok || measured.SourceUnwrapped != info.SourceUnwrapped {
+					t.Fatalf("source envelope lost during resolution: %+v, measured=%t", measured, ok)
+				}
+			}
+			if path == "/mixed.m3u8" && resolved.Program.SelfFetchable() {
+				t.Fatal("playlist with a later wrapped segment was handed directly to a receiver")
 			}
 			program, stop, err := timelines.Republish(t.Context(), resolved.Program)
 			if err != nil {
