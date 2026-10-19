@@ -14,9 +14,39 @@ type Config struct {
 	Device  cast.Device   `yaml:"device" settings:"strict"`
 	Sources sources.Sites `yaml:"sources" settings:"strict" validate:"dive"`
 	TMDB    tmdb.Config   `yaml:"tmdb" settings:"strict"`
-	Servers struct {
-		API settings.Endpoint `yaml:"api"`
-	} `yaml:"servers"`
+	Servers apiServers    `yaml:"servers"`
+}
+
+type apiServers struct {
+	API settings.Endpoint `yaml:"api"`
+}
+
+// Commands decode only the sections they need. A dry run never needs a device,
+// while a direct URL never needs source templates or a catalog key.
+type apiConfig struct {
+	Servers apiServers `yaml:"servers"`
+}
+
+type targetConfig struct {
+	Device  cast.Device `yaml:"device" settings:"strict"`
+	Servers apiServers  `yaml:"servers"`
+}
+
+type pageCastConfig struct {
+	Device  cast.Device   `yaml:"device" settings:"strict"`
+	Sources sources.Sites `yaml:"sources" settings:"strict" validate:"dive"`
+	Servers apiServers    `yaml:"servers"`
+}
+
+type pageDryRunConfig struct {
+	Sources sources.Sites `yaml:"sources" settings:"strict" validate:"dive"`
+	Servers apiServers    `yaml:"servers"`
+}
+
+type interactiveDryRunConfig struct {
+	Sources sources.Sites `yaml:"sources" settings:"strict" validate:"dive"`
+	TMDB    tmdb.Config   `yaml:"tmdb" settings:"strict"`
+	Servers apiServers    `yaml:"servers"`
 }
 
 // browsable refuses an interactive cast that has no catalog to browse.
