@@ -68,7 +68,7 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 	load.Media.Tracks, load.ActiveTrackIds = textTracks(captions)
 	reply, err := s.ch.request(ctx, transport, nsMedia, load)
 	if err == nil {
-		err = loadVerdict(reply)
+		err = loadVerdict(reply, streamURL.String())
 	}
 	if err != nil {
 		s.watchMu.Lock()
@@ -144,8 +144,8 @@ func (s *session) transportCommand(ctx context.Context, msg string) error {
 	return nil
 }
 
-// loadVerdict reads the answer to LOAD: a media status accepts it unless the player already failed.
-func loadVerdict(reply []byte) error {
+// loadVerdict accepts the requested stream only when the receiver's answer does not identify a different one.
+func loadVerdict(reply []byte, contentID string) error {
 	var response castmedia.MediaStatusResponse
 	if err := json.Unmarshal(reply, &response); err != nil {
 		return fmt.Errorf("undecodable answer to LOAD: %w", err)
@@ -156,10 +156,21 @@ func loadVerdict(reply []byte) error {
 	if len(response.Status) == 0 {
 		return errors.New("chromecast answered LOAD without a media status")
 	}
+	var matched bool
+	var other string
 	for _, status := range response.Status {
+		got := status.Media.ContentId
+		if got != "" && got != contentID {
+			other = got
+			continue
+		}
+		matched = matched || got == contentID
 		if status.PlayerState == stateIdle && status.IdleReason == idleError {
 			return errors.New("chromecast refused the media: the receiver went idle with an error")
 		}
+	}
+	if !matched && other != "" {
+		return fmt.Errorf("chromecast answered LOAD with a different stream %q", other)
 	}
 	return nil
 }

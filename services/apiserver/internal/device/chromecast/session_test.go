@@ -133,6 +133,14 @@ func TestChromecastPlayReturnsTheReceiversVerdictOnTheLoad(t *testing.T) {
 		{"a status already idle on an error fails the hand-off", func(id int, load castmedia.MediaItem) []any {
 			return []any{mediaStatus(id, load.ContentId, "IDLE", "ERROR")}
 		}, true},
+		{"a status for an older stream does not accept the load", func(id int, _ castmedia.MediaItem) []any {
+			return []any{mediaStatus(id, "http://origin.test/previous.mp4", "PLAYING", "")}
+		}, true},
+		{"another media session beside this load is ignored", func(id int, load castmedia.MediaItem) []any {
+			answer := mediaStatus(id, load.ContentId, "BUFFERING", "")
+			answer.Status = append([]castmedia.Media{{MediaSessionId: 2, PlayerState: "IDLE", IdleReason: "ERROR", Media: castmedia.MediaItem{ContentId: "http://origin.test/previous.mp4"}}}, answer.Status...)
+			return []any{answer}
+		}, false},
 		{"an empty status does not accept the load", func(id int, _ castmedia.MediaItem) []any {
 			return []any{castmedia.MediaStatusResponse{Type: msgMediaStatus, RequestId: id}}
 		}, true},
