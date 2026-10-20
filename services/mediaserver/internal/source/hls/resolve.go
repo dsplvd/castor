@@ -92,11 +92,6 @@ func inspect(ctx context.Context, env source.Env, stream source.Stream, origin s
 				continue
 			}
 			rung.Height = info.VideoHeight
-			if rung.Declared != nil {
-				measured := rung.Declared.Clone()
-				measured.VideoHeight = info.VideoHeight
-				rung.Declared = &measured
-			}
 		}
 	}
 	if len(origin.Renditions) == 0 {

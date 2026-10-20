@@ -40,5 +40,5 @@ func (s Shape) handoff() bool {
 	probe, measured := s.Program.Measurement()
 	return s.Device.SelfFetch && s.Program.SelfFetchable() && measured &&
 		s.Device.CanPlaySourceIn(primary.ContentType, probe) &&
-		(s.MaxHeight == 0 || probe.VideoCodec == "" || s.Height > 0 && s.MaxHeight.Admits(s.Height))
+		(s.MaxHeight == 0 || !probe.HasVideo() || s.Height > 0 && s.MaxHeight.Admits(s.Height))
 }

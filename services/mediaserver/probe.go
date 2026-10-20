@@ -23,7 +23,7 @@ type candidateProbe struct {
 	binary    probe.FFprobe
 }
 
-func (p candidateProbe) Probe(ctx context.Context) (info media.ProbeInfo, reach media.Reach, err error) {
+func (p candidateProbe) Inspect(ctx context.Context) (result source.Inspection, err error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 	stream := *p.stream
@@ -31,21 +31,31 @@ func (p candidateProbe) Probe(ctx context.Context) (info media.ProbeInfo, reach 
 		stream.ContentType = formats.Identify(ctx, p.client, stream.URL, stream.Headers)
 	}
 	if !media.IsSegmented(stream.ContentType) {
-		return p.binary.Link(probe.Link{URL: stream.URL, Headers: stream.Headers, InputArgs: formats.InputArgs(stream.ContentType, 0)}, fetchTimeout).Probe(ctx)
+		result.Info, result.Reach, err = p.binary.Link(probe.Link{URL: stream.URL, Headers: stream.Headers, InputArgs: formats.InputArgs(stream.ContentType, 0)}, fetchTimeout).Probe(ctx)
+		if err == nil {
+			stream.ContentType = p.stream.MeasuredContentType(result.Info)
+			program, bindErr := source.ProgramFor(&stream)
+			if bindErr != nil {
+				return result, bindErr
+			}
+			observed := media.Observe(program, result.Info)
+			result.Observation = &observed
+		}
+		return result, err
 	}
 	defer func() {
 		if failure, ok := errors.AsType[*timeline.Failure](err); ok {
 			switch failure.Status {
 			case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusGone:
-				reach = media.ReachRefused
+				result.Reach = media.ReachRefused
 			}
 		}
 	}()
 	resolved, err := p.resolver.Resolve(ctx, &stream, source.Rendition{})
 	if err != nil {
-		return info, media.ReachUnproven, err
+		return result, err
 	}
-	info, reach, err = p.timelines.Probe(ctx, resolved.Program, func(program media.Program) media.Prober {
+	result.Info, result.Reach, err = p.timelines.Probe(ctx, resolved.Program, func(program media.Program) media.Prober {
 		inputs := make([]probe.Input, 0, len(program.Inputs))
 		for _, in := range program.Inputs {
 			args := append(ffmpeg.ProtocolArgs(), ffmpeg.HeaderArgs(in.Headers)...)
@@ -55,8 +65,12 @@ func (p candidateProbe) Probe(ctx context.Context) (info media.ProbeInfo, reach 
 		return p.binary.Source(program, inputs)
 	})
 	// Keep the origin format: the local reading is HLS even for DASH.
-	info.ContentType = stream.ContentType
+	result.Info.ContentType = stream.ContentType
 	// This measurement describes the selected rendition, not the master's program IDs.
-	info.ProgramHeights = nil
-	return info, reach, err
+	result.Info.ProgramHeights = nil
+	if err == nil {
+		observed := media.Observe(resolved.Program, result.Info)
+		result.Observation = &observed
+	}
+	return result, err
 }

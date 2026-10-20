@@ -11,8 +11,8 @@ import (
 // Uncarried is the axes into cannot carry as probed, which a cast encodes rather than copies.
 func Uncarried(probe media.ProbeInfo, into Format) media.Axes {
 	return media.Axes{
-		Video: uncarried(videoRules, probe.VideoCodec, probe, into),
-		Audio: uncarried(audioRules, probe.AudioCodec, probe, into),
+		Video: probe.HasVideo() && probe.VideoCodec == "" || uncarried(videoRules, probe.VideoCodec, probe, into),
+		Audio: probe.HasAudio() && probe.AudioCodec == "" || uncarried(audioRules, probe.AudioCodec, probe, into),
 	}
 }
 
@@ -39,7 +39,7 @@ var audioRules = []rule{
 	},
 	// The one rule here that no artifact can reveal.
 	func(c media.Codec, probe media.ProbeInfo, into Format) bool {
-		return c == media.CodecTrueHD && into.Muxer == ffmpeg.FormatMP4 && probe.VideoCodec == ""
+		return c == media.CodecTrueHD && into.Muxer == ffmpeg.FormatMP4 && !probe.HasVideo()
 	},
 }
 

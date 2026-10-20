@@ -19,13 +19,14 @@ type axis struct {
 	// codec is what lands in the container: the source's when copied, the encoder's otherwise.
 	codec   media.Codec
 	copying bool
+	action  codec.Action
 	refused bool // the tables already say this container will not carry it
 	// encode is the encoder's own options, nil when copied.
 	encode []string
 }
 
 func videoAxis(probe media.ProbeInfo, video codec.Track[codec.VideoEncode], refused media.Axes) axis {
-	a := axis{spec: "v", kind: media.TrackVideo, name: video.Name(), codec: probe.VideoCodec, copying: true, refused: refused.Video}
+	a := axis{spec: "v", kind: media.TrackVideo, name: video.Name(), codec: probe.VideoCodec, copying: video.Action() == codec.CopyTrack, action: video.Action(), refused: refused.Video}
 	if venc, ok := video.Encode(); ok {
 		a.codec, a.copying, a.encode = venc.Encoder.Codec, false, videoEncodeArgs(venc)
 	}
@@ -33,7 +34,7 @@ func videoAxis(probe media.ProbeInfo, video codec.Track[codec.VideoEncode], refu
 }
 
 func audioAxis(probe media.ProbeInfo, audio codec.Track[codec.AudioEncode], refused media.Axes) axis {
-	a := axis{spec: "a", kind: media.TrackAudio, name: audio.Name(), codec: probe.AudioCodec, copying: true, refused: refused.Audio}
+	a := axis{spec: "a", kind: media.TrackAudio, name: audio.Name(), codec: probe.AudioCodec, copying: audio.Action() == codec.CopyTrack, action: audio.Action(), refused: refused.Audio}
 	if aenc, ok := audio.Encode(); ok {
 		a.codec, a.copying, a.encode = aenc.Codec, false, audioEncodeArgs(aenc)
 	}
@@ -87,6 +88,12 @@ type axisArgs struct {
 
 // args renders the axis into format; an encode takes its output's adaptations too (omitting them breaks E-AC-3).
 func (a axis) args(format container.Format) (axisArgs, error) {
+	if a.action == codec.Unplanned {
+		return axisArgs{}, fmt.Errorf("%s track has no plan", a.kind)
+	}
+	if a.action == codec.OmitTrack {
+		return axisArgs{args: []string{"-" + a.spec + "n"}}, nil
+	}
 	cp := container.Adapt(a.kind, a.codec, format, a.copying)
 	// A copy the tables already refuse must not be buildable.
 	if a.copying && a.refused {
@@ -122,6 +129,9 @@ func audioEncodeArgs(aenc codec.AudioEncode) []string {
 
 // trackArgs renders both decided axes into format: codecs first, then the output options their adaptations add.
 func trackArgs(probe media.ProbeInfo, format container.Format, video codec.Track[codec.VideoEncode], audio codec.Track[codec.AudioEncode]) (codecs, output []string, err error) {
+	if video.Action() == codec.OmitTrack && audio.Action() == codec.OmitTrack {
+		return nil, nil, fmt.Errorf("plan omits both video and audio")
+	}
 	refused := container.Uncarried(probe, format)
 	v, err := videoAxis(probe, video, refused).args(format)
 	if err != nil {

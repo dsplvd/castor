@@ -18,6 +18,7 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 		contentType   string
 		headers       http.Header
 		unmeasured    bool
+		declaredOnly  bool
 		height        int
 		maxHeight     media.HeightCap
 		wrappedHLS    bool
@@ -30,6 +31,7 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 		{name: "a device supporting wrapped segments can fetch HLS directly", contentType: media.HLS, height: 1080, maxHeight: 1080, wrappedHLS: true, want: true},
 		{name: "a device supporting wrapped segments can fetch observed wrapped HLS", contentType: media.HLS, height: 1080, maxHeight: 1080, wrappedHLS: true, sourceWrapped: true, want: true},
 		{name: "an unmeasured program is not assumed decodable", contentType: media.MP4, unmeasured: true},
+		{name: "a manifest declaration cannot authorize handoff", contentType: media.HLS, height: 1080, maxHeight: 1080, declaredOnly: true},
 		{name: "a header-gated source is served", contentType: media.MP4, headers: http.Header{"Referer": {"https://player.example/"}}},
 		{name: "a source above the ceiling is served, since a hand-off cannot be downscaled", contentType: media.MP4, height: 1600, maxHeight: 1080},
 		{name: "a source of unknown video height is served when capped", contentType: media.HLS, maxHeight: 480},
@@ -50,7 +52,9 @@ func TestAHandoffOnlyWhenEverythingChecks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !tt.unmeasured {
+			if tt.declaredOnly {
+				program.SetDeclaration(media.Declaration{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoHeight: 1080, AudioCodec: media.CodecAAC})
+			} else if !tt.unmeasured {
 				program.SetMeasurement(media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, AudioCodec: media.CodecAAC, AudioChannels: 2, SourceUnwrapped: tt.sourceWrapped})
 			}
 			device := caps

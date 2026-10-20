@@ -3,6 +3,7 @@ package mediaserver
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/binary"
 	"image"
 	"image/png"
@@ -100,7 +101,8 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 				stream.Headers = http.Header{"Authorization": {"Bearer fixture"}}
 			}
 			p := candidateProbe{stream: stream, client: client, resolver: resolver, timelines: timelines, binary: probe.FFprobe("ffprobe")}
-			info, reach, err := p.Probe(t.Context())
+			inspection, err := p.Inspect(t.Context())
+			info, reach := inspection.Info, inspection.Reach
 			if err != nil || reach != media.ReachOpened || info.VideoCodec != "mpeg2video" || info.VideoHeight != 96 {
 				t.Fatalf("probe: %+v, reach=%v, err=%v", info, reach, err)
 			}
@@ -111,6 +113,7 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 				}
 			}
 			stream.Probe = &info
+			stream.Observation = inspection.Observation
 			stream.ContentType = info.ContentType
 			resolved, err := resolver.Resolve(t.Context(), stream, source.Rendition{})
 			if err != nil {
@@ -149,8 +152,8 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 	}
 	t.Run("static image rejected", func(t *testing.T) {
 		u, _ := url.Parse(server.URL + "/image.png")
-		ranker := rank.New(rank.Config{ProbeMaxConcurrency: 1}, 0, func(s *source.Stream) media.Prober {
-			return candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: probe.FFprobe("ffprobe")}
+		ranker := rank.New(rank.Config{ProbeMaxConcurrency: 1}, 0, func(ctx context.Context, s *source.Stream) (source.Inspection, error) {
+			return (candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: probe.FFprobe("ffprobe")}).Inspect(ctx)
 		})
 		if _, err := ranker.Rank(t.Context(), []*source.Stream{{URL: u, ContentType: "image/png"}}); err == nil {
 			t.Fatal("static image admitted")

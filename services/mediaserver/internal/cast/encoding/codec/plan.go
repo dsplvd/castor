@@ -44,6 +44,11 @@ func (p Plan) Encoded() media.Axes {
 	return media.Axes{Video: video, Audio: audio}
 }
 
+// Copied excludes omitted tracks: recovery can only revise a copy that ran.
+func (p Plan) Copied() media.Axes {
+	return media.Axes{Video: p.Video.Action() == CopyTrack, Audio: p.Audio.Action() == CopyTrack}
+}
+
 // Served plans the encode a device is served, from its capabilities, track by track.
 func Served(ctx context.Context, in Inputs) (Plan, error) {
 	if len(in.Caps.Formats) > 0 {

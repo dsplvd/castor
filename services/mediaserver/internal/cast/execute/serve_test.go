@@ -23,7 +23,50 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
+	"github.com/stupside/castor/services/mediaserver/internal/probe"
 )
+
+type artifactMechanism struct {
+	fakeMechanism
+	path string
+}
+
+func (m *artifactMechanism) Artifact() output.Artifact {
+	return output.Artifact{Path: m.path}
+}
+
+func TestOutputRetainsTracksDiscoveredByTheBufferedRead(t *testing.T) {
+	ffmpegPath, ffprobePath := requireFFmpegTools(t)
+	for _, missing := range []string{"video", "audio"} {
+		t.Run(missing, func(t *testing.T) {
+			args := []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "mpegts"}
+			if missing == "video" {
+				args = append(args, "-vn")
+			} else {
+				args = append(args, "-an")
+			}
+			path := generateFixture(t, ffmpegPath, "output.ts", 1, args)
+			s := testPreparation(t.Context(), Cast{Probes: probe.FFprobe(ffprobePath)}, recovery.Attempt{})
+			t.Cleanup(func() { _ = s.releases.release() })
+			p := took(t, over)
+			close(p.buf.reader.done)
+			d := delivery{sink: &artifactMechanism{path: path}, output: p.buf.reader}
+			opts := encodePlan{
+				EncodeOptions: encoding.EncodeOptions{Format: encoding.SpoolFormat},
+				delivery:      output.Selection{Capabilities: dlnaLike()},
+			}
+			// A sparse later probe and an unmeasured optional source cannot erase
+			// tracks already established by the read into the buffer.
+			if err := s.validateOutput(d, opts, feed{}); err != nil {
+				t.Fatalf("single-track control artifact is not playable: %v", err)
+			}
+			p.buf.expected = media.TrackRequirements{Video: true, Audio: true}
+			if err := s.validateOutput(d, opts, feed{buffered: p.buf}); err == nil {
+				t.Fatalf("output lost buffered %s without failing validation", missing)
+			}
+		})
+	}
+}
 
 // playing is a buffered cast handed to a device, whose delivery ends as its mechanism says.
 type playing struct {

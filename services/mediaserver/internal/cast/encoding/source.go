@@ -175,13 +175,17 @@ func sourceMap(source ProgramSource, kind media.TrackKind) (string, bool) {
 	return fmt.Sprintf("%d:%s:%d%s", input, spec, track.Index, optional), true
 }
 
-func sourceMapArgs(source ProgramSource) []string {
+func sourceMapArgs(source ProgramSource, video, audio bool) []string {
 	var args []string
-	if mapped, ok := sourceMap(source, media.TrackVideo); ok {
-		args = append(args, "-map", mapped)
+	if video {
+		if mapped, ok := sourceMap(source, media.TrackVideo); ok {
+			args = append(args, "-map", mapped)
+		}
 	}
-	if mapped, ok := sourceMap(source, media.TrackAudio); ok {
-		args = append(args, "-map", mapped)
+	if audio {
+		if mapped, ok := sourceMap(source, media.TrackAudio); ok {
+			args = append(args, "-map", mapped)
+		}
 	}
 	return args
 }

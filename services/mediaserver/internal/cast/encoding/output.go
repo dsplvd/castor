@@ -10,7 +10,7 @@ import (
 
 // ValidateOutput checks a growing encoded artifact against receiver capabilities.
 // It observes production completion without owning or cancelling the producer.
-func ValidateOutput(ctx context.Context, prober media.Prober, caps media.Capabilities, contentType string, expected media.ProbeInfo, done <-chan struct{}) error {
+func ValidateOutput(ctx context.Context, prober media.Prober, caps media.Capabilities, contentType string, expected media.TrackRequirements, done <-chan struct{}) error {
 	return validateTracks(ctx, prober, expected, done, func(measured media.ProbeInfo) error {
 		if !caps.CanPlayIn(contentType, measured) {
 			return fmt.Errorf("encoded output does not satisfy receiver capabilities: video=%s profile=%s level=%d audio=%s", measured.VideoCodec, measured.VideoProfile, measured.VideoLevel, measured.AudioCodec)
@@ -20,11 +20,11 @@ func ValidateOutput(ctx context.Context, prober media.Prober, caps media.Capabil
 }
 
 // ValidateTracks checks that a growing read still carries the tracks measured at its source.
-func ValidateTracks(ctx context.Context, prober media.Prober, expected media.ProbeInfo, done <-chan struct{}) error {
+func ValidateTracks(ctx context.Context, prober media.Prober, expected media.TrackRequirements, done <-chan struct{}) error {
 	return validateTracks(ctx, prober, expected, done, nil)
 }
 
-func validateTracks(ctx context.Context, prober media.Prober, expected media.ProbeInfo, done <-chan struct{}, accept func(media.ProbeInfo) error) error {
+func validateTracks(ctx context.Context, prober media.Prober, expected media.TrackRequirements, done <-chan struct{}, accept func(media.ProbeInfo) error) error {
 	completed := false
 	for {
 		if err := ctx.Err(); err != nil {
@@ -34,15 +34,16 @@ func validateTracks(ctx context.Context, prober media.Prober, expected media.Pro
 		if cause := ctx.Err(); cause != nil {
 			return fmt.Errorf("validating encoded output: %w", cause)
 		}
-		if err == nil && (expected.VideoCodec == "" || measured.VideoCodec != "") && (expected.AudioCodec == "" || measured.AudioCodec != "") {
+		if err == nil && (!expected.Video || measured.VideoCodec != "") && (!expected.Audio || measured.AudioCodec != "") {
 			// Container headers can identify tracks and dimensions before the first
 			// video packet supplies pixel format / codec parameters. A successful
 			// ffprobe exit alone does not make that growing artifact complete.
-			incomplete := measured.VideoCodec != "" && (measured.VideoBitDepth == 0 ||
-				((measured.VideoCodec == media.CodecH264 || measured.VideoCodec == media.CodecHEVC) && (measured.VideoProfile == "" || measured.VideoLevel < 0)))
+			incomplete := measured.HasVideo() && (measured.VideoCodec == "" || measured.VideoBitDepth == 0 ||
+				((measured.VideoCodec == media.CodecH264 || measured.VideoCodec == media.CodecHEVC) && (measured.VideoProfile == "" || measured.VideoLevel < 0))) ||
+				measured.HasAudio() && measured.AudioCodec == ""
 			switch {
 			case incomplete:
-				err = fmt.Errorf("encoded artifact does not yet contain video codec parameters")
+				err = fmt.Errorf("encoded artifact does not yet contain codec parameters")
 			default:
 				if accept != nil {
 					return accept(measured)

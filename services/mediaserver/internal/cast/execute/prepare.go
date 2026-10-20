@@ -112,7 +112,7 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 	if err := awaitArtifact(s.ctx, d); err != nil {
 		return p, err
 	}
-	if err := s.validateOutput(d, opts); err != nil {
+	if err := s.validateOutput(d, opts, p.feed); err != nil {
 		return p, err
 	}
 	p.target, p.contentType = d.URL(), opts.Format.ContentType

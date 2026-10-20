@@ -36,9 +36,9 @@ type EncodeOptions struct {
 
 // Verbatim reports whether this encode would only re-mux the spool it reads into the same stream.
 func (o EncodeOptions) Verbatim() bool {
-	_, video := o.Video.Encode()
-	_, audio := o.Audio.Encode()
-	return !video && !audio &&
+	video := o.Video.Action() == codec.CopyTrack || o.Video.Action() == codec.OmitTrack && !o.Probe.HasVideo()
+	audio := o.Audio.Action() == codec.CopyTrack || o.Audio.Action() == codec.OmitTrack && !o.Probe.HasAudio()
+	return video && audio && (o.Video.Action() == codec.CopyTrack || o.Audio.Action() == codec.CopyTrack) &&
 		o.Input.piped && o.Format.Muxer == SpoolFormat.Muxer &&
 		o.Format.Delivery == container.DeliverStream
 }
@@ -53,11 +53,19 @@ func encodeInputArgs(in EncodeInput) []string {
 }
 
 // encodeMapArgs maps the first video and first audio track explicitly, and optionally.
-func encodeMapArgs(in EncodeInput) []string {
-	if in.piped {
-		return []string{"-map", "0:V:0?", "-map", "0:a:0?"}
+func encodeMapArgs(opts EncodeOptions) []string {
+	video, audio := opts.Video.Action() != codec.OmitTrack, opts.Audio.Action() != codec.OmitTrack
+	if opts.Input.piped {
+		var args []string
+		if video {
+			args = append(args, "-map", "0:V:0?")
+		}
+		if audio {
+			args = append(args, "-map", "0:a:0?")
+		}
+		return args
 	}
-	return sourceMapArgs(in.source)
+	return sourceMapArgs(opts.Input.source, video, audio)
 }
 
 func encodeOutputTarget(opts EncodeOptions, burnIn string) []string {
@@ -95,7 +103,7 @@ func EncodeArgs(opts EncodeOptions) (ffmpeg.Command, error) {
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "level+warning"}
 	args = append(args, hardwareInitArgs(opts.Video)...)
 	args = append(args, encodeInputArgs(opts.Input)...)
-	args = append(args, encodeMapArgs(opts.Input)...)
+	args = append(args, encodeMapArgs(opts)...)
 	args = append(args, codecs...)
 	args = append(args, "-strict", "-2")
 	args = append(args, output...)

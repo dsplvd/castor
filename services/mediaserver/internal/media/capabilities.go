@@ -93,7 +93,7 @@ func (c Capabilities) CanCopyAudio(p ProbeInfo) bool {
 }
 
 func (s AudioSupport) accepts(p ProbeInfo) bool {
-	if p.AudioCodec != s.Codec {
+	if p.AudioCodec == "" || p.AudioCodec != s.Codec {
 		return false
 	}
 	// Unknown source channel count (0) is trusted: don't force-transcode a matching codec with no layout.
@@ -104,7 +104,7 @@ func (s AudioSupport) accepts(p ProbeInfo) bool {
 }
 
 func (s VideoSupport) accepts(v ProbeInfo) bool {
-	if v.VideoCodec != s.Codec {
+	if v.VideoCodec == "" || v.VideoCodec != s.Codec {
 		return false
 	}
 	if len(s.Profiles) > 0 && !slices.Contains(s.Profiles, v.VideoProfile) && !(v.VideoProfile == ProfileConstrainedBaseline && slices.Contains(s.Profiles, ProfileBaseline)) {
@@ -172,8 +172,8 @@ func (c Capabilities) CanPlayIn(container string, p ProbeInfo) bool {
 }
 
 func (f FormatSupport) accepts(p ProbeInfo, deinterlaces bool) bool {
-	return (p.VideoCodec != "" || p.AudioCodec != "") &&
+	return (p.HasVideo() || p.HasAudio()) &&
 		(!p.VideoInterlaced || deinterlaces) &&
-		(p.VideoCodec == "" || f.Video.accepts(p)) &&
-		(p.AudioCodec == "" || f.Audio.accepts(p))
+		(!p.HasVideo() || f.Video.accepts(p)) &&
+		(!p.HasAudio() || f.Audio.accepts(p))
 }

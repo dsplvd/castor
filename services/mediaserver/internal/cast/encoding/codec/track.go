@@ -14,16 +14,36 @@ type encode interface {
 	name() string
 }
 
-// Track is one half of an encode: a re-encode, or a stream copy when it has none.
-type Track[E encode] struct{ enc *E }
+// Action is an explicit decision for one selected track. The zero value is an
+// unfinished plan and cannot be rendered into an FFmpeg command.
+type Action uint8
 
-func CopyVideo() Track[VideoEncode] { return Track[VideoEncode]{} }
+const (
+	Unplanned Action = iota
+	OmitTrack
+	CopyTrack
+	EncodeTrack
+)
 
-func CopyAudio() Track[AudioEncode] { return Track[AudioEncode]{} }
+// Track distinguishes an absent track, a stream copy, and a re-encode.
+type Track[E encode] struct {
+	action Action
+	enc    *E
+}
 
-func Encode[E encode](e E) Track[E] { return Track[E]{enc: &e} }
+func OmitVideo() Track[VideoEncode] { return Track[VideoEncode]{action: OmitTrack} }
 
-// Encode returns the re-encode parameters, with ok false for a stream copy.
+func OmitAudio() Track[AudioEncode] { return Track[AudioEncode]{action: OmitTrack} }
+
+func CopyVideo() Track[VideoEncode] { return Track[VideoEncode]{action: CopyTrack} }
+
+func CopyAudio() Track[AudioEncode] { return Track[AudioEncode]{action: CopyTrack} }
+
+func Encode[E encode](e E) Track[E] { return Track[E]{action: EncodeTrack, enc: &e} }
+
+func (t Track[E]) Action() Action { return t.action }
+
+// Encode returns the re-encode parameters, with ok false for other actions.
 func (t Track[E]) Encode() (E, bool) {
 	if t.enc == nil {
 		var none E
@@ -32,12 +52,18 @@ func (t Track[E]) Encode() (E, bool) {
 	return *t.enc, true
 }
 
-// Name is what this track puts on -c: the encoder, or the copy keyword (for decision logs).
+// Name describes the decision in logs; only copy and encode name a -c value.
 func (t Track[E]) Name() string {
-	if t.enc != nil {
+	switch t.action {
+	case EncodeTrack:
 		return (*t.enc).name()
+	case CopyTrack:
+		return copyName
+	case OmitTrack:
+		return "omit"
+	default:
+		return "unplanned"
 	}
-	return copyName
 }
 
 // VideoEncode is the video re-encode: the encoder and the picture it produces.

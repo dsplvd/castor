@@ -17,7 +17,7 @@ import (
 type buffered struct {
 	reader     *pull
 	transcript Transcript
-	expected   media.ProbeInfo
+	expected   media.TrackRequirements
 	// captionVideoOffset locates the first video sample on the PCM timeline.
 	// An unknown clock cannot safely carry separately timed generated captions.
 	captionVideoOffset *time.Duration
@@ -55,7 +55,7 @@ func (s *preparation) read(work string, program media.Program) (*buffered, error
 	}
 	logRefusals(ctx, floor)
 
-	transcript := s.transcription(ctx, facts, program)
+	transcript := s.transcription(ctx, facts, s.attempt.Program)
 	var pcmRate int
 	if transcript != nil {
 		pcmRate = transcript.SampleRate()
@@ -90,12 +90,7 @@ func (s *preparation) read(work string, program media.Program) (*buffered, error
 		offset := *facts.probe.VideoStartOffset + program.Offsets[track.Input]
 		videoOffset = &offset
 	}
-	expected := facts.probe
-	if !facts.measured {
-		if known, ok := program.Measurement(); ok {
-			expected = known
-		}
-	}
+	expected := facts.probe.RequiredTracks().Or(s.attempt.Program.RequiredTracks())
 	return &buffered{reader: reader, transcript: transcript, expected: expected, captionVideoOffset: videoOffset, live: live}, nil
 }
 

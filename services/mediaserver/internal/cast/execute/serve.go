@@ -42,21 +42,16 @@ type producer interface {
 
 // validateOutput checks the encoder's actual result, not just its requested flags.
 // Probing local artifacts never consumes the receiver's HTTP delivery counters.
-func (s *preparation) validateOutput(d delivery, opts encodePlan) error {
+func (s *preparation) validateOutput(d delivery, opts encodePlan, f feed) error {
 	path := d.sink.Artifact().Path
 	if path == "" {
 		return fmt.Errorf("encoded delivery has no local artifact to validate")
 	}
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
-	expected := opts.Probe
-	if known, ok := s.attempt.Program.Measurement(); ok {
-		if expected.VideoCodec == "" {
-			expected.VideoCodec = known.VideoCodec
-		}
-		if expected.AudioCodec == "" {
-			expected.AudioCodec = known.AudioCodec
-		}
+	expected := opts.Probe.RequiredTracks().Or(s.attempt.Program.RequiredTracks())
+	if f.buffered != nil {
+		expected = expected.Or(f.buffered.expected)
 	}
 	return encoding.ValidateOutput(ctx, s.Probes.File(path), opts.delivery.Capabilities, opts.Format.ContentType, expected, d.output.Done())
 }

@@ -23,7 +23,7 @@ func (opaque) Resolve(_ context.Context, env Env, s Subject) (Resolution, error)
 		program.Inputs[i].Fetch.Framing = s.Origin.Framing
 	}
 	var chosen Rendition
-	if probe := s.Stream.Probe; probe != nil && len(probe.AudioTracks) > 0 {
+	if probe, observed := program.Measurement(); observed && len(probe.AudioTracks) > 0 {
 		index, preferred := selectAudioTrack(probe.AudioTracks, env.AudioLanguages)
 		for i := range program.Tracks {
 			if program.Tracks[i].Kind == media.TrackAudio {

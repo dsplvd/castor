@@ -2,7 +2,6 @@
 package rank
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,7 +15,7 @@ import (
 )
 
 // Probes measures one candidate.
-type Probes func(*source.Stream) media.Prober
+type Probes func(context.Context, *source.Stream) (source.Inspection, error)
 
 type Ranker struct {
 	cfg Config
@@ -122,22 +121,18 @@ func (r *Ranker) measureAll(ctx context.Context, streams []*source.Stream) []mea
 		wg.Go(func() {
 			defer func() { <-slots }()
 			slog.DebugContext(ctx, "probing stream", "url", s.URL, "index", i+1, "total", len(streams))
-			info, reach, err := r.probes(s).Probe(ctx)
+			inspection, err := r.probes(ctx, s)
+			info, reach := inspection.Info, inspection.Reach
 			// Carried, never re-derived: the ladder was read from a body only the browser held.
 			next := *s
-			next.Probe, next.LastResort = nil, false
+			next.Probe, next.Observation, next.LastResort = nil, nil, false
 			if err != nil {
 				slog.WarnContext(ctx, "probe failed", "url", s.URL, "reach", reach, "error", err)
 			} else {
 				next.Probe = &info
-				// ffprobe reports WebM and Matroska under the same format name.
-				// A .webm link disambiguates that measurement for device handoff.
-				identified := info.ContentType
-				if identified == media.MKV && (source.Formats{}).ContentTypeOf(next.URL, "") == media.WebM {
-					identified = media.WebM
-				}
+				next.Observation = inspection.Observation
 				// A container the URL did not name is one the probe just established.
-				next.ContentType = cmp.Or(next.ContentType, identified)
+				next.ContentType = s.MeasuredContentType(info)
 			}
 			out[i] = measured{Stream: &next, reach: reach}
 		})

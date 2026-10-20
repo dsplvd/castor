@@ -20,15 +20,15 @@ func (p outputProbe) Probe(context.Context) (media.ProbeInfo, media.Reach, error
 func TestEncodedOutputMustMatchTheReceiverEnvelope(t *testing.T) {
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileBaseline}, MaxLevel: 31}, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	p := media.ProbeInfo{VideoCodec: media.CodecH264, VideoProfile: media.ProfileHigh, VideoBitDepth: 8, VideoLevel: 31, AudioCodec: media.CodecAAC, AudioChannels: 2}
-	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p, nil); err == nil {
+	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p.RequiredTracks(), nil); err == nil {
 		t.Fatal("encoder produced incompatible High profile without refusal")
 	}
 	p.VideoProfile = media.ProfileBaseline
-	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p, nil); err != nil {
+	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p.RequiredTracks(), nil); err != nil {
 		t.Fatal(err)
 	}
 	p.VideoLevel = 42
-	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p, nil); err == nil {
+	if err := ValidateOutput(t.Context(), outputProbe{info: p}, caps, media.MP4, p.RequiredTracks(), nil); err == nil {
 		t.Fatal("encoder exceeded receiver level")
 	}
 }
@@ -37,12 +37,12 @@ func TestEncodedOutputValidationEndsOnCancellationOrCompletedBadOutput(t *testin
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	probeErr := errors.New("no readable streams")
-	if err := ValidateOutput(ctx, outputProbe{err: probeErr}, media.Capabilities{}, media.MP4, media.ProbeInfo{}, nil); !errors.Is(err, context.Canceled) {
+	if err := ValidateOutput(ctx, outputProbe{err: probeErr}, media.Capabilities{}, media.MP4, media.TrackRequirements{}, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
 	}
 	done := make(chan struct{})
 	close(done)
-	if err := ValidateOutput(t.Context(), outputProbe{err: probeErr}, media.Capabilities{}, media.MP4, media.ProbeInfo{}, done); !errors.Is(err, probeErr) {
+	if err := ValidateOutput(t.Context(), outputProbe{err: probeErr}, media.Capabilities{}, media.MP4, media.TrackRequirements{}, done); !errors.Is(err, probeErr) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -64,7 +64,7 @@ func (p *finishingOutputProbe) Probe(context.Context) (media.ProbeInfo, media.Re
 func TestOutputValidationProbesCompletedArtifactAfterStartupRace(t *testing.T) {
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
 	p := &finishingOutputProbe{done: make(chan struct{}), info: media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoProfile: media.ProfileHigh}}
-	if err := ValidateOutput(t.Context(), p, caps, media.MP4, p.info, p.done); err != nil {
+	if err := ValidateOutput(t.Context(), p, caps, media.MP4, p.info.RequiredTracks(), p.done); err != nil {
 		t.Fatal(err)
 	}
 	if p.calls != 2 {
@@ -76,14 +76,14 @@ func TestCanceledValidationCannotAcceptSuccessfulProbe(t *testing.T) {
 	info := media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoProfile: media.ProfileHigh}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := ValidateOutput(ctx, outputProbe{info: info}, caps, media.MP4, info, nil); !errors.Is(err, context.Canceled) {
+	if err := ValidateOutput(ctx, outputProbe{info: info}, caps, media.MP4, info.RequiredTracks(), nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("validation=%v", err)
 	}
 }
 func TestCompletedOutputMismatchStillFailsAfterStartupRace(t *testing.T) {
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileBaseline}}}}}
 	p := &finishingOutputProbe{done: make(chan struct{}), info: media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoProfile: media.ProfileHigh}}
-	if err := ValidateOutput(t.Context(), p, caps, media.MP4, p.info, p.done); err == nil {
+	if err := ValidateOutput(t.Context(), p, caps, media.MP4, p.info.RequiredTracks(), p.done); err == nil {
 		t.Fatal("final incompatible profile accepted")
 	}
 }
@@ -108,7 +108,7 @@ func (p *headerOutputProbe) Probe(context.Context) (media.ProbeInfo, media.Reach
 func TestOutputValidationWaitsForCodecParameters(t *testing.T) {
 	p := &headerOutputProbe{done: make(chan struct{})}
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264, Profiles: []media.Profile{media.ProfileHigh}, MaxLevel: 31}}}}
-	if err := ValidateOutput(t.Context(), p, caps, media.MP4, media.ProbeInfo{VideoCodec: media.CodecH264}, p.done); err != nil {
+	if err := ValidateOutput(t.Context(), p, caps, media.MP4, media.TrackRequirements{Video: true}, p.done); err != nil {
 		t.Fatal(err)
 	}
 	if p.calls != 2 {
@@ -119,7 +119,7 @@ func TestOutputValidationWaitsForCodecParameters(t *testing.T) {
 func TestOutputValidationDoesNotRequireH264ParametersForVP8(t *testing.T) {
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportWebM, Video: media.VideoSupport{Codec: media.CodecVP8}}}}
 	info := media.ProbeInfo{VideoCodec: media.CodecVP8, VideoBitDepth: 8, VideoLevel: -99}
-	if err := ValidateOutput(t.Context(), outputProbe{info: info}, caps, media.WebM, info, nil); err != nil {
+	if err := ValidateOutput(t.Context(), outputProbe{info: info}, caps, media.WebM, info.RequiredTracks(), nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -129,7 +129,7 @@ func TestCompletedHeaderWithoutVideoParametersIsRejected(t *testing.T) {
 	close(done)
 	info := media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 360, VideoLevel: -99}
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
-	if err := ValidateOutput(t.Context(), outputProbe{info: info}, caps, media.MP4, info, done); err == nil {
+	if err := ValidateOutput(t.Context(), outputProbe{info: info}, caps, media.MP4, info.RequiredTracks(), done); err == nil {
 		t.Fatal("header-only output was accepted")
 	}
 }
@@ -137,12 +137,25 @@ func TestCompletedHeaderWithoutVideoParametersIsRejected(t *testing.T) {
 func TestBufferedReadMustRetainTheSourcesVideo(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
-	expected := media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC}
+	expected := media.TrackRequirements{Video: true, Audio: true}
 	spool := media.ProbeInfo{AudioCodec: media.CodecAAC}
 	if err := ValidateTracks(t.Context(), outputProbe{info: spool}, expected, done); err == nil {
 		t.Fatal("audio-only spool accepted after source video disappeared")
 	}
-	if err := ValidateTracks(t.Context(), outputProbe{info: spool}, media.ProbeInfo{AudioCodec: media.CodecAAC}, done); err != nil {
+	if err := ValidateTracks(t.Context(), outputProbe{info: spool}, media.TrackRequirements{Audio: true}, done); err != nil {
 		t.Fatalf("valid audio-only spool rejected: %v", err)
+	}
+}
+
+func TestBufferedReadRejectsUnidentifiedExtraTracks(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	for _, info := range []media.ProbeInfo{
+		{VideoPresent: true, AudioCodec: media.CodecAAC},
+		{AudioPresent: true, VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoProfile: media.ProfileHigh},
+	} {
+		if err := ValidateTracks(t.Context(), outputProbe{info: info}, media.TrackRequirements{}, done); err == nil {
+			t.Fatalf("unidentified stream passed output readiness: %+v", info)
+		}
 	}
 }

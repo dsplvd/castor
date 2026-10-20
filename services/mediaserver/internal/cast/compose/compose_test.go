@@ -36,6 +36,7 @@ func TestTheCompositionADeviceGets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			program.SetMeasurement(*candidate.Probe)
 			if got := For(Shape{Device: tt.device, Program: program, Delivery: tt.preference}); got != tt.want {
 				t.Errorf("composed %q, want %q", got, tt.want)
 			}

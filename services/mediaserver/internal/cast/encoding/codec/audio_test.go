@@ -48,8 +48,8 @@ func TestSurroundAudioTargets(t *testing.T) {
 func TestAnUnmeasuredAudioTrackIsNotAnAbsentOne(t *testing.T) {
 	caps := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Audio: media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 2}}}}
 	in := Inputs{Caps: caps, Into: testFormat(t, media.MP4), Measured: true}
-	if track := mustDecideAudio(t, in); track.Name() != "copy" {
-		t.Errorf("a probe that measured no audio decided %q, want copy", track.Name())
+	if track := mustDecideAudio(t, in); track.Action() != OmitTrack {
+		t.Errorf("a probe that measured no audio decided %q, want omission", track.Name())
 	}
 	in.Measured = false
 	if enc, ok := mustDecideAudio(t, in).Encode(); !ok || enc.Codec != media.CodecAAC || enc.Channels != 2 {

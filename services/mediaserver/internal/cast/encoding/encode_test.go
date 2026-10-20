@@ -32,6 +32,60 @@ func testFormat(contentType string) container.Format {
 	return f
 }
 
+func TestOmittedTracksAreNotMappedOrAdapted(t *testing.T) {
+	source := muxedSource(t, mustURL(t, "http://example.test/movie.mkv"), media.MKV, fetch.Policy{})
+	for _, input := range []EncodeInput{FromPipe(fetch.Pace{}), FromSource(source)} {
+		for _, omitVideo := range []bool{true, false} {
+			opts := EncodeOptions{Input: input, Format: mpegtsFormat, Video: codec.CopyVideo(), Audio: codec.CopyAudio()}
+			omitted, disable := "0:V:0?", "-vn"
+			if omitVideo {
+				// VP9 is not carried in this container, but this plan omits it.
+				opts.Video = codec.OmitVideo()
+				opts.Probe = media.ProbeInfo{VideoCodec: media.CodecVP9, AudioCodec: media.CodecAAC}
+			} else {
+				omitted, disable = "0:a:0?", "-an"
+				opts.Audio = codec.OmitAudio()
+				opts.Probe = media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecFLAC}
+			}
+			args := mustEncodeArgs(t, opts)
+			if slices.Contains(args, omitted) || !slices.Contains(args, disable) {
+				t.Fatalf("omitted track was mapped: %v", args)
+			}
+			if opts.Verbatim() {
+				t.Fatal("dropping a known track reused the whole spool")
+			}
+		}
+	}
+}
+
+func TestUnfinishedOrEmptyTrackPlanCannotBuildACommand(t *testing.T) {
+	for _, opts := range []EncodeOptions{
+		{Video: codec.CopyVideo()},
+		{Audio: codec.CopyAudio()},
+		{Video: codec.OmitVideo(), Audio: codec.OmitAudio()},
+	} {
+		opts.Input, opts.Format = FromPipe(fetch.Pace{}), mpegtsFormat
+		if _, err := EncodeArgs(opts); err == nil {
+			t.Fatalf("unfinished or empty track plan was rendered: %+v", opts)
+		}
+		if opts.Verbatim() {
+			t.Fatal("unfinished or empty track plan reused a spool")
+		}
+	}
+}
+
+func TestOmittingAnUnidentifiedTrackCannotReuseTheWholeSpool(t *testing.T) {
+	for _, opts := range []EncodeOptions{
+		{Video: codec.OmitVideo(), Audio: codec.CopyAudio(), Probe: media.ProbeInfo{VideoPresent: true, AudioCodec: media.CodecAAC}},
+		{Video: codec.CopyVideo(), Audio: codec.OmitAudio(), Probe: media.ProbeInfo{VideoCodec: media.CodecH264, AudioPresent: true}},
+	} {
+		opts.Input, opts.Format = FromPipe(fetch.Pace{}), mpegtsFormat
+		if opts.Verbatim() {
+			t.Fatal("omitting an unidentified stream reused the whole spool")
+		}
+	}
+}
+
 func TestTheArgvRendersTheDecision(t *testing.T) {
 	src := muxedSource(t, mustURL(t, "http://example.test/in.m3u8"), media.HLS, fetch.Policy{})
 	piped := FromPipe(fetch.Pace{})

@@ -317,6 +317,9 @@ func programFromStream(t *testing.T, stream *source.Stream) media.Program {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if stream.Observation == nil && stream.Probe != nil {
+		program.SetMeasurement(*stream.Probe)
+	}
 	return program
 }
 

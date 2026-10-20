@@ -79,7 +79,7 @@ func PullArgs(opts PullOptions) (ffmpeg.Command, error) {
 	args := pullReportArgs(opts.Verbose)
 	args = append(args, hardwareInitArgs(opts.Video)...)
 	args = append(args, sourceInputArgs(opts.Source)...)
-	args = append(args, sourceMapArgs(opts.Source)...)
+	args = append(args, sourceMapArgs(opts.Source, opts.Video.Action() != codec.OmitTrack, opts.Audio.Action() != codec.OmitTrack)...)
 	args = append(args, codecs...)
 	args = append(args, output...)
 	args = append(args, opts.Source.outputArgs()...)

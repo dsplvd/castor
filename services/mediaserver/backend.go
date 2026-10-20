@@ -55,8 +55,8 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 		timelines := follow.New(client, formats, follow.Repackager(ffmpegBinary))
 		resolver := resolverWithProbe(client, media.HeightCap(asked.GetMaxHeight()), asked.GetAudio().GetLanguages(), machinery.Probes)
 		return caster{
-			Ranker: rank.New(resolverConfig, media.HeightCap(asked.GetMaxHeight()), func(s *source.Stream) media.Prober {
-				return candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: machinery.Probes}
+			Ranker: rank.New(resolverConfig, media.HeightCap(asked.GetMaxHeight()), func(ctx context.Context, s *source.Stream) (source.Inspection, error) {
+				return (candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: machinery.Probes}).Inspect(ctx)
 			}),
 			machinery:     machinery,
 			client:        client,

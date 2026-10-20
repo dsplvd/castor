@@ -46,8 +46,8 @@ var audioCarriageRefusals = []refusalRule{{
 }}
 
 func decideAudio(in Inputs) (Track[AudioEncode], []Reason, error) {
-	if in.Probe.AudioCodec == "" && in.Measured {
-		return CopyAudio(), nil, nil
+	if !in.Probe.HasAudio() && in.Measured {
+		return OmitAudio(), nil, nil
 	}
 	refused := refuse(audioRefusals, in)
 	if len(refused) == 0 {
