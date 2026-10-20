@@ -10,6 +10,7 @@ import (
 
 	"github.com/looplab/fsm"
 	"github.com/stupside/castor/internal/telemetry"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/compose"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
 	"github.com/stupside/castor/services/mediaserver/internal/media"
@@ -39,7 +40,12 @@ type ran struct {
 type attemptEvent uint8
 
 const (
-	presentationReady attemptEvent = iota
+	inspectionStarted attemptEvent = iota
+	inspectionFinished
+	planFinished
+	productionStarted
+	presentationReady
+	playbackRequested
 	playbackStarted
 	productionFinished
 	playbackEnded
@@ -52,7 +58,12 @@ const (
 
 func (e attemptEvent) String() string {
 	return [...]string{
+		inspectionStarted:  "inspection-started",
+		inspectionFinished: "inspection-finished",
+		planFinished:       "plan-finished",
+		productionStarted:  "production-started",
 		presentationReady:  "presentation-ready",
+		playbackRequested:  "playback-requested",
 		playbackStarted:    "playback-started",
 		productionFinished: "production-finished",
 		playbackEnded:      "playback-ended",
@@ -66,6 +77,11 @@ func (e attemptEvent) String() string {
 
 const (
 	preparing        = "preparing"
+	inspecting       = "inspecting"
+	planning         = "planning"
+	outputPlanned    = "planned"
+	producing        = "producing"
+	ready            = "ready"
 	startingPlayback = "starting-playback"
 	playingBack      = "playing"
 	stopping         = "stopping"
@@ -75,16 +91,22 @@ const (
 // Callbacks update state-local evidence. Operations and cleanup remain owned
 // by the coordinator outside FSM callbacks.
 func (c *coordinator) attemptMachine() *fsm.FSM {
+	active := []string{preparing, inspecting, planning, outputPlanned, producing, ready, startingPlayback, playingBack}
 	events := fsm.Events{
-		{Name: presentationReady.String(), Src: []string{preparing}, Dst: startingPlayback},
+		{Name: inspectionStarted.String(), Src: []string{preparing}, Dst: inspecting},
+		{Name: inspectionFinished.String(), Src: []string{inspecting}, Dst: planning},
+		{Name: planFinished.String(), Src: []string{planning}, Dst: outputPlanned},
+		{Name: productionStarted.String(), Src: []string{outputPlanned}, Dst: producing},
+		{Name: presentationReady.String(), Src: []string{outputPlanned, producing}, Dst: ready},
+		{Name: playbackRequested.String(), Src: []string{ready}, Dst: startingPlayback},
 		{Name: playbackStarted.String(), Src: []string{startingPlayback}, Dst: playingBack},
 		{Name: productionFinished.String(), Src: []string{startingPlayback}, Dst: startingPlayback},
 		{Name: productionFinished.String(), Src: []string{playingBack}, Dst: playingBack},
 		{Name: playbackEnded.String(), Src: []string{playingBack}, Dst: stopping},
 		{Name: deliverySettled.String(), Src: []string{playingBack}, Dst: stopping},
 		{Name: healthEnded.String(), Src: []string{playingBack}, Dst: stopping},
-		{Name: attemptCancelled.String(), Src: []string{preparing, startingPlayback, playingBack}, Dst: stopping},
-		{Name: attemptFailed.String(), Src: []string{preparing, startingPlayback, playingBack}, Dst: stopping},
+		{Name: attemptCancelled.String(), Src: active, Dst: stopping},
+		{Name: attemptFailed.String(), Src: active, Dst: stopping},
 		{Name: cleanupFinished.String(), Src: []string{stopping}, Dst: attemptFinished},
 	}
 	return fsm.NewFSM(preparing, events, fsm.Callbacks{
@@ -123,7 +145,9 @@ type operation struct {
 // before handing them back. Operations retain results through cancellation.
 type coordinator struct {
 	device  Device
-	prepare func() (presentation, error)
+	inspect func() (inspectedPresentation, error)
+	plan    func(inspectedPresentation) (plannedPresentation, error)
+	produce func(plannedPresentation) (presentation, error)
 
 	ctx  context.Context
 	stop context.CancelCauseFunc
@@ -132,6 +156,9 @@ type coordinator struct {
 
 	machine      *fsm.FSM
 	presentation presentation
+	inspected    inspectedPresentation
+	planned      plannedPresentation
+	ready        *readyPresentation
 	events       chan *operation
 	failures     chan error
 	operations   []*operation
@@ -155,9 +182,13 @@ func newCoordinator(parent context.Context, c Cast, a recovery.Attempt) *coordin
 
 	s.machine = s.attemptMachine()
 
-	s.prepare = func() (presentation, error) {
-		return newPreparation(ctx, c, a, rel, s.failures).preparePresentation()
+	var preparation *preparation
+	s.inspect = func() (inspectedPresentation, error) {
+		preparation = newPreparation(ctx, c, a, rel, s.failures)
+		return preparation.inspectPresentation()
 	}
+	s.plan = func(p inspectedPresentation) (plannedPresentation, error) { return preparation.planPresentation(p) }
+	s.produce = func(p plannedPresentation) (presentation, error) { return preparation.producePresentation(p) }
 	return s
 }
 
@@ -181,9 +212,11 @@ func (c *coordinator) run() (ran, error) {
 		return c.finish()
 	}
 
-	c.preparation = c.launch(presentationReady, func() error {
+	c.move(inspectionStarted)
+	c.preparation = c.launch(inspectionFinished, func() error {
 		var err error
-		c.presentation, err = c.prepare()
+		c.inspected, err = c.inspect()
+		c.presentation = c.inspected.presentation
 		return err
 	})
 	c.loop()
@@ -222,6 +255,8 @@ func (c *coordinator) loop() {
 			}
 			if op.err != nil {
 				c.move(attemptFailed)
+			} else if op.event == presentationReady {
+				c.acceptPresentation()
 			} else {
 				c.move(op.event)
 			}
@@ -230,30 +265,73 @@ func (c *coordinator) loop() {
 				continue
 			}
 			switch op.event {
-			case presentationReady:
-				c.observeProduction()
-				c.launch(playbackStarted, func() error {
-					if err := c.ctx.Err(); err != nil {
-						return err
-					}
-					p := c.presentation
-					if p.delivery != nil {
-						if err := p.delivery.output.Err(); err != nil {
-							return err
-						}
-					}
-					if p.feed.buffered != nil {
-						if err := p.feed.buffered.reader.Err(); err != nil {
-							return err
-						}
-					}
-					return hand(c.ctx, c.device, p.target, p.contentType, p.captions, p.source)
+			case inspectionFinished:
+				c.preparation = c.launch(planFinished, func() error {
+					var err error
+					c.planned, err = c.plan(c.inspected)
+					c.presentation = c.planned.presentation
+					return err
 				})
+			case planFinished:
+				if c.planned.kind == compose.Handoff {
+					c.acceptPresentation()
+					c.startPlayback()
+				} else {
+					c.move(productionStarted)
+					if c.machine.Is(producing) {
+						c.preparation = c.launch(presentationReady, func() error {
+							var err error
+							c.presentation, err = c.produce(c.planned)
+							return err
+						})
+					}
+				}
+			case presentationReady:
+				c.startPlayback()
 			case playbackStarted:
 				c.observePlayback()
 			}
 		}
 	}
+}
+
+func (c *coordinator) acceptPresentation() {
+	ready, err := certifyPresentation(c.presentation)
+	if err != nil {
+		c.cause = errors.Join(c.cause, err)
+		c.move(attemptFailed)
+		return
+	}
+	c.ready = &ready
+	c.move(presentationReady)
+}
+
+func (c *coordinator) startPlayback() {
+	if !c.machine.Is(ready) {
+		return
+	}
+	c.observeProduction()
+	c.move(playbackRequested)
+	if !c.machine.Is(startingPlayback) {
+		return
+	}
+	c.launch(playbackStarted, func() error {
+		if err := c.ctx.Err(); err != nil {
+			return err
+		}
+		p := c.ready.presentation
+		if p.delivery != nil {
+			if err := p.delivery.output.Err(); err != nil {
+				return err
+			}
+		}
+		if p.feed.buffered != nil {
+			if err := p.feed.buffered.reader.Err(); err != nil {
+				return err
+			}
+		}
+		return c.ready.play(c.ctx, c.device)
+	})
 }
 
 func (c *coordinator) observeProduction() {

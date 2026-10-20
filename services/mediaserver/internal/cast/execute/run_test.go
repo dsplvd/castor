@@ -13,6 +13,7 @@ import (
 	"testing/synctest"
 
 	"github.com/looplab/fsm"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/compose"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
@@ -64,6 +65,28 @@ func TestADeviceThatRefusesPlayIsBlamed(t *testing.T) {
 	}
 	if out.Evidence.Reached == health.Playing {
 		t.Error("a cast whose device refused the URL reached Playing")
+	}
+}
+
+func TestPresentationWithoutReadinessNeverReachesTheDevice(t *testing.T) {
+	var started atomic.Bool
+	dev := &coordinatorDevice{
+		start: func(context.Context) error { started.Store(true); return nil },
+		wait:  blocking,
+	}
+	c := newCoordinator(t.Context(), Cast{Device: dev}, recovery.Attempt{})
+	reachAttemptState(t, c.machine, producing)
+	c.preparation = c.launch(presentationReady, func() error {
+		c.presentation = presentation{
+			target:      &url.URL{Scheme: "https", Host: "example.test"},
+			contentType: media.MP4, source: true,
+		}
+		return nil
+	})
+	c.loop()
+	_, err := c.finish()
+	if err == nil || started.Load() || c.ready != nil || !c.machine.Is(attemptFinished) {
+		t.Fatalf("unproved presentation: started=%v ready=%v state=%s error=%v", started.Load(), c.ready, c.machine.Current(), err)
 	}
 }
 
@@ -170,7 +193,21 @@ func reachAttemptState(t *testing.T, m *fsm.FSM, state string) {
 	if state == preparing {
 		return
 	}
-	path := []attemptEvent{presentationReady}
+	path := []attemptEvent{inspectionStarted}
+	if state != inspecting {
+		path = append(path, inspectionFinished)
+	}
+	if state != inspecting && state != planning {
+		path = append(path, planFinished)
+	}
+	if state == producing {
+		path = append(path, productionStarted)
+	} else if state != inspecting && state != planning && state != outputPlanned {
+		path = append(path, presentationReady)
+	}
+	if state == startingPlayback || state == playingBack {
+		path = append(path, playbackRequested)
+	}
 	if state == playingBack {
 		path = append(path, playbackStarted)
 	}
@@ -188,6 +225,84 @@ func reachAttemptState(t *testing.T, m *fsm.FSM, state string) {
 	if !m.Is(state) {
 		t.Fatalf("reached %s, want %s", m.Current(), state)
 	}
+}
+
+func TestReadyAttemptRequiresPlaybackRequest(t *testing.T) {
+	c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+	reachAttemptState(t, c.machine, outputPlanned)
+	c.move(presentationReady)
+	if !c.machine.Is(ready) {
+		t.Fatalf("preparation reached %s, want ready", c.machine.Current())
+	}
+	if err := fireAttempt(t.Context(), c.machine, playbackStarted); err == nil || !c.machine.Is(ready) {
+		t.Fatalf("playback started without a request: state=%s error=%v", c.machine.Current(), err)
+	}
+	c.move(playbackRequested)
+	if !c.machine.Is(startingPlayback) {
+		t.Fatalf("playback request reached %s, want starting-playback", c.machine.Current())
+	}
+}
+
+func TestPreparationStopsAtTheFailedStage(t *testing.T) {
+	for _, failed := range []string{"inspect", "plan", "produce"} {
+		t.Run(failed, func(t *testing.T) {
+			failure := errors.New(failed + " failed")
+			var stages []string
+			c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+			c.inspect = func() (inspectedPresentation, error) {
+				stages = append(stages, "inspect")
+				if failed == "inspect" {
+					return inspectedPresentation{}, failure
+				}
+				return inspectedPresentation{kind: compose.Remux}, nil
+			}
+			c.plan = func(p inspectedPresentation) (plannedPresentation, error) {
+				stages = append(stages, "plan")
+				if failed == "plan" {
+					return plannedPresentation{inspectedPresentation: p}, failure
+				}
+				return plannedPresentation{inspectedPresentation: p}, nil
+			}
+			c.produce = func(p plannedPresentation) (presentation, error) {
+				stages = append(stages, "produce")
+				return p.presentation, failure
+			}
+			_, err := c.run()
+			if !errors.Is(err, failure) || stages[len(stages)-1] != failed || !c.machine.Is(attemptFinished) {
+				t.Fatalf("stages=%v state=%s error=%v", stages, c.machine.Current(), err)
+			}
+		})
+	}
+}
+
+func TestCancellationDuringPlanningJoinsLateAcquisitions(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
+		entered := make(chan struct{})
+		lateFailure := errors.New("planner release failed")
+		var cleaned, produced bool
+		c.inspect = func() (inspectedPresentation, error) {
+			return inspectedPresentation{kind: compose.Remux}, nil
+		}
+		c.plan = func(p inspectedPresentation) (plannedPresentation, error) {
+			close(entered)
+			<-c.ctx.Done()
+			c.releases.push(func() error { cleaned = true; return lateFailure })
+			return plannedPresentation{inspectedPresentation: p}, c.ctx.Err()
+		}
+		c.produce = func(p plannedPresentation) (presentation, error) {
+			produced = true
+			return p.presentation, nil
+		}
+		done := make(chan error, 1)
+		go func() { _, err := c.run(); done <- err }()
+		<-entered
+		c.stop(context.Canceled)
+		err := <-done
+		if !cleaned || produced || !errors.Is(err, context.Canceled) || !errors.Is(err, lateFailure) || !c.machine.Is(attemptFinished) {
+			t.Fatalf("cleaned=%v produced=%v state=%s error=%v", cleaned, produced, c.machine.Current(), err)
+		}
+	})
 }
 
 func TestCancelledPreparationReleasesLateAcquisitions(t *testing.T) {
@@ -236,9 +351,10 @@ func TestCancellationDuringPlayJoinsCommandWithoutStartingPlayback(t *testing.T)
 			wait:  func(context.Context) error { awaited.Store(true); return nil },
 		}
 		c := newCoordinator(t.Context(), Cast{Device: d}, recovery.Attempt{})
+		reachAttemptState(t, c.machine, producing)
 
 		c.preparation = c.launch(presentationReady, func() error {
-			c.presentation = presentation{target: &url.URL{Scheme: "https", Host: "example.test"}}
+			c.presentation = presentation{target: &url.URL{Scheme: "https", Host: "example.test"}, contentType: media.MP4, source: true, readiness: sourceEligible}
 			return nil
 		})
 		done := make(chan error, 1)
@@ -338,10 +454,11 @@ func TestFailedProductionCannotStartPlayback(t *testing.T) {
 		wait:  blocking,
 	}
 	c := newCoordinator(t.Context(), Cast{Device: dev}, recovery.Attempt{})
+	reachAttemptState(t, c.machine, producing)
 
 	d := p.delivery()
 	c.preparation = c.launch(presentationReady, func() error {
-		c.presentation = presentation{delivery: &d, feed: feed{buffered: p.buf}}
+		c.presentation = presentation{target: &url.URL{Scheme: "http", Host: "localhost"}, contentType: media.MP4, readiness: outputValidated, delivery: &d, feed: feed{buffered: p.buf}}
 		return nil
 	})
 	c.loop()
@@ -358,13 +475,13 @@ func TestStorageFailureCancelsPreparationAndJoinsLateAcquisitions(t *testing.T) 
 	c := newCoordinator(t.Context(), Cast{}, recovery.Attempt{})
 	failure := errors.New("storage exhausted during preparation")
 	cleaned := false
-	c.prepare = func() (presentation, error) {
+	c.inspect = func() (inspectedPresentation, error) {
 		p := newPreparation(c.ctx, Cast{}, recovery.Attempt{}, c.releases, c.failures)
 		p.watchStorage(func(context.Context) error { return failure })
 		<-c.ctx.Done()
 		// An acquisition already in progress can finish after cancellation.
 		c.releases.push(func() error { cleaned = true; return nil })
-		return presentation{}, c.ctx.Err()
+		return inspectedPresentation{}, c.ctx.Err()
 	}
 	_, err := c.run()
 	if !errors.Is(err, failure) || !cleaned || !c.machine.Is(attemptFinished) {

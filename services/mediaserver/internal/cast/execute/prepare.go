@@ -53,12 +53,28 @@ type presentation struct {
 	target      *url.URL
 	contentType string
 	source      bool
+	readiness   presentationReadiness
 	delivery    *delivery
 	feed        feed
 	reached     ran
 }
 
-func (s *preparation) preparePresentation() (p presentation, err error) {
+// inspectedPresentation retains the selected reading and any validated local
+// buffer. Only this result can be passed to output planning.
+type inspectedPresentation struct {
+	presentation
+	kind compose.Kind
+	work string
+	burn burnRenderer
+}
+
+// plannedPresentation binds codec and delivery decisions to their input.
+type plannedPresentation struct {
+	inspectedPresentation
+	options encodePlan
+}
+
+func (s *preparation) inspectPresentation() (p inspectedPresentation, err error) {
 	if err := s.ctx.Err(); err != nil {
 		return p, err
 	}
@@ -67,8 +83,8 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 	if err := s.ctx.Err(); err != nil {
 		return p, err
 	}
-	kind := s.compose()
-	if kind == compose.Handoff {
+	p.kind = s.compose()
+	if p.kind == compose.Handoff {
 		primary, _ := s.attempt.Program.PrimaryInput()
 		p.target, p.contentType, p.source = primary.URL, primary.ContentType, true
 		return p, nil
@@ -77,9 +93,9 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 	if err != nil {
 		return p, err
 	}
+	p.work = work
 	p.feed = feed{program: program}
-	var burn burnRenderer
-	if kind == compose.ReadOnce {
+	if p.kind == compose.ReadOnce {
 		buf, err := s.read(work, program)
 		if err != nil {
 			return p, err
@@ -96,14 +112,35 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 		}
 		p.feed = feed{buffered: buf}
 		if _, native := s.nativeOutput(p.feed); buf.transcript != nil && !native {
-			burn = subtitle.NewCueFile(work, buf.transcript.Cues())
+			p.burn = subtitle.NewCueFile(work, buf.transcript.Cues())
 		}
 	}
-	opts, err := s.encode(p.feed, burn)
+	return p, nil
+}
+
+func (s *preparation) planPresentation(inspected inspectedPresentation) (plannedPresentation, error) {
+	p := plannedPresentation{inspectedPresentation: inspected}
+	if err := s.ctx.Err(); err != nil {
+		return p, err
+	}
+	if p.kind == compose.Handoff {
+		p.readiness = sourceEligible
+		return p, nil
+	}
+	opts, err := s.encode(p.feed, p.burn)
 	if err != nil {
 		return p, err
 	}
-	d, err := s.produce(work, p.feed, opts, burn)
+	p.options = opts
+	return p, nil
+}
+
+func (s *preparation) producePresentation(planned plannedPresentation) (presentation, error) {
+	p := planned.presentation
+	if err := s.ctx.Err(); err != nil {
+		return p, err
+	}
+	d, err := s.produce(planned.work, p.feed, planned.options, planned.burn)
 	if err != nil {
 		return p, err
 	}
@@ -112,10 +149,11 @@ func (s *preparation) preparePresentation() (p presentation, err error) {
 	if err := awaitArtifact(s.ctx, d); err != nil {
 		return p, err
 	}
-	if err := s.validateOutput(d, opts, p.feed); err != nil {
+	if err := s.validateOutput(d, planned.options, p.feed); err != nil {
 		return p, err
 	}
-	p.target, p.contentType = d.URL(), opts.Format.ContentType
+	p.target, p.contentType = d.URL(), planned.options.Format.ContentType
+	p.readiness = outputValidated
 	return p, nil
 }
 

@@ -123,7 +123,11 @@ func TestTeardownDoesNotDiscardFailuresJoinedToCancellation(t *testing.T) {
 func superviseFixture(ctx context.Context, dev Device, d delivery, f feed) (bool, error) {
 	c := newCoordinator(ctx, Cast{Device: dev}, recovery.Attempt{})
 
+	c.move(inspectionStarted)
+	c.move(inspectionFinished)
+	c.move(planFinished)
 	c.move(presentationReady)
+	c.move(playbackRequested)
 	c.move(playbackStarted)
 	c.presentation = presentation{delivery: &d, feed: f}
 	c.observePlayback()
