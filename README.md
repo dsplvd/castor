@@ -37,10 +37,22 @@ No bundled content or sources; DRM streams are refused. Use content you are auth
 
 ## Quick start
 
-On macOS ([other platforms](#installation)):
+Install with one of (requirements in [Installation](#installation)):
 
 ```sh
+# macOS
 brew install --cask stupside/tap/castor
+
+# Any platform, Node 20+
+npm install -g @castor-dev/cli
+
+# From source, Go 1.27+ and cmake
+git clone --recurse-submodules https://github.com/stupside/castor.git && cd castor && make build
+```
+
+Then discover your devices:
+
+```sh
 castor scan
 ```
 
@@ -63,15 +75,11 @@ If discovery finds nothing, see [Troubleshooting](#troubleshooting).
 
 ## Installation
 
-Install Chrome/Chromium for webpage extraction, and **ffmpeg + ffprobe 7.1+** for media processing. Tools must be on `PATH`; encoding uses a working GPU encoder when available, with software fallback.
+Whichever way you install, you also need Chrome/Chromium for webpage extraction and **ffmpeg + ffprobe 7.1+** for media processing, on `PATH`. Encoding uses a working GPU encoder when available, with software fallback.
 
-| Platform | Install |
-| --- | --- |
-| macOS | `brew install --cask stupside/tap/castor` |
-| Linux | Extract the [release](https://github.com/stupside/castor/releases/latest) for your architecture and put `castor` on `PATH`. |
-| Windows | Extract the [release ZIP](https://github.com/stupside/castor/releases/latest) and put `castor.exe` on `PATH`. Install tools with `winget install Gyan.FFmpeg` and `winget install Google.Chrome`; allow Castor on private networks. |
-| Any (Node 20+) | `npx @castor-dev/cli`, or `npm i -g @castor-dev/cli` to keep it. |
-| From source | See [CONTRIBUTING.md](CONTRIBUTING.md). |
+On Windows: `winget install Gyan.FFmpeg` and `winget install Google.Chrome`, and allow Castor on private networks.
+
+No Homebrew or Node? Extract the [latest release](https://github.com/stupside/castor/releases/latest) for your platform (`.tar.gz` for Linux, `.zip` for Windows) and put `castor` or `castor.exe` on `PATH`.
 
 ## Commands
 
