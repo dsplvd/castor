@@ -109,6 +109,7 @@ func (c *coordinator) attemptMachine() *fsm.FSM {
 		{Name: attemptFailed.String(), Src: active, Dst: stopping},
 		{Name: cleanupFinished.String(), Src: []string{stopping}, Dst: attemptFinished},
 	}
+	track := telemetry.Track("attempt", preparing, attemptFinished)
 	return fsm.NewFSM(preparing, events, fsm.Callbacks{
 		"after_" + attemptCancelled.String(): func(context.Context, *fsm.Event) { c.interruption = context.Cause(c.ctx) },
 		"after_" + playbackEnded.String(): func(context.Context, *fsm.Event) {
@@ -120,7 +121,7 @@ func (c *coordinator) attemptMachine() *fsm.FSM {
 			}
 		},
 		"after_" + playbackStarted.String(): func(context.Context, *fsm.Event) { c.presentation.reached.reached = health.Playing },
-		"after_event":                       func(ctx context.Context, e *fsm.Event) { telemetry.Transition(ctx, "attempt", e.Event, e.Src, e.Dst) },
+		"after_event":                       func(ctx context.Context, e *fsm.Event) { track(ctx, e.Event, e.Src, e.Dst) },
 	})
 }
 

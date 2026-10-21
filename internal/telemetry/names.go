@@ -15,8 +15,7 @@ const (
 	metricMediaPlans        = "castor.media.plans"
 	metricMediaRefusals     = "castor.media.refusals"
 	metricRecoveryRevisions = "castor.recovery.revisions"
-
-	eventTransition = "castor.fsm.transition"
+	metricStateDuration     = "castor.fsm.state.duration"
 )
 
 // Attribute keys.
@@ -29,9 +28,9 @@ const (
 	keyRefusal   = "castor.media.refusal"
 	keyAction    = "castor.recovery.action"
 	keyMachine   = "castor.fsm.machine"
+	keyState     = "castor.fsm.state"
 	keyEvent     = "castor.fsm.event"
-	keyFrom      = "castor.fsm.from"
-	keyTo        = "castor.fsm.to"
+	keyExit      = "castor.fsm.exit"
 )
 
 // Outcomes a finished operation or a stream client reports; bounded, never an error string.

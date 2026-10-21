@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -83,13 +82,4 @@ func start(ctx context.Context, operation Operation, kind trace.SpanKind, attrs 
 // new work keeps lifetime's cancellation; an accepted cast outlives its RPC.
 func WithTrace(lifetime, request context.Context) context.Context {
 	return trace.ContextWithSpanContext(lifetime, trace.SpanContextFromContext(request))
-}
-
-// Transition records an accepted state-machine event in the owner's trace and logs.
-func Transition(ctx context.Context, machine, event, from, to string) {
-	trace.SpanFromContext(ctx).AddEvent(eventTransition, trace.WithAttributes(
-		attribute.String(keyMachine, machine), attribute.String(keyEvent, event),
-		attribute.String(keyFrom, from), attribute.String(keyTo, to),
-	))
-	slog.DebugContext(ctx, "state transition", keyMachine, machine, keyEvent, event, keyFrom, from, keyTo, to)
 }
