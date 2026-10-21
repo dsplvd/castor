@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/health"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/output"
 	"github.com/stupside/castor/services/mediaserver/internal/cast/output/storage"
@@ -178,7 +179,14 @@ func (s *Stream) rangesDeclined() bool {
 
 // severed says why one client stopped being written to.
 func (s *Stream) severed(ctx context.Context, r *http.Request, err error, held int64, stalled time.Duration) {
-	if !errors.Is(err, os.ErrDeadlineExceeded) {
+	// A cancelled request zeroes the write deadline to wake the writer, so that error is the client leaving, not a stall.
+	leaving := ctx.Err() != nil || !errors.Is(err, os.ErrDeadlineExceeded)
+	outcome := telemetry.OutcomeStalled
+	if leaving {
+		outcome = telemetry.OutcomeDisconnected
+	}
+	telemetry.StreamClientEnded(ctx, outcome)
+	if leaving {
 		slog.InfoContext(ctx, "stream client disconnected", "from", r.RemoteAddr, "bytes_sent", held, "error", err)
 		return
 	}
@@ -290,6 +298,7 @@ func (s *Stream) send(ctx context.Context, w http.ResponseWriter, r *http.Reques
 	control := http.NewResponseController(w)
 	buf := make([]byte, sendChunkSize)
 	var sent int64
+	defer func() { telemetry.StreamSent(ctx, sent) }()
 	lastWrite := time.Now()
 	deadlines := s.o.WriteDeadline > 0
 	for {

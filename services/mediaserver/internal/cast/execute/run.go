@@ -369,7 +369,9 @@ func (c *coordinator) observePlayback() {
 }
 
 // hand points the device at target; source says whether that is the source itself rather than what castor serves.
-func hand(ctx context.Context, dev Device, target *url.URL, contentType string, shown []media.Caption, source bool) error {
+func hand(ctx context.Context, dev Device, target *url.URL, contentType string, shown []media.Caption, source bool) (err error) {
+	ctx, finish := telemetry.Start(ctx, telemetry.Play)
+	defer func() { finish(err) }()
 	slog.InfoContext(ctx, "starting playback", "host", target.Host, "content_type", contentType, "handoff", source)
 	if err := dev.Play(ctx, target, contentType, shown); err != nil {
 		return &playRefused{err: err, source: source}

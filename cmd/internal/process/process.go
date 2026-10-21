@@ -148,5 +148,5 @@ func logger(level log.Level) *slog.Logger {
 		TimeFormat:      "15:04:05.000",
 		Level:           level,
 	})
-	return slog.New(castid.Tagged(logging.Redact(slog.NewMultiHandler(screen, telemetry.Handler()))))
+	return slog.New(logging.Redact(slog.NewMultiHandler(castid.Tagged(screen, castid.LogKey), telemetry.Handler())))
 }

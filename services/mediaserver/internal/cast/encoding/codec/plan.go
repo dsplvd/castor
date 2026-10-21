@@ -4,6 +4,7 @@ package codec
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding/container"
 	"github.com/stupside/castor/services/mediaserver/internal/ffmpeg"
@@ -36,6 +37,9 @@ type Plan struct {
 	Audio    Track[AudioEncode]
 	Refusals []Reason
 }
+
+// DeviceRefusedVideo reports that the device's own envelope, not the container or the request, ruled out copying the video.
+func (p Plan) DeviceRefusedVideo() bool { return slices.Contains(p.Refusals, reasonDeviceVideo) }
 
 // Encoded returns which halves of the program this plan produces rather than passes through.
 func (p Plan) Encoded() media.Axes {

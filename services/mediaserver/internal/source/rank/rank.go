@@ -33,7 +33,6 @@ func New(cfg Config, maxHeight media.HeightCap, probes Probes) *Ranker {
 func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) (rankedStreams []*source.Stream, err error) {
 	ctx, finish := telemetry.Start(ctx, telemetry.Rank)
 	defer func() { finish(err) }()
-	slog.InfoContext(ctx, "ranking streams", "count", len(streams))
 	if len(streams) == 0 {
 		return nil, errors.New("no streams to rank")
 	}
@@ -60,7 +59,7 @@ func (r *Ranker) Rank(ctx context.Context, streams []*source.Stream) (rankedStre
 	order := ranked(pool, r.maxHeight)
 	best := order[0]
 	slog.InfoContext(ctx, "best stream selected", "url", best.URL.String(),
-		"bitrate", int64(best.Bitrate()), "height", height(best, r.maxHeight), "last_resort", best.LastResort,
+		"bitrate_bps", int64(best.Bitrate()), "height", height(best, r.maxHeight), "last_resort", best.LastResort,
 		"alternatives", len(order)-1)
 	return order, nil
 }

@@ -123,7 +123,7 @@ func Setup(ctx context.Context, c Config, service string) (func(context.Context)
 	previousTraces, previousMetrics := otel.GetTracerProvider(), otel.GetMeterProvider()
 	otel.SetTracerProvider(traces)
 	otel.SetMeterProvider(metrics)
-	d := &destination{handler: castid.Tagged(otelslog.NewHandler(service, otelslog.WithLoggerProvider(provider)))}
+	d := &destination{handler: castid.Tagged(otelslog.NewHandler(service, otelslog.WithLoggerProvider(provider)), keyCastID)}
 	active.Store(d)
 	var once sync.Once
 	var shutdownErr error
