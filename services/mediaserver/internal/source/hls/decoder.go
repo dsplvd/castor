@@ -7,7 +7,7 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/source/timeline"
 )
 
-// Decoder interprets HLS resource encryption and the TIKTIKPX segment envelope.
+// Decoder interprets HLS resource encryption and the TIKTIKPX (PNG) and WebP segment envelopes.
 // It holds no state; the relay supplies its bounded and cached key reader.
 type Decoder struct{}
 
@@ -21,7 +21,10 @@ func (d Decoder) Segment(ctx context.Context, segment timeline.Segment, body []b
 			return nil, false, err
 		}
 	}
-	return unwrapPixels(body)
+	if body, unwrapped, err := unwrapPixels(body); unwrapped || err != nil {
+		return body, unwrapped, err
+	}
+	return unwrapWebP(body)
 }
 
 func (d Decoder) Map(ctx context.Context, section timeline.Map, body []byte, keys timeline.KeyReader) ([]byte, error) {
