@@ -220,3 +220,45 @@ func TestClicksSameOriginFrameWithoutLeavingParent(t *testing.T) {
 		t.Fatalf("page=%q streams=%v", at, streams)
 	}
 }
+
+func TestClickTrapsOverThePlayerAreDisabled(t *testing.T) {
+	chrome := os.Getenv("TEST_CASTOR_CHROME")
+	if chrome == "" {
+		t.Skip("set TEST_CASTOR_CHROME to exercise real browser navigation")
+	}
+	ts := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<body style="margin:0">
+<div style="position:relative;width:800px;height:450px"><video id="v" style="width:800px;height:450px"></video>
+<div id="controls" style="position:absolute;inset:0"></div></div>
+<div id="trap" style="position:fixed;inset:0;z-index:2147483647;background:transparent"></div>
+<a id="link" href="https://ads.example" style="position:fixed;inset:0;z-index:2147483646"></a>
+<div id="banner" style="position:fixed;top:0;left:0;width:800px;height:450px;z-index:2147483645">Sale!</div>
+<script>
+let clicks = []; document.addEventListener('click', e => clicks.push(e.target.id));
+</script></body>`)
+	}))
+	ts.Start()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	s, err := newSession(ctx, BrowserConfig{ChromePath: chrome, Headless: true, Timeout: 10 * time.Second}, ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	cleared, err := clearOverlays(s.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The empty trap and link go; the banner says something, and stays on top.
+	if cleared != 2 {
+		t.Errorf("cleared %d overlays, want 2", cleared)
+	}
+	var top string
+	if err := chromedp.Run(s.ctx, chromedp.Evaluate(`document.elementFromPoint(400, 225).id`, &top)); err != nil {
+		t.Fatal(err)
+	}
+	if top != "banner" {
+		t.Errorf("topmost element = %q, want the banner left alone", top)
+	}
+}

@@ -25,3 +25,9 @@ next-env.d.ts
 .yarn/*
 !.yarn/releases
 app/.yarn/
+
+# agent notes kept local
+/AGENTS.md
+/CONTEXT.md
+/services/scrapingserver/internal/extract/OVERLAYS.md
+/config.yaml.old

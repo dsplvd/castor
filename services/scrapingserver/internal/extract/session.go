@@ -97,7 +97,23 @@ func (s *session) readBody(reqID network.RequestID) ([]byte, error) {
 	return network.GetResponseBody(reqID).Do(cdp.WithExecutor(s.ctx, target))
 }
 
+//go:embed js/clear_overlays.js
+var clearOverlaysJS string
+
+// clearOverlays disables the invisible layers a page stacks over its player, which would otherwise take the click.
+func clearOverlays(ctx context.Context) (int, error) {
+	var cleared int
+	err := chromedp.Run(ctx, chromedp.Evaluate(clearOverlaysJS, &cleared))
+	return cleared, err
+}
+
 func click(ctx context.Context, x, y float64) error {
+	// Best effort: a page that refuses the script is still clicked.
+	if cleared, err := clearOverlays(ctx); err != nil {
+		slog.DebugContext(ctx, "clearing overlays failed", "error", err)
+	} else if cleared > 0 {
+		slog.DebugContext(ctx, "disabled overlays over the player", "count", cleared)
+	}
 	return chromedp.Run(ctx, chromedp.MouseClickXY(x, y, chromedp.ButtonLeft))
 }
 
