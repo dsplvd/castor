@@ -8,6 +8,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+// durationBuckets are explicit second-scale bounds: the SDK default (0 to 10000) puts every castor
+// operation, from a 50ms RPC to a 30s extraction, in its first few buckets and makes percentiles meaningless.
+var durationBuckets = metric.WithExplicitBucketBoundaries(0.025, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 180, 600, 1800, 3600)
+
 // add counts n on the named counter. The SDK reuses instruments by name, and
 // resolving through the current provider lets embedded hosts install theirs first.
 func add(ctx context.Context, name, unit, description string, n int64, attrs ...attribute.KeyValue) {

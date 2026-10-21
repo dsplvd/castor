@@ -48,7 +48,7 @@ func start(ctx context.Context, operation Operation, kind trace.SpanKind, attrs 
 	}
 	// The SDK reuses instruments by name. Resolve through the current provider so
 	// embedded hosts can install their own SDK before starting work.
-	duration, err := otel.Meter(scope).Float64Histogram(metricOperationDuration, metric.WithUnit("s"), metric.WithDescription("Completed operation duration, including failures"))
+	duration, err := otel.Meter(scope).Float64Histogram(metricOperationDuration, metric.WithUnit("s"), metric.WithDescription("Completed operation duration, including failures"), durationBuckets)
 	if err != nil {
 		otel.Handle(err)
 	}

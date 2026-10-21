@@ -82,7 +82,7 @@ func run(ctx context.Context, root *cli.Command, args []string, observed func(*c
 				if err != nil {
 					return err
 				}
-				stop, err := telemetry.Setup(ctx, cfg.Telemetry, cmp.Or(os.Getenv("OTEL_SERVICE_NAME"), root.Name))
+				stop, err := telemetry.Setup(ctx, cfg.Telemetry, cmp.Or(os.Getenv("OTEL_SERVICE_NAME"), root.Name), version)
 				if err != nil {
 					return err
 				}

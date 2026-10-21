@@ -2,7 +2,7 @@ package telemetry
 
 // Every name castor exports lives here, in three layers: the instrumentation
 // scope, the signal names (instruments, events) and the attribute keys. Names
-// castor invents sit under "castor."; rpc.method is OpenTelemetry's own.
+// castor invents sit under "castor."; the rpc.* keys are OpenTelemetry's own.
 
 // scope names every tracer and meter castor owns.
 const scope = "castor"
@@ -32,7 +32,6 @@ const (
 	keyEvent     = "castor.fsm.event"
 	keyFrom      = "castor.fsm.from"
 	keyTo        = "castor.fsm.to"
-	keyRPCMethod = "rpc.method"
 )
 
 // Outcomes a finished operation or a stream client reports; bounded, never an error string.
