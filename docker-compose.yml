@@ -1,7 +1,7 @@
 name: castor
 
 x-castor: &castor
-  image: ghcr.io/stupside/castor:latest
+  image: ghcr.io/dsplvd/castor:latest
   restart: unless-stopped
   volumes:
     - ./config.yaml:/config.yaml:ro

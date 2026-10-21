@@ -30,8 +30,8 @@ Only scraping runs Chrome and reads `browser`/`capture` settings. It uses an iso
 Release images include an SPDX SBOM and SLSA provenance from the [delivery workflow](.github/workflows/_delivery.yml):
 
 ```sh
-docker buildx imagetools inspect ghcr.io/stupside/castor:latest --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/stupside/castor:latest --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/dsplvd/castor:latest --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/dsplvd/castor:latest --format '{{ json .Provenance }}'
 ```
 
 ## Reporting a vulnerability

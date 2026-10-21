@@ -189,7 +189,7 @@ The image includes Chrome, ffmpeg and ffprobe. Use **Linux host networking** for
 docker run --rm --network host \
   -v "$PWD/config.yaml:/config.yaml:ro" \
   -v castor-cache:/root/.cache \
-  ghcr.io/stupside/castor:latest \
+  ghcr.io/dsplvd/castor:latest \
   cast player https://example.com/watch/some-video
 ```
 
