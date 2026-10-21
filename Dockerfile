@@ -7,7 +7,8 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
       ca-certificates chromium ffmpeg fonts-liberation libgomp1 libstdc++6 libva2; \
     if [ "$TARGETARCH" = "amd64" ]; then \
-      apt-get install -y --no-install-recommends intel-media-va-driver vainfo; \
+      # iHD serves recent Intel iGPUs; i965 serves older ones such as Atom Cherry Trail and Bay Trail.
+      apt-get install -y --no-install-recommends intel-media-va-driver i965-va-driver vainfo; \
     fi; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
