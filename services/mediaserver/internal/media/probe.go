@@ -79,8 +79,9 @@ func (p ProbeInfo) TakeAudio(m ProbeInfo) ProbeInfo {
 	return p
 }
 
-// A known codec also establishes presence for facts assembled from selected
-// track metadata rather than directly from a probe's stream descriptors.
+// HasVideo reports whether video is present. A known codec also establishes
+// presence for facts assembled from selected track metadata rather than
+// directly from a probe's stream descriptors.
 func (p ProbeInfo) HasVideo() bool { return p.VideoPresent || p.VideoCodec != "" }
 func (p ProbeInfo) HasAudio() bool { return p.AudioPresent || p.AudioCodec != "" }
 
