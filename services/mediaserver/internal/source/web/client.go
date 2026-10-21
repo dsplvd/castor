@@ -25,11 +25,11 @@ type client struct {
 	http *http.Client
 }
 
-// New reads origins with documents bounded by timeout, sharing one cookie session across every read.
+// New reads origins with documents bounded by timeout, sharing one cookie session across every read, over TLS that looks like Chrome's.
 func New(timeout time.Duration) source.Client {
 	// A CDN that authorises a session on the master (Akamai's hdntl) refuses every later read without its cookie.
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	return &client{http: &http.Client{Timeout: timeout, Jar: jar}}
+	return &client{http: &http.Client{Timeout: timeout, Jar: jar, Transport: newChromeTransport()}}
 }
 
 // Replay is h with the jar's cookies for u winning over a copy h took earlier: the jar holds what refreshed during resolution.
