@@ -70,6 +70,7 @@ Install Chrome/Chromium for webpage extraction, and **ffmpeg + ffprobe 7.1+** fo
 | macOS | `brew install --cask stupside/tap/castor` |
 | Linux | Extract the [release](https://github.com/stupside/castor/releases/latest) for your architecture and put `castor` on `PATH`. |
 | Windows | Extract the [release ZIP](https://github.com/stupside/castor/releases/latest) and put `castor.exe` on `PATH`. Install tools with `winget install Gyan.FFmpeg` and `winget install Google.Chrome`; allow Castor on private networks. |
+| Any (Node 20+) | `npx @castor-dev/cli`, or `npm i -g @castor-dev/cli` to keep it. |
 | From source | See [CONTRIBUTING.md](CONTRIBUTING.md). |
 
 ## Commands
