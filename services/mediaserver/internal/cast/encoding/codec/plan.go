@@ -26,6 +26,8 @@ type Inputs struct {
 	// Spliced is a source stitched from pieces encoded apart, or live and free to become so, which only a re-encode hands over as one stream.
 	Spliced bool
 	BurnIn  string
+	// Rate is the video bitrate this server encodes at; the zero value is DefaultRate.
+	Rate Rate
 	// Encoders is the host's encoder lookup; required.
 	Encoders Encoders
 }

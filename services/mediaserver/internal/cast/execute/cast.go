@@ -27,6 +27,9 @@ type Machinery struct {
 	// Encoders is the host's encoder lookup, bound to that binary.
 	Encoders codec.Encoders
 
+	// VideoRate is the bitrate video is re-encoded at; the zero value is codec.DefaultRate.
+	VideoRate codec.Rate
+
 	// Probes measures what an attempt reads: its source program, or its local buffer.
 	Probes probe.FFprobe
 

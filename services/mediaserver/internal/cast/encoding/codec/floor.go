@@ -27,21 +27,23 @@ func floorVideoTrack(ctx context.Context, in Inputs) (Track[VideoEncode], []Reas
 	if len(refused) == 0 {
 		return CopyVideo(), nil, nil
 	}
-	enc, ok := in.Encoders(ctx, floorVideo.codec)
+	// The codec every device decodes, and the one a read-once buffer is produced in.
+	target := in.Rate.h264()
+	enc, ok := in.Encoders(ctx, target.codec)
 	if !ok {
-		return Track[VideoEncode]{}, refused, fmt.Errorf("no working encoder for recovery codec %q", floorVideo.codec)
+		return Track[VideoEncode]{}, refused, fmt.Errorf("no working encoder for recovery codec %q", target.codec)
 	}
 
 	produced := VideoEncode{
 		Encoder: enc,
-		Maxrate: floorVideo.maxrate,
-		Bufsize: floorVideo.bufsize,
+		Maxrate: target.maxrate,
+		Bufsize: target.bufsize,
 		// Caps pixel rate where VBV cap cannot; prevents false slowness reports.
 		MaxHeight: in.MaxHeight,
 	}
 	// Hardware uses bitrate, software uses quality; not interchangeable.
 	if enc.Hardware {
-		produced.Bitrate = floorVideo.bitrate
+		produced.Bitrate = target.bitrate
 	} else {
 		produced.Quality = floorVideoQuality
 	}

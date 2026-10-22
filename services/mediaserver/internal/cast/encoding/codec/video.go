@@ -60,7 +60,7 @@ func decideVideo(ctx context.Context, in Inputs) (Track[VideoEncode], []Reason, 
 		return CopyVideo(), nil, nil
 	}
 	host := func(c media.Codec) (ffmpeg.Encoder, bool) { return in.Encoders(ctx, c) }
-	enc, t, ok := selectVideoEncoder(in.Caps, host)
+	enc, t, ok := selectVideoEncoder(in.Caps, in.Rate.targets(), host)
 	if !ok {
 		return Track[VideoEncode]{}, refused, noVideoEncoder(in.Caps)
 	}
@@ -95,8 +95,8 @@ func decodesOnGPU(enc ffmpeg.Encoder, in Inputs, interlaced bool) bool {
 // playbackFrameRate is the most any device castor serves shows in a second; above it a re-encode drops frames.
 const playbackFrameRate = 60
 
-func selectVideoEncoder(caps media.Capabilities, selectEncoder func(media.Codec) (ffmpeg.Encoder, bool)) (ffmpeg.Encoder, videoTarget, bool) {
-	for _, t := range videoTargets {
+func selectVideoEncoder(caps media.Capabilities, targets []videoTarget, selectEncoder func(media.Codec) (ffmpeg.Encoder, bool)) (ffmpeg.Encoder, videoTarget, bool) {
+	for _, t := range targets {
 		for _, format := range caps.Formats {
 			support := format.Video
 			if support.Codec != t.codec {
@@ -136,15 +136,6 @@ type videoTarget struct {
 	width, height             int
 	frameRate                 float64
 	bitrate, maxrate, bufsize string
-}
-
-// floorVideo is the codec every device decodes, and the one a read-once buffer is produced in.
-var floorVideo = videoTarget{codec: media.CodecH264, bitrate: "4M", maxrate: "4M", bufsize: "8M"}
-
-// videoTargets is every codec castor encodes video to, in preference order.
-var videoTargets = []videoTarget{
-	{codec: media.CodecHEVC, bitrate: "2M", maxrate: "2M", bufsize: "4M"},
-	floorVideo,
 }
 
 const keyframeSeconds = 2

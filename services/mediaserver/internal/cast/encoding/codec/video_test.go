@@ -44,7 +44,7 @@ func TestSelectVideoEncoder(t *testing.T) {
 		{"nothing in common", decodes(media.CodecVP8), map[media.Codec]ffmpeg.Encoder{media.CodecH264: h264SW}, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _, _ := selectVideoEncoder(tt.caps, func(c media.Codec) (ffmpeg.Encoder, bool) { e, ok := tt.avail[c]; return e, ok })
+			got, _, _ := selectVideoEncoder(tt.caps, DefaultRate.targets(), func(c media.Codec) (ffmpeg.Encoder, bool) { e, ok := tt.avail[c]; return e, ok })
 			if got.Name != tt.want {
 				t.Errorf("selectVideoEncoder = %q, want %q", got.Name, tt.want)
 			}

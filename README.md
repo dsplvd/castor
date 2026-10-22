@@ -147,6 +147,8 @@ servers:
 
 Your computer controls the TV; the NAS processes and serves media. Set `servers.media.advertise` on the server if its chosen address is unreachable from the TV.
 
+When the media server has to re-encode video, it targets 4 Mbps H.264 by default (HEVC gets half). Raise or lower that on the server with `servers.media.video_bitrate`, for example `8M` or `6000k`, or `CASTOR_SERVERS__MEDIA__VIDEO_BITRATE=8M`. The value is the average and the ceiling; the buffer is twice it. It must be between `500k` and `40M`, and a server will not start on a value it cannot read. A source that can be copied is not re-encoded, so this setting does not apply to it.
+
 For apps or a shared API, run each service separately:
 
 | Command | Default port | Runs where |

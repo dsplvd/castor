@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/urfave/cli/v3"
@@ -67,5 +68,61 @@ func TestWhisperConfigBelongsToMediaServer(t *testing.T) {
 	t.Setenv("CASTOR_SERVERS__MEDIA__WHISPER__MODEL_PATH", "/models/from-env.bin")
 	if got := load().Servers.Media.Whisper.ModelPath; got != "/models/from-env.bin" {
 		t.Errorf("model path from environment = %q", got)
+	}
+}
+
+func TestTheVideoBitrateIsASetting(t *testing.T) {
+	load := func(t *testing.T, args ...string) *Config {
+		t.Helper()
+		var got *Config
+		command := &cli.Command{
+			Name: "castor", Flags: []cli.Flag{settings.Flag},
+			Action: func(_ context.Context, cmd *cli.Command) (err error) {
+				got, err = settings.Load(cmd, defaults())
+				return err
+			},
+		}
+		if err := command.Run(context.Background(), append([]string{"castor"}, args...)); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	file := func(t *testing.T, yaml string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	if got := load(t, "--config", file(t, "")).Servers.Media.VideoBitrate.String(); got != "4M" {
+		t.Errorf("unset, the video bitrate is %s, want the default 4M", got)
+	}
+	if got := load(t, "--config", file(t, "servers:\n  media:\n    video_bitrate: 8M\n")).Servers.Media.VideoBitrate.String(); got != "8M" {
+		t.Errorf("from the file, the video bitrate is %s, want 8M", got)
+	}
+	t.Setenv("CASTOR_SERVERS__MEDIA__VIDEO_BITRATE", "6000k")
+	if got := load(t, "--config", file(t, "servers:\n  media:\n    video_bitrate: 8M\n")).Servers.Media.VideoBitrate.String(); got != "6M" {
+		t.Errorf("from the environment, the video bitrate is %s, want it to win with 6M", got)
+	}
+}
+
+func TestAnUnusableVideoBitrateStopsTheServerFromStarting(t *testing.T) {
+	t.Setenv("CASTOR_SERVERS__MEDIA__VIDEO_BITRATE", "8 megabits")
+	command := &cli.Command{
+		Name: "castor", Flags: []cli.Flag{settings.Flag},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			_, err := settings.Load(cmd, defaults())
+			return err
+		},
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := command.Run(context.Background(), []string{"castor", "--config", path})
+	if err == nil || !strings.Contains(err.Error(), "8 megabits") {
+		t.Errorf("Load = %v, want an error naming the bad value", err)
 	}
 }

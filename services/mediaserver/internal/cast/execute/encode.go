@@ -90,6 +90,7 @@ func (s *preparation) decide(caps media.Capabilities, into container.Format, fac
 		// Attempt's evidence: axis a reader already died copying not handed to second process to copy again.
 		Decode:   s.attempt.Decode,
 		BurnIn:   burnIn,
+		Rate:     s.VideoRate,
 		Encoders: s.Encoders,
 	})
 	if err != nil {

@@ -2,6 +2,7 @@ package mediaserver
 
 import (
 	"github.com/stupside/castor/internal/settings"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding/codec"
 	"github.com/stupside/castor/services/mediaserver/internal/source/rank"
 	"github.com/stupside/castor/services/mediaserver/internal/subtitle/whisper"
 )
@@ -30,6 +31,8 @@ type ServerConfig struct {
 	Listen            string `yaml:"listen" validate:"required,hostname_port|startswith=:"`
 	// Advertise is where devices reach this server from outside its network.
 	Advertise string `yaml:"advertise" validate:"omitempty,http_url"`
+	// VideoBitrate is what re-encoded H.264 video is encoded at, such as 8M or 6000k; HEVC uses half of it.
+	VideoBitrate codec.Rate `yaml:"video_bitrate"`
 	// FFmpeg names the tools installed on this host.
 	FFmpeg FFmpegConfig `yaml:"ffmpeg" validate:"required"`
 	// Whisper configures transcription performed by this media server.
@@ -47,6 +50,7 @@ func defaults() Config {
 	c := Config{}
 	c.Servers.Media.FFmpeg = FFmpegConfig{Path: "ffmpeg", ProbePath: "ffprobe"}
 	c.Servers.Media.Listen = ":8410"
+	c.Servers.Media.VideoBitrate = codec.DefaultRate
 	c.Servers.Media.Resolver = ResolverConfig{ProbeMaxConcurrency: 2}
 	return c
 }

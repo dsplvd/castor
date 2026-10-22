@@ -9,6 +9,7 @@ import (
 
 	mediav1 "github.com/stupside/castor/gen/castor/media/v1"
 	castorv1 "github.com/stupside/castor/gen/castor/v1"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding/codec"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -90,5 +91,20 @@ func TestBackendKeepsOriginCredentialsWithinEachCast(t *testing.T) {
 	body, _, _, err = a.client.Fetch(t.Context(), u, nil)
 	if err != nil || body != "session=cast-A" {
 		t.Fatalf("cast A lost its own session: %q: %v", body, err)
+	}
+}
+
+func TestTheConfiguredVideoBitrateReachesTheCastingMachinery(t *testing.T) {
+	rate, err := codec.ParseRate("8M")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := defaults()
+	if got := cfg.backend()(&mediav1.PlaybackSettings{}).(caster).machinery.VideoRate.String(); got != "4M" {
+		t.Errorf("an unset server casts at %s, want the default 4M", got)
+	}
+	cfg.Servers.Media.VideoBitrate = rate
+	if got := cfg.backend()(&mediav1.PlaybackSettings{}).(caster).machinery.VideoRate.String(); got != "8M" {
+		t.Errorf("a server set to 8M casts at %s", got)
 	}
 }
