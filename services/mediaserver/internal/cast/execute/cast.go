@@ -30,6 +30,10 @@ type Machinery struct {
 	// VideoRate is the bitrate video is re-encoded at; the zero value is codec.DefaultRate.
 	VideoRate codec.Rate
 
+	// CopyLive lets a live source be stream-copied when the device accepts its codecs, instead of always re-encoded.
+	// A copy that breaks is retried decoded by recovery, as any copy that breaks is.
+	CopyLive bool
+
 	// Probes measures what an attempt reads: its source program, or its local buffer.
 	Probes probe.FFprobe
 

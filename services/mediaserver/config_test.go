@@ -126,3 +126,43 @@ func TestAnUnusableVideoBitrateStopsTheServerFromStarting(t *testing.T) {
 		t.Errorf("Load = %v, want an error naming the bad value", err)
 	}
 }
+
+func TestCopyLiveIsOffUnlessAServerTurnsItOn(t *testing.T) {
+	load := func(t *testing.T, args ...string) *Config {
+		t.Helper()
+		var got *Config
+		command := &cli.Command{
+			Name: "castor", Flags: []cli.Flag{settings.Flag},
+			Action: func(_ context.Context, cmd *cli.Command) (err error) {
+				got, err = settings.Load(cmd, defaults())
+				return err
+			},
+		}
+		if err := command.Run(context.Background(), append([]string{"castor"}, args...)); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	file := func(t *testing.T, yaml string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if load(t, "--config", file(t, "")).Servers.Media.CopyLive {
+		t.Error("copy_live is on by default; it changes what every live cast is sent")
+	}
+	if !load(t, "--config", file(t, "servers:\n  media:\n    copy_live: true\n")).Servers.Media.CopyLive {
+		t.Error("copy_live: true in the file did not turn it on")
+	}
+	t.Setenv("CASTOR_SERVERS__MEDIA__COPY_LIVE", "true")
+	if !load(t, "--config", file(t, "")).Servers.Media.CopyLive {
+		t.Error("CASTOR_SERVERS__MEDIA__COPY_LIVE=true did not turn it on")
+	}
+	t.Setenv("CASTOR_SERVERS__MEDIA__COPY_LIVE", "false")
+	if load(t, "--config", file(t, "servers:\n  media:\n    copy_live: true\n")).Servers.Media.CopyLive {
+		t.Error("the environment's false did not win over the file's true")
+	}
+}

@@ -59,3 +59,36 @@ func TestProgramBindingsIncludeReplayHeaders(t *testing.T) {
 		t.Fatal("same URL with different replay headers was treated as the same measured input")
 	}
 }
+
+func TestAProgramIsSplicedAcrossOnlyWhereItsSeamsAreKnownOrDistrusted(t *testing.T) {
+	input := func(id InputID, fetch Fetch) Input {
+		return Input{ID: id, URL: &url.URL{Scheme: "https", Host: "example.test", Path: "/" + string(id)}, Fetch: fetch}
+	}
+	for _, tt := range []struct {
+		name      string
+		inputs    []Input
+		distrust  bool // what SplicedAcross(false) says: live sources are distrusted
+		trustLive bool // what SplicedAcross(true) says
+	}{
+		{"a file", []Input{input("a", Fetch{})}, false, false},
+		{"a live source", []Input{input("a", Fetch{Live: true})}, true, false},
+		{"a playlist that declares its seams", []Input{input("a", Fetch{Spliced: true})}, true, true},
+		{"a live source that declares its seams", []Input{input("a", Fetch{Live: true, Spliced: true})}, true, true},
+		{"a file beside a live source", []Input{input("a", Fetch{}), input("b", Fetch{Live: true})}, true, false},
+		{"a live source beside one with seams", []Input{input("a", Fetch{Live: true}), input("b", Fetch{Spliced: true})}, true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Program{Inputs: tt.inputs}
+			if got := p.SplicedAcross(false); got != tt.distrust {
+				t.Errorf("SplicedAcross(false) = %v, want %v", got, tt.distrust)
+			}
+			if got := p.SplicedAcross(true); got != tt.trustLive {
+				t.Errorf("SplicedAcross(true) = %v, want %v", got, tt.trustLive)
+			}
+			// Distrusting live is what Seamed has always said.
+			if p.Seamed() != p.SplicedAcross(false) {
+				t.Errorf("Seamed() = %v differs from SplicedAcross(false) = %v", p.Seamed(), p.SplicedAcross(false))
+			}
+		})
+	}
+}

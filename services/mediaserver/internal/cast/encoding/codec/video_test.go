@@ -155,3 +155,35 @@ func TestTheVideoPlanTakesTheGPUPathOnlyWhenTheSourceQualifies(t *testing.T) {
 		})
 	}
 }
+
+// A server that copies live sources asks the plan as it asks any source: not spliced. What keeps that safe is that a copy
+// which breaks is remembered, so the retry decodes the same packets instead of copying them again.
+func TestACopyThatBrokeIsNotOfferedAgain(t *testing.T) {
+	h264 := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
+	probe := media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 1080, VideoBitDepth: 8}
+	for _, tt := range []struct {
+		name       string
+		spliced    bool
+		decode     media.Axes
+		wantCopy   bool
+		wantReason []Reason
+	}{
+		{name: "a live source trusted and unbroken is copied", wantCopy: true},
+		{name: "the same source after its copy broke is re-encoded", decode: media.Axes{Video: true}, wantReason: []Reason{reasonVideoCopyFailed}},
+		{name: "a source that declares its seams is never copied", spliced: true, wantReason: []Reason{reasonSpliced}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			in := Inputs{Caps: h264, Probe: probe, Measured: true, Into: testFormat(t, media.MPEGTS), MaxHeight: 1080, Spliced: tt.spliced, Decode: tt.decode, Encoders: hostEncoders}
+			track, refused, err := decideVideo(t.Context(), in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, encoded := track.Encode(); encoded == tt.wantCopy {
+				t.Errorf("re-encoded = %v, want a copy = %v", encoded, tt.wantCopy)
+			}
+			if !slices.Equal(refused, tt.wantReason) {
+				t.Errorf("reasons = %v, want %v", refused, tt.wantReason)
+			}
+		})
+	}
+}

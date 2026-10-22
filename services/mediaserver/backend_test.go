@@ -108,3 +108,14 @@ func TestTheConfiguredVideoBitrateReachesTheCastingMachinery(t *testing.T) {
 		t.Errorf("a server set to 8M casts at %s", got)
 	}
 }
+
+func TestTheCopyLiveSettingReachesTheCastingMachinery(t *testing.T) {
+	cfg := defaults()
+	if cfg.backend()(&mediav1.PlaybackSettings{}).(caster).machinery.CopyLive {
+		t.Error("an unset server copies live sources")
+	}
+	cfg.Servers.Media.CopyLive = true
+	if !cfg.backend()(&mediav1.PlaybackSettings{}).(caster).machinery.CopyLive {
+		t.Error("a server set to copy live sources does not tell its machinery")
+	}
+}

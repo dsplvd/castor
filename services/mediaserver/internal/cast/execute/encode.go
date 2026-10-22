@@ -56,7 +56,7 @@ func (s *preparation) encode(f feed, burn burnRenderer) (encodePlan, error) {
 		if err != nil {
 			return encodePlan{}, err
 		}
-		decided, err := s.decide(selected.Capabilities, into, facts, burnIn, f.spliced())
+		decided, err := s.decide(selected.Capabilities, into, facts, burnIn, s.spliced(f))
 		if err != nil {
 			planningErr = errors.Join(planningErr, fmt.Errorf("%s: %w", into.ContentType, err))
 			continue

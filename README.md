@@ -161,6 +161,8 @@ Your computer controls the TV; the NAS processes and serves media. Set `servers.
 
 When the media server has to re-encode video, it targets 4 Mbps H.264 by default (HEVC gets half). Raise or lower that on the server with `servers.media.video_bitrate`, for example `8M` or `6000k`, or `CASTOR_SERVERS__MEDIA__VIDEO_BITRATE=8M`. The value is the average and the ceiling; the buffer is twice it. It must be between `500k` and `40M`, and a server will not start on a value it cannot read. A source that can be copied is not re-encoded, so this setting does not apply to it.
 
+A live stream is always re-encoded by default, because a live playlist can change resolution or codec settings partway, which a copy would carry to the device unchanged. If your device can play the stream as it is (for example H.264 with AAC) and the server's CPU or GPU cannot keep up with re-encoding it, set `servers.media.copy_live: true` (or `CASTOR_SERVERS__MEDIA__COPY_LIVE=true`) to copy it instead; that costs almost no processing. A playlist that declares its own seams (`EXT-X-DISCONTINUITY`) is still re-encoded. If a copy fails, castor retries by re-encoding, but only for failures while the stream is being read, not once the device is already playing, so try it on your own streams first.
+
 For apps or a shared API, run each service separately:
 
 | Command | Default port | Runs where |

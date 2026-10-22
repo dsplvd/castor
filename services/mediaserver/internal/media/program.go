@@ -217,6 +217,12 @@ func (p Program) Seamed() bool {
 	return slices.ContainsFunc(p.Inputs, func(in Input) bool { return in.Fetch.seamed() })
 }
 
+// SplicedAcross reports that an input's timeline is known to break, or may: a live one can have a splice reload in at any time.
+// trustLive believes a live source until it shows otherwise, so only a playlist that declares its seams counts.
+func (p Program) SplicedAcross(trustLive bool) bool {
+	return slices.ContainsFunc(p.Inputs, func(in Input) bool { return in.Fetch.Spliced || in.Fetch.Live && !trustLive })
+}
+
 // PrimaryInput returns the input that owns the program clock (bool for incomplete program).
 func (p Program) PrimaryInput() (Input, bool) {
 	return p.LookupInput(p.ClockInput)

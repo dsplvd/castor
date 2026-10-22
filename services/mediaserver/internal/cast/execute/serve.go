@@ -25,7 +25,13 @@ type feed struct {
 }
 
 // spliced is whether the plan joins a seamed program itself; a buffer was made one stream by the floor.
-func (f feed) spliced() bool { return f.buffered == nil && f.program.Seamed() }
+// trustLive is a server's choice to believe a live source is one stream until its playlist says otherwise.
+func (f feed) spliced(trustLive bool) bool {
+	return f.buffered == nil && f.program.SplicedAcross(trustLive)
+}
+
+// spliced is whether this server's plan must join the feed itself: a live source is one stream only where the server trusts it.
+func (s *preparation) spliced(f feed) bool { return f.spliced(s.CopyLive) }
 
 // delivery is what serves a cast: the mechanism the device fetches from, and what writes the bytes it serves.
 type delivery struct {

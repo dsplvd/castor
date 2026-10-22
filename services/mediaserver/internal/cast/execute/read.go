@@ -46,7 +46,7 @@ func (s *preparation) read(work string, program media.Program) (*buffered, error
 		Into:      encoding.SpoolFormat,
 		Decode:    s.attempt.Decode,
 		MaxHeight: s.MaxHeight,
-		Spliced:   program.Seamed(),
+		Spliced:   program.SplicedAcross(s.CopyLive),
 		Rate:      s.VideoRate,
 		Encoders:  s.Encoders,
 	})

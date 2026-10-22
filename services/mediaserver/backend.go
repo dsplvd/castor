@@ -47,6 +47,7 @@ func (c *Config) backend() func(*mediav1.PlaybackSettings) cast.Caster {
 		Binary:     ffmpeg.Inspect(ffmpegBinary),
 		Encoders:   ffmpeg.Encoders(ffmpegBinary),
 		VideoRate:  c.Servers.Media.VideoBitrate,
+		CopyLive:   c.Servers.Media.CopyLive,
 		Probes:     probe.FFprobe(ffprobeBinary),
 		InputArgs:  formats.InputArgs,
 	}

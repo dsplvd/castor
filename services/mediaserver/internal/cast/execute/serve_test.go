@@ -461,3 +461,37 @@ func testEncoding(t *testing.T, opts encoding.EncodeOptions) encodePlan {
 	}
 	return encodePlan{EncodeOptions: opts, delivery: selected}
 }
+
+func TestALiveFeedIsOnlySplicedUntilItsServerTrustsLiveSources(t *testing.T) {
+	live := media.Program{Inputs: []media.Input{{ID: media.PrimaryInputID, Fetch: media.Fetch{Live: true}}}}
+	seamed := media.Program{Inputs: []media.Input{{ID: media.PrimaryInputID, Fetch: media.Fetch{Live: true, Spliced: true}}}}
+	for _, tt := range []struct {
+		name      string
+		feed      feed
+		trustLive bool
+		want      bool
+	}{
+		{"a live source, as ever", feed{program: live}, false, true},
+		{"a live source on a server that trusts it", feed{program: live}, true, false},
+		{"a source that declares its seams, trusted or not", feed{program: seamed}, true, true},
+		{"a buffer was made one stream by the floor", feed{program: live, buffered: &buffered{}}, false, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.feed.spliced(tt.trustLive); got != tt.want {
+				t.Errorf("spliced(%v) = %v, want %v", tt.trustLive, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAServerPlansLiveSourcesByItsOwnTrustInThem(t *testing.T) {
+	live := feed{program: media.Program{Inputs: []media.Input{{ID: media.PrimaryInputID, Fetch: media.Fetch{Live: true}}}}}
+	cautious := &preparation{}
+	trusting := &preparation{Machinery: Machinery{CopyLive: true}}
+	if !cautious.spliced(live) {
+		t.Error("a server that was not told to copy live sources plans a live one as one stream")
+	}
+	if trusting.spliced(live) {
+		t.Error("a server told to copy live sources still plans a live one as spliced")
+	}
+}

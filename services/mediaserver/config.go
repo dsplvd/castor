@@ -33,6 +33,9 @@ type ServerConfig struct {
 	Advertise string `yaml:"advertise" validate:"omitempty,http_url"`
 	// VideoBitrate is what re-encoded H.264 video is encoded at, such as 8M or 6000k; HEVC uses half of it.
 	VideoBitrate codec.Rate `yaml:"video_bitrate"`
+	// CopyLive stream-copies a live source the device can play as it is, rather than always re-encoding it. Off by default:
+	// a live stream can change resolution or codec parameters mid-way, which a copy carries to the device unchanged.
+	CopyLive bool `yaml:"copy_live"`
 	// FFmpeg names the tools installed on this host.
 	FFmpeg FFmpegConfig `yaml:"ffmpeg" validate:"required"`
 	// Whisper configures transcription performed by this media server.
