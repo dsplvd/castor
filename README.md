@@ -17,6 +17,9 @@
   <a href="https://github.com/stupside/homebrew-tap/blob/main/Casks/castor.rb">
     <img src="https://img.shields.io/badge/Homebrew-Available-FBB040?style=flat-square&logo=homebrew" alt="Homebrew">
   </a>
+  <a href="https://www.npmjs.com/package/@castor-dev/cli">
+    <img src="https://img.shields.io/npm/v/@castor-dev/cli?style=flat-square&logo=npm" alt="npm">
+  </a>
   <a href="https://github.com/stupside/castor/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/stupside/castor?style=flat-square" alt="License">
   </a>
