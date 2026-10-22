@@ -30,10 +30,12 @@ func (p candidateProbe) Inspect(ctx context.Context) (result source.Inspection, 
 	if stream.ContentType == "" {
 		stream.ContentType = formats.Identify(ctx, p.client, stream.URL, stream.Headers)
 	}
+	result.ContentType = stream.ContentType
 	if !media.IsSegmented(stream.ContentType) {
 		result.Info, result.Reach, err = p.binary.Link(probe.Link{URL: stream.URL, Headers: stream.Headers, InputArgs: formats.InputArgs(stream.ContentType, 0)}, fetchTimeout).Probe(ctx)
 		if err == nil {
 			stream.ContentType = p.stream.MeasuredContentType(result.Info)
+			result.ContentType = stream.ContentType
 			program, bindErr := source.ProgramFor(&stream)
 			if bindErr != nil {
 				return result, bindErr

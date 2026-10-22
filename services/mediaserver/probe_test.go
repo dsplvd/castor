@@ -59,7 +59,7 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 		switch r.URL.Path {
 		case "/master.m3u8":
 			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100000,RESOLUTION=160x96\nvideo.m3u8\n"))
-		case "/opaque":
+		case "/opaque", "/playlist.mp4":
 			if r.Header.Get("Authorization") != "Bearer fixture" {
 				http.Error(w, "missing auth", http.StatusUnauthorized)
 				return
@@ -150,6 +150,50 @@ func TestWrappedSegmentsAreMeasuredAndReadAsVideo(t *testing.T) {
 			}
 		})
 	}
+	for _, tc := range []struct{ path, mime string }{
+		{"/opaque", "application/vnd.apple.mpegurl"},
+		{"/opaque", "application/x-mpegurl"},
+		{"/opaque", "application/vnd.apple.mpegurl; charset=utf-8"},
+		// An unrecognized MIME type is no evidence: the playlist body decides.
+		{"/opaque", "text/plain"},
+		// A recognized MIME type outranks a misleading extension.
+		{"/playlist.mp4", "application/vnd.apple.mpegurl"},
+	} {
+		t.Run(tc.path+" "+tc.mime, func(t *testing.T) {
+			u, _ := url.Parse(server.URL + tc.path)
+			ranker := rank.New(rank.Config{ProbeMaxConcurrency: 1}, 0, func(ctx context.Context, s *source.Stream) (source.Inspection, error) {
+				return (candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: probe.FFprobe("ffprobe")}).Inspect(ctx)
+			})
+			measured, err := (caster{Ranker: ranker}).Measure(t.Context(), &source.Stream{URL: u, ContentType: tc.mime, Headers: http.Header{"Authorization": {"Bearer fixture"}}})
+			if err != nil || measured.Probe == nil || measured.Probe.VideoHeight != 96 || measured.ContentType != media.HLS {
+				t.Fatalf("HLS MIME alias was not measured as video: %+v, %v", measured, err)
+			}
+			resolved, err := resolver.Resolve(t.Context(), measured, source.Rendition{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info, ok := resolved.Program.Measurement(); !ok || !info.SourceUnwrapped {
+				t.Fatalf("HLS observation lost after ranking: %+v, %t", info, ok)
+			}
+		})
+	}
+	t.Run("container MIME with parameters", func(t *testing.T) {
+		u, _ := url.Parse(server.URL + "/plain.ts")
+		ranker := rank.New(rank.Config{ProbeMaxConcurrency: 1}, 0, func(ctx context.Context, s *source.Stream) (source.Inspection, error) {
+			return (candidateProbe{stream: s, client: client, resolver: resolver, timelines: timelines, binary: probe.FFprobe("ffprobe")}).Inspect(ctx)
+		})
+		measured, err := (caster{Ranker: ranker}).Measure(t.Context(), &source.Stream{URL: u, ContentType: "Video/MP2T; charset=binary"})
+		if err != nil || measured.Probe == nil || measured.ContentType != media.MPEGTS {
+			t.Fatalf("container MIME was not measured as its content type: %+v, %v", measured, err)
+		}
+		resolved, err := resolver.Resolve(t.Context(), measured, source.Rendition{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := resolved.Program.Measurement(); !ok {
+			t.Fatal("observation bound under another identity than ranking kept")
+		}
+	})
 	t.Run("static image rejected", func(t *testing.T) {
 		u, _ := url.Parse(server.URL + "/image.png")
 		ranker := rank.New(rank.Config{ProbeMaxConcurrency: 1}, 0, func(ctx context.Context, s *source.Stream) (source.Inspection, error) {

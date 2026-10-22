@@ -14,7 +14,7 @@ import (
 	"github.com/stupside/castor/services/mediaserver/internal/source"
 )
 
-// Probes measures one candidate.
+// Probes measures one candidate and names the content type it is read as.
 type Probes func(context.Context, *source.Stream) (source.Inspection, error)
 
 type Ranker struct {
@@ -125,13 +125,13 @@ func (r *Ranker) measureAll(ctx context.Context, streams []*source.Stream) []mea
 			// Carried, never re-derived: the ladder was read from a body only the browser held.
 			next := *s
 			next.Probe, next.Observation, next.LastResort = nil, nil, false
+			// Inspection's content type is the one its observation is bound under.
+			next.ContentType = inspection.ContentType
 			if err != nil {
 				slog.WarnContext(ctx, "probe failed", "url", s.URL, "reach", reach, "error", err)
 			} else {
 				next.Probe = &info
 				next.Observation = inspection.Observation
-				// A container the URL did not name is one the probe just established.
-				next.ContentType = s.MeasuredContentType(info)
 			}
 			out[i] = measured{Stream: &next, reach: reach}
 		})
