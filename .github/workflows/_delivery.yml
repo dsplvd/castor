@@ -202,6 +202,8 @@ jobs:
 
   npm:
     needs: publish
+    # Only the upstream project holds the npm scope and its trusted publisher; a fork stops after the image.
+    if: ${{ github.repository == 'stupside/castor' }}
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -226,7 +228,8 @@ jobs:
 
   brew:
     needs: publish
-    if: ${{ !contains(inputs.version, '-') }}
+    # Likewise the Homebrew tap: only upstream can push to it.
+    if: ${{ github.repository == 'stupside/castor' && !contains(inputs.version, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
