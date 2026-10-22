@@ -17,6 +17,9 @@
   <a href="https://github.com/stupside/homebrew-tap/blob/main/Casks/castor.rb">
     <img src="https://img.shields.io/badge/Homebrew-Available-FBB040?style=flat-square&logo=homebrew" alt="Homebrew">
   </a>
+  <a href="https://www.npmjs.com/package/@castor-dev/cli">
+    <img src="https://img.shields.io/npm/v/@castor-dev/cli?style=flat-square&logo=npm" alt="npm">
+  </a>
   <a href="https://github.com/stupside/castor/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/stupside/castor?style=flat-square" alt="License">
   </a>
@@ -37,10 +40,22 @@ No bundled content or sources; DRM streams are refused. Use content you are auth
 
 ## Quick start
 
-On macOS ([other platforms](#installation)):
+Install with one of (requirements in [Installation](#installation)):
 
 ```sh
+# macOS
 brew install --cask stupside/tap/castor
+
+# Any platform, Node 20+
+npm install -g @castor-dev/cli
+
+# From source, Go 1.27+ and cmake
+git clone --recurse-submodules https://github.com/stupside/castor.git && cd castor && make build
+```
+
+Then discover your devices:
+
+```sh
 castor scan
 ```
 
@@ -63,14 +78,11 @@ If discovery finds nothing, see [Troubleshooting](#troubleshooting).
 
 ## Installation
 
-Install Chrome/Chromium for webpage extraction, and **ffmpeg + ffprobe 7.1+** for media processing. Tools must be on `PATH`; encoding uses a working GPU encoder when available, with software fallback.
+Whichever way you install, you also need Chrome/Chromium for webpage extraction and **ffmpeg + ffprobe 7.1+** for media processing, on `PATH`. Encoding uses a working GPU encoder when available, with software fallback.
 
-| Platform | Install |
-| --- | --- |
-| macOS | `brew install --cask stupside/tap/castor` |
-| Linux | Extract the [release](https://github.com/stupside/castor/releases/latest) for your architecture and put `castor` on `PATH`. |
-| Windows | Extract the [release ZIP](https://github.com/stupside/castor/releases/latest) and put `castor.exe` on `PATH`. Install tools with `winget install Gyan.FFmpeg` and `winget install Google.Chrome`; allow Castor on private networks. |
-| From source | See [CONTRIBUTING.md](CONTRIBUTING.md). |
+On Windows: `winget install Gyan.FFmpeg` and `winget install Google.Chrome`, and allow Castor on private networks.
+
+No Homebrew or Node? Extract the [latest release](https://github.com/stupside/castor/releases/latest) for your platform (`.tar.gz` for Linux, `.zip` for Windows) and put `castor` or `castor.exe` on `PATH`.
 
 ## Commands
 
@@ -181,7 +193,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for service ownership and cast lifecycle.
 
 Devices fetch media and captions on **8410** for a standalone media server, or a random LAN port for an embedded one. Discovery uses SSDP UDP 1900 (DLNA/Roku) and mDNS UDP 5353 (Chromecast). Outbound control uses Chromecast TCP 8009, Roku TCP 8060 (80 for sideloading), or DLNA's advertised port. API and scraping ports are for service clients.
 
-Logs include a shared `cast_id` across services. With remote services, inspect each server's logs. Set `telemetry.endpoint` to export logs through OTLP/HTTP.
+Logs include a shared `cast_id` across services. With remote services, inspect each server's logs.
+
+Set `telemetry.endpoint` to an OTLP/HTTP collector's base URL to export logs, traces and metrics (castor adds `/v1/logs`, `/v1/traces` and `/v1/metrics`). Every service needs it, and trace context follows a cast across them. Exported records carry `castor.cast.id`, and castor's own names sit under `castor.`.
+
+```sh
+docker run --rm -p 3000:3000 -p 4318:4318 \
+  -v "$PWD/docker/grafana:/otel-lgtm/grafana/conf/provisioning/dashboards:ro" \
+  grafana/otel-lgtm   # Grafana on :3000 (admin/admin) with the Castor dashboard
+CASTOR_TELEMETRY__ENDPOINT=http://localhost:4318 castor cast
+```
 
 ## Docker
 

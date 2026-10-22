@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -24,20 +25,25 @@ func (fs Formats) Claiming(contentType string) Reader {
 	return opaque{}
 }
 
-// ContentTypeOf names what a link carries: its extension first, then a confirmed MIME type, else "".
-func (fs Formats) ContentTypeOf(u *url.URL, mime string) string {
-	ids := fs.identities()
-	if u != nil {
-		ext := strings.ToLower(path.Ext(u.Path))
-		for _, id := range ids {
-			if ext != "" && slices.Contains(id.Extensions, ext) {
-				return id.ContentType
-			}
+// Named is the content type a link's extension names, else "".
+func (fs Formats) Named(u *url.URL) string {
+	ext := strings.ToLower(path.Ext(u.Path))
+	for _, id := range fs.identities() {
+		if ext != "" && slices.Contains(id.Extensions, ext) {
+			return id.ContentType
 		}
 	}
-	mime = strings.ToLower(mime)
-	for _, id := range ids {
-		if mime != "" && slices.Contains(id.MIMETypes, mime) {
+	return ""
+}
+
+// Announced is the content type a server's MIME type names, aliases and parameters included, else "".
+func (fs Formats) Announced(mimeType string) string {
+	if parsed, _, err := mime.ParseMediaType(mimeType); err == nil {
+		mimeType = parsed
+	}
+	mimeType = strings.ToLower(mimeType)
+	for _, id := range fs.identities() {
+		if mimeType != "" && slices.Contains(id.MIMETypes, mimeType) {
 			return id.ContentType
 		}
 	}
@@ -57,7 +63,7 @@ const sniffBytes = 64 << 10
 
 // Identify names what a link carries: its name first, else the grammar of its body, since a script serves a playlist under any name.
 func (fs Formats) Identify(ctx context.Context, c Client, u *url.URL, headers http.Header) string {
-	if ct := fs.ContentTypeOf(u, ""); ct != "" {
+	if ct := fs.Named(u); ct != "" {
 		return ct
 	}
 	headers = headers.Clone()

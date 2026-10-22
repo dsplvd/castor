@@ -6,12 +6,15 @@ import (
 	"slices"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/recovery"
+	"github.com/stupside/castor/services/mediaserver/internal/cast/teardown"
 )
 
 // Preparation registers releases; the coordinator takes ownership after joining it.
 // All workers and publications are joined before any storage is released.
 // Passive resources are then released in reverse acquisition order.
 type releases struct {
+	// ctx is what stopping the workers cancels; their joins drop what that provoked.
+	ctx     context.Context
 	stack   []func() error
 	joins   []func() error
 	signals []func()
@@ -54,7 +57,7 @@ func (r *releases) release() error {
 	r.joins, r.stack = nil, nil
 	var errs []error
 	for _, join := range slices.Backward(joins) {
-		errs = append(errs, join())
+		errs = append(errs, teardown.Failures(r.ctx, join()))
 	}
 	for _, release := range slices.Backward(stack) {
 		errs = append(errs, release())
@@ -78,7 +81,7 @@ func (c *coordinator) join() error {
 		if op == c.terminal {
 			err = errors.Join(err, op.err)
 		} else {
-			err = errors.Join(err, unlessTeardown(op.err))
+			err = errors.Join(err, teardown.Failures(c.ctx, op.err))
 		}
 		if op.event == deliverySettled && op.err == nil {
 			c.delivered = true
@@ -105,25 +108,4 @@ func (c *coordinator) finish() (ran, error) {
 		err = &recovery.Interrupted{Cause: c.interruption, Failure: err}
 	}
 	return p.reached, err
-}
-
-// Ignore cancellation caused by joining workers, but retain failures joined to it.
-func unlessTeardown(err error) error {
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		var kept []error
-		for _, child := range joined.Unwrap() {
-			kept = append(kept, unlessTeardown(child))
-		}
-		return errors.Join(kept...)
-	}
-	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
-		if child := wrapped.Unwrap(); child != nil && unlessTeardown(child) == nil {
-			return nil
-		}
-		return err
-	}
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-	return err
 }
