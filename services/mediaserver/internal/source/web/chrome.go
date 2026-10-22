@@ -31,6 +31,15 @@ type chromeTransport struct {
 	speaksH2 map[string]bool
 }
 
+// newTransport is how castor reads origins: as Chrome does, unless the program replaced http.DefaultTransport,
+// which is then its own choice to respect (instrumentation, or a test standing in for an origin).
+func newTransport() http.RoundTripper {
+	if _, stock := http.DefaultTransport.(*http.Transport); !stock {
+		return http.DefaultTransport
+	}
+	return newChromeTransport()
+}
+
 func newChromeTransport() *chromeTransport {
 	t := &chromeTransport{speaksH2: map[string]bool{}}
 	base := http.DefaultTransport.(*http.Transport).Clone()

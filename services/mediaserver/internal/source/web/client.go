@@ -29,7 +29,7 @@ type client struct {
 func New(timeout time.Duration) source.Client {
 	// A CDN that authorises a session on the master (Akamai's hdntl) refuses every later read without its cookie.
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	return &client{http: &http.Client{Timeout: timeout, Jar: jar, Transport: newChromeTransport()}}
+	return &client{http: &http.Client{Timeout: timeout, Jar: jar, Transport: newTransport()}}
 }
 
 // Replay is h with the jar's cookies for u winning over a copy h took earlier: the jar holds what refreshed during resolution.

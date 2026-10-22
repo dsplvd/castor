@@ -42,3 +42,21 @@ func TestChromeTransportReadsHTTPSOverBothProtocols(t *testing.T) {
 		})
 	}
 }
+
+func TestAReplacedDefaultTransportIsRespected(t *testing.T) {
+	previous := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+	stub := roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, nil })
+	http.DefaultTransport = stub
+	if _, ok := newTransport().(roundTripFunc); !ok {
+		t.Errorf("newTransport = %T, want the program's own transport", newTransport())
+	}
+	http.DefaultTransport = previous
+	if _, ok := newTransport().(*chromeTransport); !ok {
+		t.Errorf("newTransport = %T, want the Chrome transport over the stock default", newTransport())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
