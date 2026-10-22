@@ -230,6 +230,12 @@ func (c *collector) hasHits() bool {
 	return len(c.captures) > 0
 }
 
+// hasStream reports whether anything that is not an advertisement was captured.
+func (c *collector) hasStream() bool {
+	hits, onlyAds, _ := c.progress()
+	return hits && !onlyAds
+}
+
 // progress reports whether anything was captured, whether all of it is ads, and what closes on the next capture.
 func (c *collector) progress() (hits, onlyAds bool, next <-chan struct{}) {
 	c.mu.Lock()

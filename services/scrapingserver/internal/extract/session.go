@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
@@ -45,6 +47,7 @@ func newSession(ctx context.Context, cfg BrowserConfig, targetURL string) (*sess
 	if err := chromedp.Run(taskCtx,
 		runtime.Enable(),
 		network.Enable(),
+		network.SetBlockedURLs().WithURLPatterns(blockedScripts()),
 		browser.SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorDeny),
 		profile.Apply(),
 	); err != nil {
@@ -80,6 +83,10 @@ func allocatorOpts(cfg BrowserConfig) []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-renderer-backgrounding", true),
 		chromedp.Flag("autoplay-policy", "no-user-gesture-required"),
 		chromedp.Flag("incognito", true),
+		// A player embedded from another site is a frame in its own process by default, and what such a frame fetches
+		// never reaches the listener on the page. In one process, its streams are seen where they are played.
+		chromedp.Flag("disable-features", "IsolateOrigins,site-per-process"),
+		chromedp.Flag("disable-site-isolation-trials", true),
 	}
 	// Only appended when wanted: its presence matters, not its value.
 	if cfg.Headless {
@@ -140,6 +147,7 @@ type action struct {
 // runActions drives the page until it has been driven as far as it can usefully be driven.
 func (s *session) runActions() {
 	actions := []action{
+		{"select source", func() error { return selectSources(s.ctx, s.collector.hasStream, sourceSettle, sourcePanelWait) }},
 		{"click player", func() error { return clickPlayer(s.ctx) }},
 		{"click", func() error { return click(s.ctx, s.centerX, s.centerY) }},
 		{"navigate iframe", func() error {
@@ -170,4 +178,102 @@ func (s *session) Close() {
 	s.cancel()
 	s.collector.close()
 	s.allocCancel()
+}
+
+//go:embed js/select_source.js
+var selectSourceJS string
+
+// sourcePick is what the page's list of sources offered: how many usable ones it holds, and where the asked-for one is.
+type sourcePick struct {
+	Total    int     `json:"total"`
+	Picked   bool    `json:"picked"`
+	Label    string  `json:"label"`
+	Panel    string  `json:"panel"`
+	Selected bool    `json:"selected"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+}
+
+// pickSource asks the page for the skip-th usable source of its list, scrolled into view. A page with no such list answers Picked false.
+func pickSource(ctx context.Context, skip int) (sourcePick, error) {
+	var pick sourcePick
+	err := chromedp.Run(ctx, chromedp.Evaluate("("+selectSourceJS+")("+strconv.Itoa(skip)+")", &pick))
+	return pick, err
+}
+
+// waitUntil polls done until it holds, d passes or ctx ends, and reports whether it held.
+func waitUntil(ctx context.Context, done func() bool, d time.Duration) bool {
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if done() {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			return done()
+		case <-tick.C:
+		}
+	}
+}
+
+// awaitSources is the first pick, once the page has had up to wait to list its sources. A page fills its list in after it has
+// loaded, so an empty page a moment in is not a page without sources; one that is already playing needs no source at all.
+func awaitSources(ctx context.Context, started func() bool, wait time.Duration) (sourcePick, error) {
+	var pick sourcePick
+	var err error
+	waitUntil(ctx, func() bool {
+		pick, err = pickSource(ctx, 0)
+		return err != nil || pick.Picked || started()
+	}, wait)
+	return pick, err
+}
+
+// selectSources works down the page's own list of sources, in its order, until one makes the player fetch a stream;
+// each gets settle to start. Anything the page does not list is left to the rest of the actions.
+// Many players sit idle until a source is chosen, so without this nothing is ever requested.
+func selectSources(ctx context.Context, started func() bool, settle, panelWait time.Duration) error {
+	for tried := range maxSourceAttempts {
+		var pick sourcePick
+		var err error
+		if tried == 0 {
+			pick, err = awaitSources(ctx, started, panelWait)
+		} else {
+			pick, err = pickSource(ctx, tried)
+		}
+		if err != nil {
+			return err
+		}
+		if !pick.Picked {
+			if tried == 0 {
+				slog.DebugContext(ctx, "the page lists no sources", "usable", pick.Total)
+			} else {
+				slog.DebugContext(ctx, "no more sources to try", "tried", tried, "usable", pick.Total)
+			}
+			return nil
+		}
+		slog.DebugContext(ctx, "selecting source", "label", pick.Label, "panel", pick.Panel, "source", tried+1, "of", pick.Total, "already_selected", pick.Selected)
+		// The page's own choice is left as it is; clicking it again would only restart it.
+		if !pick.Selected {
+			if err := click(ctx, pick.X, pick.Y); err != nil {
+				return err
+			}
+		}
+		if waitUntil(ctx, started, settle/2) {
+			return nil
+		}
+		// A player that loaded idle wants a click of its own.
+		if err := clickPlayer(ctx); err != nil {
+			slog.DebugContext(ctx, "player click after choosing a source failed", "error", err)
+		}
+		if waitUntil(ctx, started, settle/2) {
+			return nil
+		}
+		slog.DebugContext(ctx, "the source fetched no stream, trying the next", "label", pick.Label)
+	}
+	return nil
 }

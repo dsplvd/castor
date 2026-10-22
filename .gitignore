@@ -31,3 +31,4 @@ app/.yarn/
 /CONTEXT.md
 /services/scrapingserver/internal/extract/OVERLAYS.md
 /config.yaml.old
+/services/scrapingserver/internal/extract/SOURCES.md

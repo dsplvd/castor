@@ -31,4 +31,9 @@ const (
 	turnstileRetryTimeout  = 10 * time.Second
 	bypassTurnstileTimeout = 20 * time.Second
 	pageBudget             = 2 * time.Minute
+	// maxSourceAttempts is how many of a page's sources are tried before the rest of the page is driven, and sourceSettle how long each gets to start.
+	maxSourceAttempts = 3
+	sourceSettle      = 12 * time.Second
+	// sourcePanelWait is how long a page gets to list its sources: they are filled in after it loads.
+	sourcePanelWait = 8 * time.Second
 )
