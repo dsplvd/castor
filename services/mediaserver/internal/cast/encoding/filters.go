@@ -22,8 +22,29 @@ func scaleFilter(maxHeight media.HeightCap) string {
 // toneMap maps a PQ or HLG picture to BT.709 SDR in linear light.
 const toneMap = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
 
+// gpuScaleFilter resizes GPU frames like the CPU scale does, and fixes their format for the encoder.
+// The encoder's own filters (the upload) are not applied on this path: the frames never left the GPU.
+func gpuScaleFilter(venc codec.VideoEncode) string {
+	scale := venc.Encoder.GPU.Scale
+	switch {
+	case venc.MaxWidth > 0 && venc.MaxHeight > 0:
+		return fmt.Sprintf("%s=w='min(iw,%d)':h='min(ih,%d)':force_original_aspect_ratio=decrease:force_divisible_by=2:format=nv12", scale, venc.MaxWidth, int(venc.MaxHeight)&^1)
+	case venc.MaxHeight > 0:
+		return fmt.Sprintf("%s=w=-2:h='min(%d,max(2,trunc(ih/2)*2))':format=nv12", scale, int(venc.MaxHeight)&^1)
+	}
+	return scale + "=format=nv12"
+}
+
 // videoFilters is a re-encode's -vf chain, in the order the frames pass through it.
 func videoFilters(venc codec.VideoEncode) []string {
+	if venc.GPUDecode && venc.Encoder.GPU != nil {
+		// Deinterlacing, tone mapping and drawn subtitles need CPU frames, so a plan that has them never takes this path.
+		var filters []string
+		if venc.MaxFrameRate > 0 {
+			filters = append(filters, fmt.Sprintf("fps='min(source_fps,%s)'", strconv.FormatFloat(venc.MaxFrameRate, 'f', -1, 64)))
+		}
+		return append(filters, gpuScaleFilter(venc))
+	}
 	var filters []string
 	if venc.Deinterlace {
 		filters = append(filters, "bwdif=mode=send_frame")

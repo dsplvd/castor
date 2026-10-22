@@ -43,12 +43,13 @@ func (o EncodeOptions) Verbatim() bool {
 		o.Format.Delivery == container.DeliverStream
 }
 
-func encodeInputArgs(in EncodeInput) []string {
+func encodeInputArgs(in EncodeInput, videoArgs []string) []string {
 	if !in.piped {
-		return sourceInputArgs(in.source)
+		return sourceInputArgs(in.source, videoArgs)
 	}
 	args := paceArgs(in.pace, false)
 	args = append(args, demuxFlags...)
+	args = append(args, videoArgs...)
 	return append(args, "-f", SpoolFormat.Muxer, "-i", ffmpeg.StdinPipe)
 }
 
@@ -102,7 +103,7 @@ func EncodeArgs(opts EncodeOptions) (ffmpeg.Command, error) {
 
 	args := []string{"-hide_banner", "-nostats", "-loglevel", "level+warning"}
 	args = append(args, hardwareInitArgs(opts.Video)...)
-	args = append(args, encodeInputArgs(opts.Input)...)
+	args = append(args, encodeInputArgs(opts.Input, gpuDecodeArgs(opts.Video))...)
 	args = append(args, encodeMapArgs(opts)...)
 	args = append(args, codecs...)
 	args = append(args, "-strict", "-2")

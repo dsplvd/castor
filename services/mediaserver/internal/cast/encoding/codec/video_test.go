@@ -86,3 +86,72 @@ func TestWhatForcesAVideoReEncode(t *testing.T) {
 		})
 	}
 }
+
+func TestWhatKeepsASourceOffTheGPU(t *testing.T) {
+	proven := ffmpeg.Encoder{Name: "h264_vaapi", Codec: media.CodecH264, Hardware: true,
+		GPU: &ffmpeg.GPUPipeline{Codecs: []media.Codec{media.CodecH264}}}
+	unproven := ffmpeg.Encoder{Name: "h264_vaapi", Codec: media.CodecH264, Hardware: true, GPU: &ffmpeg.GPUPipeline{}}
+	software := ffmpeg.Encoder{Name: "libx264", Codec: media.CodecH264}
+	sdr := media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8}
+
+	for _, tt := range []struct {
+		name       string
+		enc        ffmpeg.Encoder
+		probe      media.ProbeInfo
+		burnIn     string
+		interlaced bool
+		want       bool
+	}{
+		{name: "a proven codec at 8 bits", enc: proven, probe: sdr, want: true},
+		{name: "an encoder with no GPU pipeline", enc: software, probe: sdr},
+		{name: "a pipeline that proved nothing", enc: unproven, probe: sdr},
+		{name: "a codec the GPU was not proven to decode", enc: proven, probe: media.ProbeInfo{VideoCodec: media.CodecHEVC, VideoBitDepth: 8}},
+		{name: "ten bits", enc: proven, probe: media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 10}},
+		{name: "a bit depth the probe did not report", enc: proven, probe: media.ProbeInfo{VideoCodec: media.CodecH264}},
+		{name: "a source of unknown codec", enc: proven, probe: media.ProbeInfo{VideoBitDepth: 8}},
+		{name: "HDR needs the CPU tone map", enc: proven, probe: media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoHDR: true}},
+		{name: "a turned picture needs a CPU filter", enc: proven, probe: media.ProbeInfo{VideoCodec: media.CodecH264, VideoBitDepth: 8, VideoRotation: 90}},
+		{name: "interlaced frames the device cannot weave", enc: proven, probe: sdr, interlaced: true},
+		{name: "drawn subtitles need CPU frames", enc: proven, probe: sdr, burnIn: "/tmp/cue.txt"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodesOnGPU(tt.enc, Inputs{Probe: tt.probe, BurnIn: tt.burnIn}, tt.interlaced); got != tt.want {
+				t.Errorf("decodesOnGPU = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTheVideoPlanTakesTheGPUPathOnlyWhenTheSourceQualifies(t *testing.T) {
+	gpu := ffmpeg.Encoder{Name: "h264_vaapi", Codec: media.CodecH264, Hardware: true,
+		GPU: &ffmpeg.GPUPipeline{Codecs: []media.Codec{media.CodecH264}}}
+	encoders := func(_ context.Context, c media.Codec) (ffmpeg.Encoder, bool) { return gpu, c == media.CodecH264 }
+	h264 := media.Capabilities{Formats: []media.FormatSupport{{Transport: media.TransportMP4, Video: media.VideoSupport{Codec: media.CodecH264}}}}
+
+	for _, tt := range []struct {
+		name   string
+		probe  media.ProbeInfo
+		burnIn string
+		want   bool
+	}{
+		{"8-bit H.264", media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 1080, VideoBitDepth: 8}, "", true},
+		{"10-bit H.264", media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 1080, VideoBitDepth: 10}, "", false},
+		{"8-bit H.264 with a burn-in", media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 1080, VideoBitDepth: 8}, "/tmp/cue.txt", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			// A spliced source cannot be copied, so the plan must re-encode it.
+			in := Inputs{Caps: h264, Probe: tt.probe, Measured: true, Into: testFormat(t, media.MPEGTS), MaxHeight: 1080, Spliced: true, BurnIn: tt.burnIn, Encoders: encoders}
+			track, _, err := decideVideo(t.Context(), in)
+			if err != nil {
+				t.Fatalf("decideVideo: %v", err)
+			}
+			enc, ok := track.Encode()
+			if !ok {
+				t.Fatal("the plan copies a spliced source")
+			}
+			if enc.GPUDecode != tt.want {
+				t.Errorf("GPUDecode = %v, want %v", enc.GPUDecode, tt.want)
+			}
+		})
+	}
+}

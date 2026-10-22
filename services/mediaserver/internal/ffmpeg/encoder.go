@@ -3,6 +3,7 @@ package ffmpeg
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,12 +15,28 @@ import (
 
 // Encoder is one concrete way to produce a codec: the ffmpeg -c:v name plus its command fragments.
 type Encoder struct {
-	Name     string      // -c:v value, e.g. "libx264", "hevc_videotoolbox"
-	Codec    media.Codec // the abstract codec produced, independent of the name
-	Hardware bool        // GPU-backed: trusted only after a real test encode
-	InitArgs []string    // emitted before the input: hardware device setup
-	Filters  []string    // appended to the -vf chain: e.g. the GPU upload
-	Flags    []string    // encoder-specific -c:v flags: preset, pix_fmt, GOP
+	Name     string       // -c:v value, e.g. "libx264", "hevc_videotoolbox"
+	Codec    media.Codec  // the abstract codec produced, independent of the name
+	Hardware bool         // GPU-backed: trusted only after a real test encode
+	InitArgs []string     // emitted before the input: hardware device setup
+	Filters  []string     // appended to the -vf chain: e.g. the GPU upload
+	Flags    []string     // encoder-specific -c:v flags: preset, pix_fmt, GOP
+	GPU      *GPUPipeline // how frames stay on the GPU from decode to encode; nil where the encoder has no such path
+}
+
+// GPUPipeline is a hardware encoder's way of keeping a picture on the GPU from decode to encode, so the CPU never touches it.
+type GPUPipeline struct {
+	InputArgs []string // input options for the video input: hardware decode into GPU frames
+	Scale     string   // the filter that resizes those frames
+	// Codecs are the source codecs this host has proven it can decode, scale and encode that way.
+	// It is empty until proven: an encoder that merely exists says nothing about what its GPU decodes.
+	Codecs []media.Codec
+}
+
+// DecodesOnGPU reports whether a source of codec, at bitDepth, can take the GPU path on this host.
+func (e Encoder) DecodesOnGPU(codec media.Codec, bitDepth int) bool {
+	// Only 8-bit is proven: a GPU that decodes a codec does not necessarily decode its 10-bit profiles.
+	return e.GPU != nil && bitDepth == 8 && slices.Contains(e.GPU.Codecs, codec)
 }
 
 const vaapiRenderNode = "/dev/dri/renderD128"
@@ -77,6 +94,10 @@ func vaapiEncoder(name string, codec media.Codec, node string) Encoder {
 		Name: name, Codec: codec, Hardware: true,
 		InitArgs: []string{"-init_hw_device", "vaapi=" + alias + ":" + node, "-filter_hw_device", alias},
 		Filters:  vaapiFilters,
+		GPU: &GPUPipeline{
+			InputArgs: []string{"-hwaccel", "vaapi", "-hwaccel_device", alias, "-hwaccel_output_format", "vaapi"},
+			Scale:     "scale_vaapi",
+		},
 	}
 }
 
@@ -98,6 +119,10 @@ type proof struct {
 	mu     sync.Mutex
 	tested bool
 	works  bool
+
+	// gpuTested and gpuCodecs are the GPU pipeline's own test, run only after the encoder itself works.
+	gpuTested bool
+	gpuCodecs []media.Codec
 }
 
 func (p *provenEncoders) best(ctx context.Context, codec media.Codec) (Encoder, bool) {
@@ -114,7 +139,7 @@ func (p *provenEncoders) best(ctx context.Context, codec media.Codec) (Encoder, 
 			if ran {
 				slog.InfoContext(ctx, "encoder selected", "encoder", e.Name, "codec", string(codec), "hardware", hardware)
 			}
-			return e, true
+			return p.withGPU(ctx, e), true
 		}
 	}
 	return Encoder{}, false
@@ -122,15 +147,7 @@ func (p *provenEncoders) best(ctx context.Context, codec media.Codec) (Encoder, 
 
 // available reports whether e works, and whether this call ran the test encode that proved it.
 func (p *provenEncoders) available(ctx context.Context, e Encoder) (works, ran bool) {
-	key := strings.Join(slices.Concat([]string{e.Name}, e.InitArgs, e.Filters, e.Flags), "\x00")
-	p.mu.Lock()
-	slot := p.slots[key]
-	if slot == nil {
-		slot = &proof{}
-		p.slots[key] = slot
-	}
-	p.mu.Unlock()
-
+	slot := p.slot(e)
 	slot.mu.Lock()
 	defer slot.mu.Unlock()
 	if slot.tested {
@@ -145,6 +162,103 @@ func (p *provenEncoders) available(ctx context.Context, e Encoder) (works, ran b
 		slog.InfoContext(ctx, "encoder unavailable", "encoder", e.Name, "hardware", e.Hardware)
 	}
 	return works, true
+}
+
+// slot is e's test record, made on first ask.
+func (p *provenEncoders) slot(e Encoder) *proof {
+	key := strings.Join(slices.Concat([]string{e.Name}, e.InitArgs, e.Filters, e.Flags), "\x00")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	slot := p.slots[key]
+	if slot == nil {
+		slot = &proof{}
+		p.slots[key] = slot
+	}
+	return slot
+}
+
+// withGPU is e with the source codecs its GPU pipeline has proven it decodes, testing them once.
+// A pipeline that cannot be proven stays empty, which sends every cast down the software decode path.
+func (p *provenEncoders) withGPU(ctx context.Context, e Encoder) Encoder {
+	if e.GPU == nil {
+		return e
+	}
+	slot := p.slot(e)
+	slot.mu.Lock()
+	defer slot.mu.Unlock()
+	if !slot.gpuTested {
+		codecs := testGPUPipeline(ctx, p.ffmpegPath, e)
+		// A cancelled test proves nothing, and remembering it would disable working hardware.
+		if ctx.Err() != nil {
+			return e
+		}
+		slot.gpuTested, slot.gpuCodecs = true, codecs
+		if len(codecs) > 0 {
+			slog.InfoContext(ctx, "GPU decode proven", "encoder", e.Name, "source_codecs", codecs)
+		} else {
+			slog.InfoContext(ctx, "GPU decode unavailable, decoding on the CPU", "encoder", e.Name)
+		}
+	}
+	gpu := *e.GPU
+	gpu.Codecs = slices.Clone(slot.gpuCodecs)
+	e.GPU = &gpu
+	return e
+}
+
+// gpuSources are the source codecs a GPU pipeline is tried on, each with the software encoder that makes a clip of it.
+var gpuSources = []struct {
+	codec media.Codec
+	clip  []string
+}{
+	{media.CodecH264, []string{"-c:v", "libx264", "-pix_fmt", "yuv420p"}},
+	{media.CodecHEVC, []string{"-c:v", "libx265", "-pix_fmt", "yuv420p", "-x265-params", "log-level=error"}},
+}
+
+// testGPUPipeline returns the source codecs e decodes, scales and encodes without a frame leaving the GPU.
+func testGPUPipeline(ctx context.Context, ffmpegPath string, e Encoder) []media.Codec {
+	dir, err := os.MkdirTemp("", "castor-gpu-")
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	var proven []media.Codec
+	for _, source := range gpuSources {
+		clip := filepath.Join(dir, string(source.codec)+".ts")
+		if ctx.Err() != nil || !makeClip(ctx, ffmpegPath, clip, source.clip) {
+			continue
+		}
+		if testDecode(ctx, ffmpegPath, e, clip) {
+			proven = append(proven, source.codec)
+		}
+	}
+	return proven
+}
+
+// makeClip writes a short software-encoded clip of one codec, the source the GPU is asked to decode.
+func makeClip(ctx context.Context, ffmpegPath, path string, encode []string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	args := []string{"-hide_banner", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=0.4"}
+	args = append(args, encode...)
+	args = append(args, "-f", "mpegts", path)
+	_, err := Run(ctx, ffmpegPath, args, nil, nil)
+	return err == nil
+}
+
+// testDecode runs the clip through e's whole GPU pipeline, scaling as a cast does.
+func testDecode(ctx context.Context, ffmpegPath string, e Encoder, clip string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	args := append([]string{"-hide_banner"}, e.InitArgs...)
+	args = append(args, e.GPU.InputArgs...)
+	args = append(args, "-i", clip,
+		"-vf", e.GPU.Scale+"=w='min(iw,320)':h='min(ih,180)':force_original_aspect_ratio=decrease:force_divisible_by=2:format=nv12",
+		"-c:v", e.Name)
+	args = append(args, e.Flags...)
+	args = append(args, "-f", "null", "-")
+	_, err := Run(ctx, ffmpegPath, args, nil, nil)
+	return err == nil
 }
 
 // testEncode encodes one tenth of a second with e's own device setup and filters.

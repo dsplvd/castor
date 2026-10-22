@@ -80,6 +80,15 @@ func hardwareInitArgs(video codec.Track[codec.VideoEncode]) []string {
 	return venc.Encoder.InitArgs
 }
 
+// gpuDecodeArgs are the input options that decode the video input on the GPU, or nil for a CPU decode.
+func gpuDecodeArgs(video codec.Track[codec.VideoEncode]) []string {
+	venc, ok := video.Encode()
+	if !ok || !venc.GPUDecode || venc.Encoder.GPU == nil {
+		return nil
+	}
+	return venc.Encoder.GPU.InputArgs
+}
+
 type axisArgs struct {
 	args       []string
 	movFlags   []string

@@ -140,18 +140,23 @@ func readArgs(p fetch.Policy) []string {
 var demuxFlags = []string{"-fflags", "+genpts+discardcorrupt"}
 
 // sourceInputArgs renders each input with its fetch policy, headers, and pace.
-func sourceInputArgs(source ProgramSource) []string {
+// videoArgs are input options for the input that carries the picture, such as decoding it on the GPU.
+func sourceInputArgs(source ProgramSource, videoArgs []string) []string {
+	videoTrack, _, hasVideo := source.program.TrackInput(media.TrackVideo)
 	var args []string
 	// A seam's jump is a discontinuity, not a gap (the default 10s stretches it); ffmpeg holds it for the whole read.
 	if source.program.Seamed() {
 		args = append(args, "-dts_delta_threshold", "1")
 	}
-	for _, input := range source.inputs() {
+	for id, input := range source.inputs() {
 		args = append(args, demuxFlags...)
 		args = append(args, paceArgs(input.fetch.Pace, source.binary.Catchup)...)
 		args = append(args, source.openArgs(input)...)
 		if input.offset != 0 {
 			args = append(args, "-itsoffset", formatSeconds(input.offset))
+		}
+		if hasVideo && id == videoTrack.Input {
+			args = append(args, videoArgs...)
 		}
 		args = append(args, "-i", input.url.String())
 	}

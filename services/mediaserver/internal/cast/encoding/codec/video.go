@@ -64,13 +64,15 @@ func decideVideo(ctx context.Context, in Inputs) (Track[VideoEncode], []Reason, 
 	if !ok {
 		return Track[VideoEncode]{}, refused, noVideoEncoder(in.Caps)
 	}
+	interlaced := in.Probe.VideoInterlaced && !in.Caps.Deinterlaces
 	return Encode(VideoEncode{
 		Encoder:             enc,
 		Profile:             t.profile,
 		Level:               t.level,
 		MaxWidth:            t.width,
-		Deinterlace:         in.Probe.VideoInterlaced && !in.Caps.Deinterlaces,
+		Deinterlace:         interlaced,
 		ToneMap:             in.Probe.VideoHDR,
+		GPUDecode:           decodesOnGPU(enc, in, interlaced),
 		MaxFrameRate:        min(playbackFrameRate, t.frameRate),
 		Bitrate:             t.bitrate,
 		Maxrate:             t.maxrate,
@@ -79,6 +81,15 @@ func decideVideo(ctx context.Context, in Inputs) (Track[VideoEncode], []Reason, 
 		KeyframeIntervalSec: keyframeSeconds,
 		SubtitleTextFile:    in.BurnIn,
 	}), refused, nil
+}
+
+// decodesOnGPU reports whether this source can stay on the GPU from decode to encode.
+// Anything that needs a CPU filter (deinterlacing, tone mapping, drawn subtitles, a turn) or a
+// stream the GPU was never proven to decode keeps the CPU path, which is the safe one.
+func decodesOnGPU(enc ffmpeg.Encoder, in Inputs, interlaced bool) bool {
+	p := in.Probe
+	return enc.DecodesOnGPU(p.VideoCodec, p.VideoBitDepth) &&
+		!interlaced && !p.VideoHDR && p.VideoRotation == 0 && in.BurnIn == ""
 }
 
 // playbackFrameRate is the most any device castor serves shows in a second; above it a re-encode drops frames.

@@ -96,6 +96,9 @@ type VideoEncode struct {
 	ToneMap bool
 	// MaxFrameRate drops frames above it; 0 keeps the source's rate.
 	MaxFrameRate float64
+	// GPUDecode decodes the source on the encoder's GPU and keeps the frames there through the scale to the encode.
+	// Only set when the source qualifies; every other cast decodes on the CPU.
+	GPUDecode bool
 }
 
 func (e VideoEncode) name() string { return e.Encoder.Name }
