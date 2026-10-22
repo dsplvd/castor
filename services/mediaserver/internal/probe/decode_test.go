@@ -231,3 +231,37 @@ func TestSelectedVideoOffsetUsesItsInputClock(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeReadsTheAudioProfile(t *testing.T) {
+	// A copy cannot tell HE-AAC from AAC-LC by its codec name alone: the profile is what decides whether mp4 can carry it.
+	lc := `{"codec_type":"audio","codec_name":"aac","profile":"LC","channels":2,"sample_rate":"48000"}`
+	he := `{"codec_type":"audio","codec_name":"aac","profile":"HE-AAC","channels":2,"sample_rate":"48000"}`
+	ac3 := `{"codec_type":"audio","codec_name":"ac3","channels":6}`
+	for _, tc := range []struct {
+		name         string
+		streams      string
+		audioIndex   int
+		wantProfile  media.Profile
+		wantTrackFor map[int]media.Profile
+	}{
+		{"plain AAC-LC", h264Stream + "," + lc, 0, "LC", map[int]media.Profile{0: "LC"}},
+		{"HE-AAC", h264Stream + "," + he, 0, "HE-AAC", map[int]media.Profile{0: "HE-AAC"}},
+		{"a codec with no profile", h264Stream + "," + ac3, 0, "", map[int]media.Profile{0: ""}},
+		{"the selected track decides, and each track keeps its own", h264Stream + "," + lc + "," + he, 1, "HE-AAC", map[int]media.Profile{0: "LC", 1: "HE-AAC"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info, err := decode(probeJSON(vodFormat, tc.streams), 0, tc.audioIndex)
+			if err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if info.AudioProfile != tc.wantProfile {
+				t.Errorf("AudioProfile = %q, want %q", info.AudioProfile, tc.wantProfile)
+			}
+			for i, want := range tc.wantTrackFor {
+				if got := info.AudioTracks[i].Profile; got != want {
+					t.Errorf("track %d profile = %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}

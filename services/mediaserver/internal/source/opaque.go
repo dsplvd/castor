@@ -34,7 +34,7 @@ func (opaque) Resolve(_ context.Context, env Env, s Subject) (Resolution, error)
 		track := probe.AudioTracks[index]
 		chosen.AudioLanguage = track.Language
 		measurement := probe.Clone()
-		measurement.AudioCodec, measurement.AudioChannels, measurement.AudioSampleRate = track.Codec, track.Channels, track.SampleRate
+		measurement.AudioCodec, measurement.AudioProfile, measurement.AudioChannels, measurement.AudioSampleRate = track.Codec, track.Profile, track.Channels, track.SampleRate
 		program.SetMeasurement(measurement)
 	}
 	return Resolution{Program: program, Origin: s.Origin, Rendition: chosen}, nil

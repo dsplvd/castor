@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stupside/castor/services/mediaserver/internal/cast/encoding/container"
@@ -73,4 +74,56 @@ func testFormat(t *testing.T, contentType string) container.Format {
 		t.Fatalf("no producible format for %q", contentType)
 	}
 	return f
+}
+
+// HE-AAC cannot be copied into mp4, but its picture can: the axes are decided apart, so a stream like that keeps its
+// video as it is and re-encodes only its sound.
+func TestHEAACIsReEncodedForMP4ButItsPictureStaysCopied(t *testing.T) {
+	support := func(transport media.Transport) media.FormatSupport {
+		return media.FormatSupport{
+			Transport: transport,
+			Video:     media.VideoSupport{Codec: media.CodecH264},
+			Audio:     media.AudioSupport{Codec: media.CodecAAC, MaxChannels: 6},
+		}
+	}
+	aacDevice := media.Capabilities{Formats: []media.FormatSupport{support(media.TransportMP4), support(media.TransportMPEGTS)}}
+	probe := func(profile media.Profile) media.ProbeInfo {
+		return media.ProbeInfo{VideoCodec: media.CodecH264, VideoHeight: 1080, VideoBitDepth: 8,
+			AudioCodec: media.CodecAAC, AudioProfile: profile, AudioChannels: 2, AudioSampleRate: 48000}
+	}
+	for _, tt := range []struct {
+		name      string
+		profile   media.Profile
+		into      string
+		wantCopy  bool
+		wantAudio []Reason
+	}{
+		{"AAC-LC into mp4 is copied", "LC", media.MP4, true, nil},
+		{"HE-AAC into mp4 is re-encoded", "HE-AAC", media.MP4, false, []Reason{reasonContainerAudio}},
+		{"HE-AACv2 into mp4 is re-encoded", "HE-AACv2", media.MP4, false, []Reason{reasonContainerAudio}},
+		{"HE-AAC into mpegts is copied, ADTS keeps its SBR", "HE-AAC", media.MPEGTS, true, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			in := Inputs{Caps: aacDevice, Probe: probe(tt.profile), Measured: true, Into: testFormat(t, tt.into), MaxHeight: 1080, Encoders: hostEncoders}
+			plan, err := Served(t.Context(), in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Video.Action() != CopyTrack {
+				t.Errorf("video was not copied: %v", plan.Video.Action())
+			}
+			if copied := plan.Audio.Action() == CopyTrack; copied != tt.wantCopy {
+				t.Errorf("audio copied = %v, want %v (refusals %v)", copied, tt.wantCopy, plan.Refusals)
+			}
+			if !tt.wantCopy {
+				audio, ok := plan.Audio.Encode()
+				if !ok || audio.Codec != media.CodecAAC {
+					t.Errorf("audio plan = %+v, want an AAC re-encode", audio)
+				}
+				if !slices.Equal(plan.Refusals, tt.wantAudio) {
+					t.Errorf("reasons = %v, want %v", plan.Refusals, tt.wantAudio)
+				}
+			}
+		})
+	}
 }

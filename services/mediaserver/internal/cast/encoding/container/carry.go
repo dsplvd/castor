@@ -37,6 +37,12 @@ var audioRules = []rule{
 	func(c media.Codec, _ media.ProbeInfo, into Format) bool {
 		return outOfBand(into) && slices.Contains([]media.Codec{"aac_latm", "wmav2", "pcm_mulaw", "pcm_alaw"}, c)
 	},
+	// HE-AAC marks its SBR extension implicitly, which an MPEG-TS (ADTS) stream can keep but the mp4 family's audio
+	// config cannot say: copied across, the config describes plain AAC at the wrong rate and a Chrome-based receiver
+	// fails on the first audio packet. Only re-encoding it gives the mp4 family a config that is true.
+	func(c media.Codec, probe media.ProbeInfo, into Format) bool {
+		return outOfBand(into) && c == media.CodecAAC && strings.HasPrefix(string(probe.AudioProfile), "HE-AAC")
+	},
 	// The one rule here that no artifact can reveal.
 	func(c media.Codec, probe media.ProbeInfo, into Format) bool {
 		return c == media.CodecTrueHD && into.Muxer == ffmpeg.FormatMP4 && !probe.HasVideo()

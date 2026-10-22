@@ -32,6 +32,13 @@ func TestUncarriedMatrix(t *testing.T) {
 		{"flv1 is private data in mpegts", media.ProbeInfo{VideoCodec: "flv1", AudioCodec: media.CodecAAC}, mpegts, true, false},
 		{"mpeg2 travels in mpegts", media.ProbeInfo{VideoCodec: "mpeg2video", AudioCodec: media.CodecAAC}, mpegts, false, false},
 		{"truehd alone in a fragmented mp4 is sliced wrong", media.ProbeInfo{AudioCodec: media.CodecTrueHD}, mp4, false, true},
+		// HE-AAC's SBR is implicit in ADTS, and the mp4 family's audio config cannot say it.
+		{"HE-AAC travels in mpegts", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC, AudioProfile: "HE-AAC"}, mpegts, false, false},
+		{"HE-AAC is uncarried by mp4", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC, AudioProfile: "HE-AAC"}, mp4, false, true},
+		{"HE-AACv2 is uncarried by mp4", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC, AudioProfile: "HE-AACv2"}, mp4, false, true},
+		{"AAC-LC travels in mp4", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC, AudioProfile: "LC"}, mp4, false, false},
+		{"AAC of unknown profile is not refused", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAAC}, mp4, false, false},
+		{"a codec that is not AAC is not judged by its profile", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecAC3, AudioProfile: "HE-AAC"}, mp4, false, false},
 		{"truehd beside video is correct", media.ProbeInfo{VideoCodec: media.CodecH264, AudioCodec: media.CodecTrueHD}, mp4, false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

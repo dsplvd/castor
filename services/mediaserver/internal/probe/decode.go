@@ -119,11 +119,12 @@ func decode(out []byte, videoIndex, audioIndex int) (media.ProbeInfo, error) {
 		case "audio":
 			sampleRate, _ := strconv.Atoi(s.SampleRate)
 			info.AudioTracks = append(info.AudioTracks, media.AudioTrack{
-				Language: s.Tags.Language, Codec: media.Codec(s.CodecName), Channels: s.Channels, SampleRate: sampleRate, Default: s.Disposition.Default != 0,
+				Language: s.Tags.Language, Codec: media.Codec(s.CodecName), Profile: media.Profile(s.Profile), Channels: s.Channels, SampleRate: sampleRate, Default: s.Disposition.Default != 0,
 			})
 			if audioSeen == audioIndex {
 				info.AudioPresent = true
 				info.AudioCodec = media.Codec(s.CodecName)
+				info.AudioProfile = media.Profile(s.Profile)
 				info.AudioChannels = s.Channels
 				info.AudioSampleRate = sampleRate
 			}

@@ -35,9 +35,11 @@ type ProbeInfo struct {
 	// Add the program input offset to locate the picture on the PCM clock.
 	VideoStartOffset *time.Duration
 
-	AudioCodec      Codec // e.g. CodecAAC, CodecAC3
-	AudioChannels   int   // channel count (2 = stereo, 6 = 5.1, 8 = 7.1), 0 if unknown
-	AudioSampleRate int   // Hz, 0 if unknown
+	AudioCodec    Codec // e.g. CodecAAC, CodecAC3
+	AudioChannels int   // channel count (2 = stereo, 6 = 5.1, 8 = 7.1), 0 if unknown
+	// AudioProfile is the codec's profile as ffprobe names it, such as LC, HE-AAC or HE-AACv2; empty where the codec has none or it is unknown.
+	AudioProfile    Profile
+	AudioSampleRate int // Hz, 0 if unknown
 	// AudioTracks are the input's audio tracks in ffmpeg's kind-relative order.
 	AudioTracks []AudioTrack
 
@@ -55,6 +57,7 @@ type ProbeInfo struct {
 type AudioTrack struct {
 	Language   string
 	Codec      Codec
+	Profile    Profile
 	Channels   int
 	SampleRate int
 	Default    bool
@@ -74,7 +77,7 @@ func (p ProbeInfo) TakeVideo(m ProbeInfo) ProbeInfo {
 // TakeAudio is p with every sound fact taken from m; a new audio field is carried here or nowhere.
 func (p ProbeInfo) TakeAudio(m ProbeInfo) ProbeInfo {
 	p.AudioPresent = m.AudioPresent
-	p.AudioCodec, p.AudioChannels, p.AudioSampleRate = m.AudioCodec, m.AudioChannels, m.AudioSampleRate
+	p.AudioCodec, p.AudioProfile, p.AudioChannels, p.AudioSampleRate = m.AudioCodec, m.AudioProfile, m.AudioChannels, m.AudioSampleRate
 	p.AudioTracks = slices.Clone(m.AudioTracks)
 	return p
 }
