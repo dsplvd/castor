@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/publicsuffix"
@@ -23,6 +25,65 @@ import (
 // client reads an origin over net/http with the session its documents opened; satisfies source.Client.
 type client struct {
 	http *http.Client
+
+	mu sync.Mutex
+	// unreferred is the hosts found to refuse a request that names the page it came from, and to answer one that does not.
+	unreferred map[string]bool
+}
+
+// referral is the headers that name the page a request came from.
+var referral = []string{"Origin", "Referer"}
+
+func hasReferral(h http.Header) bool {
+	return slices.ContainsFunc(referral, func(name string) bool { return h.Get(name) != "" })
+}
+
+func dropReferral(h http.Header) {
+	for _, name := range referral {
+		h.Del(name)
+	}
+}
+
+func (c *client) asksWithoutReferral(host string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.unreferred[host]
+}
+
+func (c *client) learnUnreferred(host string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.unreferred == nil {
+		c.unreferred = map[string]bool{}
+	}
+	c.unreferred[host] = true
+}
+
+// send is hc.Do for req, except that a host which answers 403 to a request naming the page it came from is asked again without
+// that naming, and remembered if that works. A CDN behind a player's origin often turns away the page's Origin and Referer on
+// some of its hosts while the others accept them; the player's own fetches were not all made the same way as the one captured.
+func (c *client) send(hc *http.Client, req *http.Request) (*http.Response, error) {
+	host := req.URL.Host
+	if c.asksWithoutReferral(host) {
+		dropReferral(req.Header)
+	}
+	resp, err := hc.Do(req)
+	if err != nil || resp.StatusCode != http.StatusForbidden || !hasReferral(req.Header) {
+		return resp, err
+	}
+	bare := req.Clone(req.Context())
+	dropReferral(bare.Header)
+	retry, err := hc.Do(bare)
+	if err != nil {
+		// The refusal stands; the retry only failed to answer.
+		return resp, nil
+	}
+	_ = resp.Body.Close()
+	if retry.StatusCode >= 200 && retry.StatusCode < 300 {
+		slog.InfoContext(req.Context(), "a host refuses requests that name the page they came from; asking it without", "host", host)
+		c.learnUnreferred(host)
+	}
+	return retry, nil
 }
 
 // New reads origins with documents bounded by timeout, sharing one cookie session across every read, over TLS that looks like Chrome's.
@@ -60,7 +121,7 @@ func (c *client) Fetch(ctx context.Context, u *url.URL, h http.Header) (string, 
 	maps.Copy(req.Header, h)
 	withoutJarred(req, c.http.Jar.Cookies(u))
 
-	resp, err := c.http.Do(req)
+	resp, err := c.send(c.http, req)
 	if err != nil {
 		return "", u, 0, fmt.Errorf("fetching document: %w", err)
 	}
@@ -96,7 +157,7 @@ func (c *client) Read(ctx context.Context, u *url.URL, h http.Header, r timeline
 	// Media is read for as long as it takes to arrive, bounded by the caller rather than the document timeout.
 	reader := *c.http
 	reader.Timeout = 0
-	resp, err := reader.Do(req)
+	resp, err := c.send(&reader, req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching media: %w", err)
 	}

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,4 +140,150 @@ func reaching(origin *httptest.Server, timeout time.Duration) *client {
 	c := New(timeout).(*client)
 	c.http.Transport = origin.Client().Transport
 	return c
+}
+
+// referralRefuser is an origin like the CDN host that answers 403 to any request naming the page it came from.
+type referralRefuser struct {
+	mu                    sync.Mutex
+	withReferral, without int
+	last                  http.Header
+}
+
+func (o *referralRefuser) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if r.Header.Get("Referer") != "" || r.Header.Get("Origin") != "" {
+		o.withReferral++
+		http.Error(w, "hotlinking", http.StatusForbidden)
+		return
+	}
+	o.without++
+	o.last = r.Header.Clone()
+	if r.Header.Get("Range") != "" {
+		w.Header().Set("Content-Range", "bytes 0-4/5")
+		w.WriteHeader(http.StatusPartialContent)
+	}
+	_, _ = w.Write([]byte("media"))
+}
+
+func (o *referralRefuser) counts() (withReferral, without int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.withReferral, o.without
+}
+
+var pageHeaders = http.Header{
+	"Origin":     {"https://player.example"},
+	"Referer":    {"https://player.example/"},
+	"User-Agent": {"castor-test"},
+}
+
+func TestAHostThatRefusesTheReferralIsAskedWithoutItAndRemembered(t *testing.T) {
+	origin := &referralRefuser{}
+	srv := httptest.NewServer(origin)
+	t.Cleanup(srv.Close)
+	client := reaching(srv, 5*time.Second)
+	u := sourcetest.URL(t, srv.URL+"/segment")
+
+	for i := range 3 {
+		body, _, status, err := client.Fetch(t.Context(), u, pageHeaders)
+		if err != nil || status != http.StatusOK || body != "media" {
+			t.Fatalf("read %d = (%q, %d, %v), want the segment", i+1, body, status, err)
+		}
+	}
+	// One refusal taught the client; the two reads after it went out bare at once.
+	if refused, served := origin.counts(); refused != 1 || served != 3 {
+		t.Errorf("origin saw %d referred requests and %d bare ones, want 1 and 3", refused, served)
+	}
+	// Only the page's naming is dropped: the rest of the browser's headers still go.
+	if got := origin.last.Get("User-Agent"); got != "castor-test" {
+		t.Errorf("User-Agent on the bare request = %q, want it kept", got)
+	}
+}
+
+func TestMediaReadsAreAskedWithoutTheReferralToo(t *testing.T) {
+	origin := &referralRefuser{}
+	srv := httptest.NewServer(origin)
+	t.Cleanup(srv.Close)
+	client := reaching(srv, 5*time.Second)
+	body, err := client.Read(t.Context(), sourcetest.URL(t, srv.URL+"/segment"), pageHeaders, timeline.Range{Offset: 0, Length: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(body)
+	_ = body.Close()
+	if string(got) != "media" {
+		t.Errorf("read %q, want the segment", got)
+	}
+	// The retry keeps what the read asked for besides the referral.
+	if r := origin.last.Get("Range"); r != "bytes=0-4" {
+		t.Errorf("Range on the bare request = %q, want bytes=0-4", r)
+	}
+}
+
+func TestAHostThatRefusesEverythingStillRefusesAndIsNotRemembered(t *testing.T) {
+	var requests, referred atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Header.Get("Referer") != "" {
+			referred.Add(1)
+		}
+		http.Error(w, "gone", http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	client := reaching(srv, 5*time.Second)
+	u := sourcetest.URL(t, srv.URL+"/segment")
+
+	for range 2 {
+		if _, _, status, err := client.Fetch(t.Context(), u, pageHeaders); err == nil || status != http.StatusForbidden {
+			t.Fatalf("Fetch = (%d, %v), want the origin's own 403", status, err)
+		}
+	}
+	// Each read asked once with the referral and once without; a refusal that was no one's fault is never learned.
+	if requests.Load() != 4 || referred.Load() != 2 {
+		t.Errorf("origin saw %d requests, %d of them referred, want 4 and 2", requests.Load(), referred.Load())
+	}
+}
+
+func TestAHostThatAcceptsTheReferralIsNotAskedTwice(t *testing.T) {
+	var requests, referred atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Header.Get("Referer") != "" && r.Header.Get("Origin") != "" {
+			referred.Add(1)
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+	client := reaching(srv, 5*time.Second)
+	if body, _, status, err := client.Fetch(t.Context(), sourcetest.URL(t, srv.URL+"/a"), pageHeaders); err != nil || status != 200 || body != "ok" {
+		t.Fatalf("Fetch = (%q, %d, %v)", body, status, err)
+	}
+	if requests.Load() != 1 || referred.Load() != 1 {
+		t.Errorf("origin saw %d requests (%d referred), want one, referred as asked", requests.Load(), referred.Load())
+	}
+}
+
+func TestWhatOneHostRefusesDoesNotChangeAnotherHost(t *testing.T) {
+	refuser, friendly := &referralRefuser{}, &referralRefuser{}
+	a, b := httptest.NewServer(refuser), httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Referer") == "" {
+			friendly.mu.Lock()
+			friendly.without++ // a bare request here would mean the other host's lesson leaked
+			friendly.mu.Unlock()
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(a.Close)
+	t.Cleanup(b.Close)
+	client := reaching(a, 5*time.Second)
+	if _, _, _, err := client.Fetch(t.Context(), sourcetest.URL(t, a.URL+"/s"), pageHeaders); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := client.Fetch(t.Context(), sourcetest.URL(t, b.URL+"/s"), pageHeaders); err != nil {
+		t.Fatal(err)
+	}
+	if _, without := friendly.counts(); without != 0 {
+		t.Errorf("the second host was asked without the referral %d time(s) because of the first", without)
+	}
 }
