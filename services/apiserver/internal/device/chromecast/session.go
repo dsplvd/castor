@@ -5,7 +5,9 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
+	"os"
 	"sync"
 
 	castmedia "github.com/vishen/go-chromecast/cast"
@@ -57,9 +59,16 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 	s.ending = mine
 	s.transport = transport
 	s.watchMu.Unlock()
+	// An experiment: CASTOR_EXPERIMENT_STREAM_TYPE=LIVE loads the media as a live stream rather than a seekable file, which a live cast
+	// may fare better as. BUFFERED stays the default until that is shown.
+	streamType := "BUFFERED"
+	if v := os.Getenv("CASTOR_EXPERIMENT_STREAM_TYPE"); v == "LIVE" || v == "BUFFERED" {
+		streamType = v
+	}
+	slog.InfoContext(ctx, "loading media on the chromecast", "stream_type", streamType, "content_type", contentType)
 	load := &loadCommand{
 		Type: msgLoad, Autoplay: true,
-		Media: mediaItem{MediaItem: castmedia.MediaItem{ContentId: streamURL.String(), ContentType: contentType, StreamType: "BUFFERED"}},
+		Media: mediaItem{MediaItem: castmedia.MediaItem{ContentId: streamURL.String(), ContentType: contentType, StreamType: streamType}},
 	}
 	load.Media.Metadata = castmedia.MediaMetadata{Title: info.GetTitle(), Subtitle: info.GetSynopsis(), ReleaseDate: info.GetReleaseDate()}
 	if imageURL := info.GetImageUrl(); imageURL != "" {
