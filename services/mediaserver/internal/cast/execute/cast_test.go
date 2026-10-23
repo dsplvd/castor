@@ -36,6 +36,8 @@ type fakeDevice struct {
 	refuse error
 	served []byte
 	ended  bool
+	// live is what the last Play was told.
+	live bool
 }
 
 // finished is a process that has run and exited cleanly, standing in for a read's ffmpeg.
@@ -64,7 +66,8 @@ func (loopback) Publish(ctx context.Context, h http.Handler) (output.Publication
 
 var _ Device = (*fakeDevice)(nil)
 
-func (d *fakeDevice) Play(ctx context.Context, streamURL *url.URL, _ string, _ []media.Caption) error {
+func (d *fakeDevice) Play(ctx context.Context, streamURL *url.URL, _ string, _ []media.Caption, live bool) error {
+	d.live = live
 	if d.refuse != nil {
 		return d.refuse
 	}

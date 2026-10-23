@@ -20,6 +20,8 @@ type Playback struct {
 	Container mediav1.Container
 	Captions  []*mediav1.DeviceCommand_Caption
 	Info      *castorv1.MediaInfo
+	// Live is a stream with no end, which a device that tells it from a file should play at its live edge.
+	Live bool
 }
 
 // Device is a connected device, ready to play; whoever connected it closes it.

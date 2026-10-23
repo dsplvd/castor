@@ -1684,9 +1684,11 @@ func (*DeviceCommand_Call_Resume) isDeviceCommand_Call_Operation() {}
 type DeviceCommand_Play struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// url is what the device fetches: the source itself, or what the media server serves it.
-	Url           string                   `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	Container     Container                `protobuf:"varint,2,opt,name=container,proto3,enum=castor.media.v1.Container" json:"container,omitempty"`
-	Captions      []*DeviceCommand_Caption `protobuf:"bytes,3,rep,name=captions,proto3" json:"captions,omitempty"`
+	Url       string                   `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Container Container                `protobuf:"varint,2,opt,name=container,proto3,enum=castor.media.v1.Container" json:"container,omitempty"`
+	Captions  []*DeviceCommand_Caption `protobuf:"bytes,3,rep,name=captions,proto3" json:"captions,omitempty"`
+	// live says the stream has no end and is played at its live edge, so a device that distinguishes the two should not treat it as a file to seek in.
+	Live          bool `protobuf:"varint,4,opt,name=live,proto3" json:"live,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1740,6 +1742,13 @@ func (x *DeviceCommand_Play) GetCaptions() []*DeviceCommand_Caption {
 		return x.Captions
 	}
 	return nil
+}
+
+func (x *DeviceCommand_Play) GetLive() bool {
+	if x != nil {
+		return x.Live
+	}
+	return false
 }
 
 // Caption is a text track the device shows over the stream; its url is fetched like the stream's.
@@ -2145,7 +2154,7 @@ const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\fAudioSupport\x12=\n" +
 	"\x05codec\x18\x01 \x01(\x0e2\x1b.castor.media.v1.AudioCodecB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05codec\x12!\n" +
-	"\fmax_channels\x18\x02 \x01(\rR\vmaxChannels\"\x8e\t\n" +
+	"\fmax_channels\x18\x02 \x01(\rR\vmaxChannels\"\xa2\t\n" +
 	"\rDeviceCommand\x129\n" +
 	"\x04call\x18\x01 \x01(\v2#.castor.media.v1.DeviceCommand.CallH\x00R\x04call\x12?\n" +
 	"\x06cancel\x18\x02 \x01(\v2%.castor.media.v1.DeviceCommand.CancelH\x00R\x06cancel\x1a\xb5\x02\n" +
@@ -2155,13 +2164,14 @@ const file_castor_media_v1_device_proto_rawDesc = "" +
 	"\tawait_end\x18\x03 \x01(\v2'.castor.media.v1.DeviceCommand.AwaitEndH\x00R\bawaitEnd\x12<\n" +
 	"\x05pause\x18\x04 \x01(\v2$.castor.media.v1.DeviceCommand.PauseH\x00R\x05pause\x12?\n" +
 	"\x06resume\x18\x05 \x01(\v2%.castor.media.v1.DeviceCommand.ResumeH\x00R\x06resumeB\x12\n" +
-	"\toperation\x12\x05\xbaH\x02\b\x01\x1a\xac\x02\n" +
+	"\toperation\x12\x05\xbaH\x02\b\x01\x1a\xc0\x02\n" +
 	"\x04Play\x12\x99\x01\n" +
 	"\x03url\x18\x01 \x01(\tB\x86\x01\xbaH\x82\x01\xba\x01z\n" +
 	"\rplay.url.http\x12\x1cmust be an http or https URL\x1aKthis.isUri() && (this.startsWith('http://') || this.startsWith('https://'))r\x03\x18\x80@R\x03url\x12D\n" +
 	"\tcontainer\x18\x02 \x01(\x0e2\x1a.castor.media.v1.ContainerB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\tcontainer\x12B\n" +
-	"\bcaptions\x18\x03 \x03(\v2&.castor.media.v1.DeviceCommand.CaptionR\bcaptions\x1a\xb6\x02\n" +
+	"\bcaptions\x18\x03 \x03(\v2&.castor.media.v1.DeviceCommand.CaptionR\bcaptions\x12\x12\n" +
+	"\x04live\x18\x04 \x01(\bR\x04live\x1a\xb6\x02\n" +
 	"\aCaption\x12\x9c\x01\n" +
 	"\x03url\x18\x01 \x01(\tB\x89\x01\xbaH\x85\x01\xba\x01}\n" +
 	"\x10caption.url.http\x12\x1cmust be an http or https URL\x1aKthis.isUri() && (this.startsWith('http://') || this.startsWith('https://'))r\x03\x18\x80@R\x03url\x12B\n" +

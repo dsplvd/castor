@@ -95,9 +95,11 @@ func serve(t *testing.T, commands ...*mediav1.DeviceCommand) (*mediaclient.Clien
 
 // lentDevice plays what it is handed, or refuses it with refusal.
 type lentDevice struct {
-	played  chan *url.URL
-	as      chan mediav1.Container
-	info    chan *castorv1.MediaInfo
+	played chan *url.URL
+	as     chan mediav1.Container
+	info   chan *castorv1.MediaInfo
+	// live is the last Play's, read after played has been received.
+	live    bool
 	refusal error
 }
 
@@ -109,6 +111,7 @@ func (s *lentDevice) Play(_ context.Context, playback device.Playback) error {
 	if s.refusal != nil {
 		return s.refusal
 	}
+	s.live = playback.Live
 	s.played <- playback.URL
 	s.as <- playback.Container
 	s.info <- playback.Info
@@ -231,3 +234,20 @@ func (*lentDevice) Stop(context.Context) error   { return nil }
 func (*lentDevice) Close() error                 { return nil }
 func (*lentDevice) Pause(context.Context) error  { return nil }
 func (*lentDevice) Resume(context.Context) error { return nil }
+
+func TestAStreamWithNoEndIsHandedToTheDeviceAsLive(t *testing.T) {
+	for _, live := range []bool{true, false} {
+		cmd := play("https://cdn.example/direct", mediav1.Container_CONTAINER_HLS)
+		cmd.GetCall().GetPlay().Live = live
+		c, _ := serve(t, cmd)
+		lent := newLentDevice()
+
+		if _, driven := cast(t, c, lent); driven != nil {
+			t.Fatalf("the drive ended with %v", driven)
+		}
+		taken(t, lent.played)
+		if lent.live != live {
+			t.Errorf("the device was handed live=%v, want %v", lent.live, live)
+		}
+	}
+}

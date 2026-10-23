@@ -310,7 +310,7 @@ func castOn(t *testing.T, c server, source *mediav1.Source, device *lentDevice) 
 // handoff is a cast the device fetches the head stream of for itself.
 func handoff(ctx context.Context, device execute.Device, _ output.Publisher, streams []*source.Stream, turns recovery.Turns) error {
 	turns.Attempting(1)
-	return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil)
+	return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil, false)
 }
 
 func TestPagesStreamsAreRankedThenHandedToTheLentDeviceAsTheyAre(t *testing.T) {
@@ -439,7 +439,7 @@ func TestAStreamCastNeverShowsExtractingAndItsStateNeverGoesBack(t *testing.T) {
 		turns.Attempting(1)
 		turns.Revising(recovery.ServeInstead, "refused")
 		turns.Attempting(2)
-		return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil)
+		return device.Play(ctx, streams[0].URL, streams[0].ContentType, nil, false)
 	}).backend())
 
 	w := castOn(t, c, streamOf("https://cdn.example/direct"), newLentDevice())
@@ -493,7 +493,7 @@ func TestWhatTheServerServesTheDeviceFetchesFromTheServerItself(t *testing.T) {
 		}
 		stream := pub.URL("stream.ts")
 		stream.RawQuery = "n=1"
-		return lent.Play(ctx, stream, media.MPEGTS, nil)
+		return lent.Play(ctx, stream, media.MPEGTS, nil, false)
 	}).backend())
 
 	if err := castOn(t, c, streamOf("https://cdn.example/direct"), device).outcome(); err != nil {
@@ -586,7 +586,7 @@ func TestADeviceGoneOnItsNetworkIsGoneToTheCastsRecovery(t *testing.T) {
 func TestACastHasOneDeviceAndPlaysOnWhenItsLenderLeaves(t *testing.T) {
 	playing, ended := make(chan struct{}), make(chan struct{})
 	c := serve(t, machinery(func(ctx context.Context, device execute.Device, _ output.Publisher, streams []*source.Stream, _ recovery.Turns) error {
-		if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil); err != nil {
+		if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil, false); err != nil {
 			return err
 		}
 		close(playing)
@@ -625,7 +625,7 @@ func TestACastThatNeedsItsDeviceAgainOnceItsLenderLeftEndsThere(t *testing.T) {
 		<-again
 		// Recovery revising the attempt, each revision playing again, until the cast is ended.
 		for range 50 {
-			if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil); ctx.Err() != nil {
+			if err := device.Play(ctx, streams[0].URL, streams[0].ContentType, nil, false); ctx.Err() != nil {
 				return err
 			}
 		}

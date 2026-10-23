@@ -40,5 +40,5 @@ func certifyPresentation(p presentation) (readyPresentation, error) {
 }
 
 func (p readyPresentation) play(ctx context.Context, device Device) error {
-	return hand(ctx, device, p.target, p.contentType, p.captions, p.source)
+	return hand(ctx, device, p.target, p.contentType, p.captions, p.source, p.live)
 }

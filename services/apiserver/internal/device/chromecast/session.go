@@ -33,7 +33,7 @@ var _ device.Device = (*session)(nil)
 
 // Play returns the receiver's own verdict on the LOAD, so a refused URL fails the hand-off; a dropped connection is gone.
 func (s *session) Play(ctx context.Context, playback device.Playback) error {
-	if err := s.play(ctx, playback.URL, device.MIME(playback.Container), playback.Captions, playback.Info); err != nil {
+	if err := s.play(ctx, playback.URL, device.MIME(playback.Container), playback.Captions, playback.Info, playback.Live); err != nil {
 		select {
 		case <-s.ch.gone:
 			return &device.Gone{Device: s.name, Observed: "the Cast connection closed before the media loaded", Err: err}
@@ -44,7 +44,7 @@ func (s *session) Play(ctx context.Context, playback device.Playback) error {
 	return nil
 }
 
-func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string, captions []*mediav1.DeviceCommand_Caption, info *castorv1.MediaInfo) error {
+func (s *session) play(ctx context.Context, streamURL *url.URL, contentType string, captions []*mediav1.DeviceCommand_Caption, info *castorv1.MediaInfo, live bool) error {
 	transport, err := s.mediaReceiver(ctx)
 	if err != nil {
 		return fmt.Errorf("starting the chromecast's media receiver: %w", err)
@@ -59,12 +59,7 @@ func (s *session) play(ctx context.Context, streamURL *url.URL, contentType stri
 	s.ending = mine
 	s.transport = transport
 	s.watchMu.Unlock()
-	// An experiment: CASTOR_EXPERIMENT_STREAM_TYPE=LIVE loads the media as a live stream rather than a seekable file, which a live cast
-	// may fare better as. BUFFERED stays the default until that is shown.
-	streamType := "BUFFERED"
-	if v := os.Getenv("CASTOR_EXPERIMENT_STREAM_TYPE"); v == "LIVE" || v == "BUFFERED" {
-		streamType = v
-	}
+	streamType := loadStreamType(live)
 	slog.InfoContext(ctx, "loading media on the chromecast", "stream_type", streamType, "content_type", contentType)
 	load := &loadCommand{
 		Type: msgLoad, Autoplay: true,
@@ -256,4 +251,17 @@ func (s *session) Capabilities() *mediav1.Capabilities {
 		Captions:  []mediav1.CaptionFormat{mediav1.CaptionFormat_CAPTION_FORMAT_VTT},
 	})
 	return caps
+}
+
+// loadStreamType is how the receiver is told to treat the media. A stream with no end loads as LIVE, which has the receiver
+// follow the live edge instead of seeking: a BUFFERED one that the receiver reconnects to is asked for from byte 0 again,
+// which a live cast can no longer serve. CASTOR_EXPERIMENT_STREAM_TYPE (LIVE or BUFFERED) overrides the choice.
+func loadStreamType(live bool) string {
+	if v := os.Getenv("CASTOR_EXPERIMENT_STREAM_TYPE"); v == "LIVE" || v == "BUFFERED" {
+		return v
+	}
+	if live {
+		return "LIVE"
+	}
+	return "BUFFERED"
 }

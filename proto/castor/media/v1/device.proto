@@ -263,6 +263,8 @@ message DeviceCommand {
       not_in: [0]
     }];
     repeated Caption captions = 3;
+    // live says the stream has no end and is played at its live edge, so a device that distinguishes the two should not treat it as a file to seek in.
+    bool live = 4;
   }
 
   // Caption is a text track the device shows over the stream; its url is fetched like the stream's.

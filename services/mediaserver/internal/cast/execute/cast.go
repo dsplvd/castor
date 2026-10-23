@@ -66,7 +66,7 @@ type Cast struct {
 // Device is what a cast plays on, connected for the whole cast by whoever lent it, who also closes it.
 type Device interface {
 	// Play points the device at streamURL, advertised as contentType.
-	Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption) error
+	Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption, live bool) error
 
 	AwaitEnd(ctx context.Context) error
 

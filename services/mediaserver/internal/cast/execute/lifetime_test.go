@@ -23,7 +23,7 @@ type captionPlayback struct {
 	wait  func(context.Context) error
 }
 
-func (d *captionPlayback) Play(_ context.Context, _ *url.URL, _ string, shown []media.Caption) error {
+func (d *captionPlayback) Play(_ context.Context, _ *url.URL, _ string, shown []media.Caption, _ bool) error {
 	d.shown = shown
 	return nil
 }

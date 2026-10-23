@@ -53,10 +53,12 @@ type presentation struct {
 	target      *url.URL
 	contentType string
 	source      bool
-	readiness   presentationReadiness
-	delivery    *delivery
-	feed        feed
-	reached     ran
+	// live is a presentation of a source with no end.
+	live      bool
+	readiness presentationReadiness
+	delivery  *delivery
+	feed      feed
+	reached   ran
 }
 
 // inspectedPresentation retains the selected reading and any validated local
@@ -84,6 +86,9 @@ func (s *preparation) inspectPresentation() (p inspectedPresentation, err error)
 		return p, err
 	}
 	p.kind = s.compose()
+	if primary, ok := s.attempt.Program.PrimaryInput(); ok {
+		p.live = primary.Fetch.Live
+	}
 	if p.kind == compose.Handoff {
 		primary, _ := s.attempt.Program.PrimaryInput()
 		p.target, p.contentType, p.source = primary.URL, primary.ContentType, true

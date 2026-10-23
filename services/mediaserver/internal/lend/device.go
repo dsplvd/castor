@@ -25,8 +25,8 @@ func NewDevice(line *Line, caps media.Capabilities, left func()) Device {
 	return Device{line: line, caps: caps, left: left}
 }
 
-func (d Device) Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption) error {
-	play := &mediav1.DeviceCommand_Play{Url: streamURL.String(), Container: wire.Container(contentType)}
+func (d Device) Play(ctx context.Context, streamURL *url.URL, contentType string, captions []media.Caption, live bool) error {
+	play := &mediav1.DeviceCommand_Play{Url: streamURL.String(), Container: wire.Container(contentType), Live: live}
 	for _, c := range captions {
 		play.Captions = append(play.Captions, wire.Caption(c, c.URL))
 	}

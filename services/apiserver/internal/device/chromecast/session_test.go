@@ -390,3 +390,40 @@ func TestRequestTimeoutRetainsDeadlineIdentity(t *testing.T) {
 		}
 	})
 }
+
+func TestAStreamWithNoEndLoadsAsLiveAndAFileAsBuffered(t *testing.T) {
+	t.Setenv("CASTOR_EXPERIMENT_STREAM_TYPE", "")
+	for _, tc := range []struct {
+		name string
+		live bool
+		want string
+	}{{"live", true, "LIVE"}, {"file", false, "BUFFERED"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			loaded := make(chan castmedia.MediaItem, 1)
+			dev := receiverAnswering(t, func(id int, load castmedia.MediaItem) []any {
+				loaded <- load
+				return []any{mediaStatus(id, load.ContentId, "BUFFERING", "")}
+			})
+			stream := &url.URL{Scheme: "http", Host: "media.test", Path: "/stream.mp4"}
+			if err := dev.Play(t.Context(), device.Playback{URL: stream, Container: mediav1.Container_CONTAINER_MP4, Live: tc.live}); err != nil {
+				t.Fatal(err)
+			}
+			if got := (<-loaded).StreamType; got != tc.want {
+				t.Errorf("StreamType = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTheEnvironmentOverridesTheStreamTypeAStreamLoadsAs(t *testing.T) {
+	for _, tc := range []struct {
+		env  string
+		live bool
+		want string
+	}{{"BUFFERED", true, "BUFFERED"}, {"LIVE", false, "LIVE"}, {"nonsense", true, "LIVE"}, {"", false, "BUFFERED"}} {
+		t.Setenv("CASTOR_EXPERIMENT_STREAM_TYPE", tc.env)
+		if got := loadStreamType(tc.live); got != tc.want {
+			t.Errorf("env %q live=%v: %q, want %q", tc.env, tc.live, got, tc.want)
+		}
+	}
+}
