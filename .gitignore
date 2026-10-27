@@ -32,3 +32,13 @@ app/.yarn/
 /services/scrapingserver/internal/extract/OVERLAYS.md
 /config.yaml.old
 /services/scrapingserver/internal/extract/SOURCES.md
+
+# Android client build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/.kotlin/
+android/captures/

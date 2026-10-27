@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        The castor API server runs on the user's LAN without TLS (plain HTTP/1.1 or h2c), and its
+        address is entered by the user in Settings, so it cannot be listed as a fixed domain.
+        Cleartext is therefore permitted for every host. The bearer token travels in the clear
+        on that LAN: put the server behind a TLS reverse proxy if that is not acceptable.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,17 @@
+version: v2
+clean: true
+managed:
+  enabled: true
+inputs:
+  - directory: ..
+    paths:
+      - ../proto/castor/v1
+plugins:
+  - remote: buf.build/protocolbuffers/java
+    out: app/src/main/gen
+    opt: lite
+  - remote: buf.build/protocolbuffers/kotlin
+    out: app/src/main/gen
+    opt: lite
+  - remote: buf.build/connectrpc/kotlin
+    out: app/src/main/gen
