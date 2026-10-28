@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -86,7 +87,8 @@ func findFrames(ctx context.Context) ([]frameCandidate, error) {
 	if waitCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 		return nil, nil
 	}
-	return frames, err
+	// A chat room opened as the page plays nothing, and costs the traversal its time.
+	return slices.DeleteFunc(frames, func(f frameCandidate) bool { return chatFrame(f.Src) }), err
 }
 
 // openFrame loads a frame's document as its parent would, since embed hosts refuse a request no site framed; only a web page is opened.

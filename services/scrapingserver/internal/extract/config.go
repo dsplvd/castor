@@ -36,4 +36,10 @@ const (
 	sourceSettle      = 12 * time.Second
 	// sourcePanelWait is how long a page gets to list its sources: they are filled in after it loads.
 	sourcePanelWait = 8 * time.Second
+	// sourcePanelWaitWithPlayer is what is left of that wait once a player frame is on the page: a page that already embeds its player
+	// has little reason to list sources later, but a list that is built beside it appears within a moment.
+	sourcePanelWaitWithPlayer = 2 * time.Second
+	// frameClickSettle is how long a player frame gets, in all, to fetch a stream after being clicked in place; the click is repeated halfway,
+	// for a player whose first click is taken by an ad or only unmutes it.
+	frameClickSettle = 10 * time.Second
 )

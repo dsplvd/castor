@@ -149,6 +149,7 @@ func (s *session) runActions() {
 	actions := []action{
 		{"select source", func() error { return selectSources(s.ctx, s.collector.hasStream, sourceSettle, sourcePanelWait) }},
 		{"click player", func() error { return clickPlayer(s.ctx) }},
+		{"click player frame", func() error { return clickPlayerFrame(s.ctx, s.collector.hasStream, frameClickSettle) }},
 		{"click", func() error { return click(s.ctx, s.centerX, s.centerY) }},
 		{"navigate iframe", func() error {
 			return navigateIframe(s.ctx, s.collector.hasMaster)
@@ -223,12 +224,23 @@ func waitUntil(ctx context.Context, done func() bool, d time.Duration) bool {
 
 // awaitSources is the first pick, once the page has had up to wait to list its sources. A page fills its list in after it has
 // loaded, so an empty page a moment in is not a page without sources; one that is already playing needs no source at all.
-func awaitSources(ctx context.Context, started func() bool, wait time.Duration) (sourcePick, error) {
+// A page that has put a player frame up has already chosen its source, so from the moment one shows only withPlayer of the wait is left.
+func awaitSources(ctx context.Context, started func() bool, wait, withPlayer time.Duration) (sourcePick, error) {
 	var pick sourcePick
 	var err error
+	var playerSince time.Time
 	waitUntil(ctx, func() bool {
 		pick, err = pickSource(ctx, 0)
-		return err != nil || pick.Picked || started()
+		if err != nil || pick.Picked || started() {
+			return true
+		}
+		if playerSince.IsZero() {
+			if frames, _ := playerFrames(ctx, false); len(frames) > 0 {
+				slog.DebugContext(ctx, "a player frame is on the page; not waiting long for sources", "src", frames[0].Src)
+				playerSince = time.Now()
+			}
+		}
+		return !playerSince.IsZero() && time.Since(playerSince) >= withPlayer
 	}, wait)
 	return pick, err
 }
@@ -241,7 +253,7 @@ func selectSources(ctx context.Context, started func() bool, settle, panelWait t
 		var pick sourcePick
 		var err error
 		if tried == 0 {
-			pick, err = awaitSources(ctx, started, panelWait)
+			pick, err = awaitSources(ctx, started, panelWait, sourcePanelWaitWithPlayer)
 		} else {
 			pick, err = pickSource(ctx, tried)
 		}
