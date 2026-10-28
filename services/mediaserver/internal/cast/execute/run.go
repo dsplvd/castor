@@ -120,8 +120,13 @@ func (c *coordinator) attemptMachine() *fsm.FSM {
 				}
 			}
 		},
-		"after_" + playbackStarted.String(): func(context.Context, *fsm.Event) { c.presentation.reached.reached = health.Playing },
-		"after_event":                       func(ctx context.Context, e *fsm.Event) { track(ctx, e.Event, e.Src, e.Dst) },
+		"after_" + playbackStarted.String(): func(context.Context, *fsm.Event) {
+			c.presentation.reached.reached = health.Playing
+			if c.playing != nil {
+				c.playing()
+			}
+		},
+		"after_event": func(ctx context.Context, e *fsm.Event) { track(ctx, e.Event, e.Src, e.Dst) },
 	})
 }
 
@@ -146,6 +151,7 @@ type operation struct {
 // before handing them back. Operations retain results through cancellation.
 type coordinator struct {
 	device  Device
+	playing func()
 	inspect func() (inspectedPresentation, error)
 	plan    func(inspectedPresentation) (plannedPresentation, error)
 	produce func(plannedPresentation) (presentation, error)
@@ -177,7 +183,7 @@ func newCoordinator(parent context.Context, c Cast, a recovery.Attempt) *coordin
 	// Signal every owner before joining or releasing any resource.
 	rel.interrupt(func() { cancel(nil) })
 	s := &coordinator{
-		device: c.Device, ctx: ctx, stop: cancel, releases: rel,
+		device: c.Device, playing: c.Playing, ctx: ctx, stop: cancel, releases: rel,
 		events: make(chan *operation), failures: make(chan error),
 	}
 

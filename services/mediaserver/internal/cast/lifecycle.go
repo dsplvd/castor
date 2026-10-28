@@ -26,6 +26,7 @@ const (
 	eventRank
 	eventAttempt
 	eventRevise
+	eventPlaying
 	eventEnd
 	eventAbandon
 )
@@ -37,6 +38,7 @@ func (e castEvent) String() string {
 		eventRank:       "rank",
 		eventAttempt:    "attempt",
 		eventRevise:     "revise",
+		eventPlaying:    "playing",
 		eventEnd:        "end",
 		eventAbandon:    "abandon",
 	}[e]
@@ -59,6 +61,7 @@ func (c *cast) lifecycle() *fsm.FSM {
 		{Name: eventRank.String(), Src: []string{stateMeasuring}, Dst: stateMeasuring},
 		{Name: eventAttempt.String(), Src: []string{stateMeasuring, stateCasting}, Dst: stateCasting},
 		{Name: eventRevise.String(), Src: []string{stateCasting}, Dst: stateCasting},
+		{Name: eventPlaying.String(), Src: []string{stateCasting}, Dst: stateCasting},
 		{Name: eventEnd.String(), Src: []string{stateMeasuring, stateCasting}, Dst: stateEnded},
 		// Only a cast still awaiting is abandoned, so a grace that runs out as a device is lent changes nothing.
 		{Name: eventAbandon.String(), Src: []string{stateAwaiting}, Dst: stateEnded},

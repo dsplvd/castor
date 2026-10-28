@@ -157,6 +157,7 @@ func (k caster) Play(ctx context.Context, device execute.Device, publisher outpu
 		Publisher:     publisher,
 		Captions:      k.captions(k.asked.GetSubtitles()),
 		MaxHeight:     media.HeightCap(k.asked.GetMaxHeight()),
+		Playing:       turns.Playing,
 	}
 	// The ranked streams, head first; the rest are what recovery switches to.
 	return recovery.Cast(ctx, recovery.Intent{

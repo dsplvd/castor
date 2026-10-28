@@ -48,6 +48,9 @@ func changed(ctx context.Context, last, now *castorv1.CastStatus) {
 			if casting.Casting.GetAttempt() != previous.GetAttempt() {
 				slog.InfoContext(ctx, "cast attempting", "try", casting.Casting.GetAttempt())
 			}
+			if casting.Casting.GetPlaying() && !previous.GetPlaying() {
+				slog.InfoContext(ctx, "cast playing on the device", "try", casting.Casting.GetAttempt())
+			}
 		}
 	}
 }

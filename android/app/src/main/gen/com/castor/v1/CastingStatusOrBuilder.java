@@ -38,4 +38,14 @@ public interface CastingStatusOrBuilder extends
    * @return The revision.
    */
   com.castor.v1.Revision getRevision();
+
+  /**
+   * <pre>
+   * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+   * </pre>
+   *
+   * <code>bool playing = 5 [json_name = "playing"];</code>
+   * @return The playing.
+   */
+  boolean getPlaying();
 }

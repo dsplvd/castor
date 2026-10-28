@@ -153,6 +153,8 @@ message CastingStatus {
   uint32 castable = 2;
   uint32 attempt = 3 [(buf.validate.field).uint32.gte = 1];
   Revision revision = 4;
+  // playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+  bool playing = 5;
 }
 
 message Ended {

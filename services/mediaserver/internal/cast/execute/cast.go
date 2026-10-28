@@ -61,6 +61,9 @@ type Cast struct {
 
 	// MaxHeight is the tallest picture the cast may show.
 	MaxHeight media.HeightCap
+
+	// Playing hears the device start an attempt's stream. Nil hears nothing.
+	Playing func()
 }
 
 // Device is what a cast plays on, connected for the whole cast by whoever lent it, who also closes it.

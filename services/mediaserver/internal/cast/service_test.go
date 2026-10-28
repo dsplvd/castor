@@ -110,12 +110,19 @@ func TestMeasurementCountsSurviveAttemptsAndRevisions(t *testing.T) {
 	if got := first.status.GetCasting(); got.GetStreams() != 5 || got.GetCastable() != 3 || got.GetAttempt() != 1 || got.GetRevision() != nil {
 		t.Fatalf("first attempt %v, want retained counts and no revision", first.status)
 	}
+	s.Playing()
+	if playing, _ := s.now.Load(); !playing.status.GetCasting().GetPlaying() {
+		t.Fatalf("after the TV started: %v, want playing", playing.status)
+	}
 	s.Revising(recovery.SwitchCandidate, "refused")
 	s.Attempting(2)
 	now, _ = s.now.Load()
 	casting := now.status.GetCasting()
 	if casting.GetStreams() != 5 || casting.GetCastable() != 3 || casting.GetAttempt() != 2 || casting.GetRevision().GetAction() != castorv1.RecoveryAction_RECOVERY_ACTION_SWITCH_CANDIDATE || casting.GetRevision().GetWhy() != "refused" {
 		t.Errorf("after switching candidate: %v", now.status)
+	}
+	if casting.GetPlaying() {
+		t.Error("a new attempt kept the last one's playing")
 	}
 	if measured.status.GetMeasuring().GetStreams() != 5 || measured.status.GetMeasuring().GetCastable() != 3 || first.status.GetCasting().GetRevision() != nil {
 		t.Error("later transitions changed an earlier snapshot")

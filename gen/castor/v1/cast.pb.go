@@ -1005,11 +1005,13 @@ func (x *MeasuringStatus) GetCastable() uint32 {
 }
 
 type CastingStatus struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Streams       uint32                 `protobuf:"varint,1,opt,name=streams,proto3" json:"streams,omitempty"`
-	Castable      uint32                 `protobuf:"varint,2,opt,name=castable,proto3" json:"castable,omitempty"`
-	Attempt       uint32                 `protobuf:"varint,3,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	Revision      *Revision              `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Streams  uint32                 `protobuf:"varint,1,opt,name=streams,proto3" json:"streams,omitempty"`
+	Castable uint32                 `protobuf:"varint,2,opt,name=castable,proto3" json:"castable,omitempty"`
+	Attempt  uint32                 `protobuf:"varint,3,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Revision *Revision              `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	// playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+	Playing       bool `protobuf:"varint,5,opt,name=playing,proto3" json:"playing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1070,6 +1072,13 @@ func (x *CastingStatus) GetRevision() *Revision {
 		return x.Revision
 	}
 	return nil
+}
+
+func (x *CastingStatus) GetPlaying() bool {
+	if x != nil {
+		return x.Playing
+	}
+	return false
 }
 
 type Ended struct {
@@ -1613,12 +1622,13 @@ const file_castor_v1_cast_proto_rawDesc = "" +
 	"\x0fMeasuringStatus\x12\x18\n" +
 	"\astreams\x18\x01 \x01(\rR\astreams\x12\x1f\n" +
 	"\bcastable\x18\x02 \x01(\rH\x00R\bcastable\x88\x01\x01B\v\n" +
-	"\t_castable\"\x99\x01\n" +
+	"\t_castable\"\xb3\x01\n" +
 	"\rCastingStatus\x12\x18\n" +
 	"\astreams\x18\x01 \x01(\rR\astreams\x12\x1a\n" +
 	"\bcastable\x18\x02 \x01(\rR\bcastable\x12!\n" +
 	"\aattempt\x18\x03 \x01(\rB\a\xbaH\x04*\x02(\x01R\aattempt\x12/\n" +
-	"\brevision\x18\x04 \x01(\v2\x13.castor.v1.RevisionR\brevision\"\xb2\x01\n" +
+	"\brevision\x18\x04 \x01(\v2\x13.castor.v1.RevisionR\brevision\x12\x18\n" +
+	"\aplaying\x18\x05 \x01(\bR\aplaying\"\xb2\x01\n" +
 	"\x05Ended\x126\n" +
 	"\tcompleted\x18\x01 \x01(\v2\x16.google.protobuf.EmptyH\x00R\tcompleted\x122\n" +
 	"\astopped\x18\x02 \x01(\v2\x16.google.protobuf.EmptyH\x00R\astopped\x12,\n" +

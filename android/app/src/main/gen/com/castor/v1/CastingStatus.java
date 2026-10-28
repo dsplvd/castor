@@ -142,6 +142,44 @@ public  final class CastingStatus extends
     bitField0_ = (bitField0_ & ~0x00000001);
   }
 
+  public static final int PLAYING_FIELD_NUMBER = 5;
+  private boolean playing_;
+  /**
+   * <pre>
+   * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+   * </pre>
+   *
+   * <code>bool playing = 5 [json_name = "playing"];</code>
+   * @return The playing.
+   */
+  @java.lang.Override
+  public boolean getPlaying() {
+    return playing_;
+  }
+  /**
+   * <pre>
+   * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+   * </pre>
+   *
+   * <code>bool playing = 5 [json_name = "playing"];</code>
+   * @param value The playing to set.
+   */
+  private void setPlaying(boolean value) {
+    
+    playing_ = value;
+  }
+  /**
+   * <pre>
+   * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+   * </pre>
+   *
+   * <code>bool playing = 5 [json_name = "playing"];</code>
+   */
+  private void clearPlaying() {
+
+    playing_ = false;
+  }
+
   public static com.castor.v1.CastingStatus parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -370,6 +408,46 @@ public  final class CastingStatus extends
       return this;
     }
 
+    /**
+     * <pre>
+     * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+     * </pre>
+     *
+     * <code>bool playing = 5 [json_name = "playing"];</code>
+     * @return The playing.
+     */
+    @java.lang.Override
+    public boolean getPlaying() {
+      return instance.getPlaying();
+    }
+    /**
+     * <pre>
+     * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+     * </pre>
+     *
+     * <code>bool playing = 5 [json_name = "playing"];</code>
+     * @param value The playing to set.
+     * @return This builder for chaining.
+     */
+    public Builder setPlaying(boolean value) {
+      copyOnWrite();
+      instance.setPlaying(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+     * </pre>
+     *
+     * <code>bool playing = 5 [json_name = "playing"];</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearPlaying() {
+      copyOnWrite();
+      instance.clearPlaying();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:castor.v1.CastingStatus)
   }
   @java.lang.Override
@@ -391,10 +469,11 @@ public  final class CastingStatus extends
             "castable_",
             "attempt_",
             "revision_",
+            "playing_",
           };
           java.lang.String info =
-              "\u0000\u0004\u0000\u0001\u0001\u0004\u0004\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
-              "\u0003\u000b\u0004\u1009\u0000";
+              "\u0000\u0005\u0000\u0001\u0001\u0005\u0005\u0000\u0000\u0000\u0001\u000b\u0002\u000b" +
+              "\u0003\u000b\u0004\u1009\u0000\u0005\u0007";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

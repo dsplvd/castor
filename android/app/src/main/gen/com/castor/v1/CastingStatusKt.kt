@@ -106,6 +106,31 @@ public object CastingStatusKt {
 
     public val CastingStatusKt.Dsl.revisionOrNull: com.castor.v1.Revision?
       get() = _builder.revisionOrNull
+
+    /**
+     * ```
+     * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+     * ```
+     *
+     * `bool playing = 5 [json_name = "playing"];`
+     */
+    public var playing: kotlin.Boolean
+      @kotlin.jvm.JvmName("getPlaying")
+        get() = _builder.playing
+      @kotlin.jvm.JvmName("setPlaying")
+        set(value) {
+        _builder.playing = value
+      }
+    /**
+     * ```
+     * playing is the TV having started this attempt's stream; a later attempt starts out not playing.
+     * ```
+     *
+     * `bool playing = 5 [json_name = "playing"];`
+     */
+    public fun clearPlaying() {
+      _builder.clearPlaying()
+    }
   }
 }
 public inline fun com.castor.v1.CastingStatus.copy(block: `com.castor.v1`.CastingStatusKt.Dsl.() -> kotlin.Unit): com.castor.v1.CastingStatus =

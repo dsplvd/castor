@@ -427,6 +427,7 @@ type unheard struct{}
 
 func (unheard) Attempting(int)          {}
 func (unheard) Revising(Action, string) {}
+func (unheard) Playing()                {}
 
 // A resolver can finish after cancellation; recovery must not start another
 // resolver or an attempt using a late successful result.

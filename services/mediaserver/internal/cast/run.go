@@ -59,7 +59,13 @@ func (c *cast) Attempting(try int) {
 			}}
 		}
 		next.status.GetCasting().Attempt = uint32(try)
+		next.status.GetCasting().Playing = false
 	})
+}
+
+// Playing shows the TV playing the current attempt's stream.
+func (c *cast) Playing() {
+	c.fire(eventPlaying, func(next *view) { next.status.GetCasting().Playing = true })
 }
 
 // Revising shows the action the cast is revising its attempt with, and why.

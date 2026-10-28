@@ -32,6 +32,8 @@ type Intent struct {
 type Turns interface {
 	Attempting(try int)
 	Revising(action Action, why string)
+	// Playing is the device having started the current attempt's stream.
+	Playing()
 }
 
 // Attempt is one fully decided try: link, rung, fetch terms, delivery preference.
