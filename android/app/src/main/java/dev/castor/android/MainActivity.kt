@@ -10,7 +10,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -37,7 +39,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import dev.castor.android.domain.ShareAction
+import dev.castor.android.domain.ShareChoice
 import dev.castor.android.domain.extractSharedUrl
+import dev.castor.android.domain.planShare
+import dev.castor.android.ui.BrowserScreen
+import dev.castor.android.ui.BrowserViewModel
 import dev.castor.android.ui.CastScreen
 import dev.castor.android.ui.CastViewModel
 import dev.castor.android.ui.DevicesScreen
@@ -115,12 +122,31 @@ private fun CastorApp(shared: SharedUrl?, onSharedHandled: () -> Unit) {
         restoreState = true
     }
 
-    LaunchedEffect(shared) {
-        if (shared != null) {
-            castVm.prefill(shared.url, shared.asPage)
+    fun apply(action: ShareAction) = when (action) {
+        is ShareAction.OpenBrowser -> nav.navigate("browser?url=${android.net.Uri.encode(action.url)}") { launchSingleTop = true }
+        is ShareAction.PrefillCast -> {
+            castVm.prefill(action.url, true)
             goTo("cast")
-            onSharedHandled()
         }
+    }
+
+    // A shared page can be opened in the in-app browser or cast through the server.
+    shared?.let { s ->
+        AlertDialog(
+            onDismissRequest = onSharedHandled,
+            title = { Text("Shared page") },
+            text = { Text(s.url, maxLines = 3) },
+            confirmButton = {
+                TextButton(onClick = { apply(planShare(s.url, ShareChoice.BROWSER)); onSharedHandled() }) {
+                    Text("Open in browser")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { apply(planShare(s.url, ShareChoice.SERVER)); onSharedHandled() }) {
+                    Text("Cast page via server")
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -145,6 +171,18 @@ private fun CastorApp(shared: SharedUrl?, onSharedHandled: () -> Unit) {
                     vm = castVm,
                     onOpenCast = { id -> nav.navigate("playing/$id") },
                     onNeedSettings = { goTo("settings") },
+                    onOpenBrowser = { u -> nav.navigate("browser?url=${android.net.Uri.encode(u)}") { launchSingleTop = true } },
+                )
+            }
+            composable(
+                "browser?url={url}",
+                arguments = listOf(navArgument("url") { type = NavType.StringType; defaultValue = "" }),
+            ) { entry ->
+                BrowserScreen(
+                    vm = viewModel<BrowserViewModel>(entry),
+                    startUrl = entry.arguments?.getString("url").orEmpty(),
+                    onOpenCast = { id -> nav.navigate("playing/$id") },
+                    onClose = { nav.popBackStack() },
                 )
             }
             composable("devices") { DevicesScreen(viewModel<DevicesViewModel>()) }

@@ -58,6 +58,16 @@ fun buildCastRequest(
             setStream(Stream.newBuilder().setUrl(trimmed))
         }
     }
+    return assembleCastRequest(source, target, maxHeight, delivery)
+}
+
+/** Joins a source, the target and the user's Preferences into a request (shared by every source kind). */
+fun assembleCastRequest(
+    source: Source.Builder,
+    target: TargetChoice,
+    maxHeight: Int?,
+    delivery: DeliveryPref,
+): CastRequest {
     val targetMsg = Target.newBuilder().apply {
         when (target) {
             is TargetChoice.Discovered -> setDeviceId(target.id)
@@ -135,7 +145,7 @@ fun describe(status: CastStatus): StatusLine = when (status.stateCase) {
             add("${c.castable} of ${plural(c.streams, "stream")} castable")
             if (c.hasRevision()) add("${c.revision.action.label()}: ${c.revision.why}")
         }.joinToString("\n")
-        StatusLine("Casting (attempt ${c.attempt})", detail)
+        StatusLine(if (c.playing) "Playing on the TV" else "Casting (attempt ${c.attempt})", detail)
     }
     else -> StatusLine("Waiting for the server")
 }

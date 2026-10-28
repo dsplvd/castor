@@ -6,14 +6,22 @@ import androidx.lifecycle.viewModelScope
 import com.castor.v1.Device
 import com.castor.v1.DeviceType
 import dev.castor.android.CastorApp
+import dev.castor.android.data.BrowserSession
+import dev.castor.android.data.BrowserState
+import dev.castor.android.data.PlaylistInspector
+import dev.castor.android.domain.PlaylistInfo
 import dev.castor.android.data.CastorClient
 import dev.castor.android.data.Settings
 import dev.castor.android.data.TargetKind
 import dev.castor.android.data.userMessage
+import dev.castor.android.domain.CapturedStream
 import dev.castor.android.domain.DeliveryPref
 import dev.castor.android.domain.StatusLine
 import dev.castor.android.domain.TargetChoice
+import dev.castor.android.domain.addressBarUrl
 import dev.castor.android.domain.buildCastRequest
+import dev.castor.android.domain.buildStreamsCastRequest
+import dev.castor.android.domain.defaultSelection
 import dev.castor.android.domain.describe
 import dev.castor.android.domain.isHttpUrl
 import dev.castor.android.domain.label
@@ -25,6 +33,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -319,5 +330,159 @@ class NowPlayingViewModel(app: Application) : BaseViewModel(app) {
     private companion object {
         const val MAX_RETRIES = 5
         const val RETRY_DELAY_MS = 2_000L
+    }
+}
+
+// ---------------------------------------------------------------- browser
+
+data class BrowserUi(
+    val page: BrowserState = BrowserState(),
+    /** Ranked best first. */
+    val candidates: List<CapturedStream> = emptyList(),
+    val selected: Set<String> = emptySet(),
+    val busy: Boolean = false,
+    val error: String? = null,
+    /** Set while the user must pick a device before the pending cast can go. */
+    val devicePicker: List<Device>? = null,
+    val deviceError: String? = null,
+    /** What the caught playlists say, by URL. */
+    val details: Map<String, PlaylistInfo> = emptyMap(),
+    /** Playlists being fetched right now. */
+    val inspecting: Set<String> = emptySet(),
+)
+
+class BrowserViewModel(app: Application) : BaseViewModel(app) {
+    private val session = BrowserSession(app)
+    val webView get() = session.webView
+
+    /** null = the default selection (all manifests) until the user touches a checkbox. */
+    private val explicit = MutableStateFlow<Set<String>?>(null)
+    private val extra = MutableStateFlow(BrowserUi())
+
+    private val inspector = PlaylistInspector()
+    private val sheetOpen = MutableStateFlow(false)
+
+    val ui: StateFlow<BrowserUi> = combine(session.state, session.candidates, explicit, extra) { page, cands, sel, x ->
+        val live = cands.map { it.url }.toSet()
+        val drm = x.details.filterValues { it.drm != null }.keys
+        // DRM streams sink below the rest; the sort is stable, so the ranking is otherwise kept.
+        val ordered = cands.sortedBy { it.url in drm }
+        x.copy(page = page, candidates = ordered, selected = sel?.intersect(live) ?: defaultSelection(ordered, drm))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, BrowserUi())
+
+    init {
+        // While the sheet is open, look inside each manifest not yet looked at (the inspector limits concurrency).
+        viewModelScope.launch {
+            combine(sheetOpen, session.candidates) { open, cands -> if (open) cands else emptyList() }.collect { cands ->
+                val state = extra.value
+                cands.filter { inspector.inspectable(it) && it.url !in state.details && it.url !in state.inspecting }
+                    .forEach { c ->
+                        extra.update { it.copy(inspecting = it.inspecting + c.url) }
+                        launch {
+                            val info = inspector.inspect(c)
+                            extra.update { it.copy(details = it.details + (c.url to info), inspecting = it.inspecting - c.url) }
+                        }
+                    }
+            }
+        }
+    }
+
+    /** The caught sheet is open: inspect what is in it. */
+    fun setSheetOpen(open: Boolean) { sheetOpen.value = open }
+
+    private val _started = Channel<String>(Channel.BUFFERED)
+    val started = _started.receiveAsFlow()
+
+    private var opened = false
+    private var cast = false
+
+    /** Loads [url] the first time only, so rotation and returning keep the page. */
+    fun openOnce(url: String) {
+        if (opened) return
+        opened = true
+        addressBarUrl(url)?.let(session::load)
+    }
+
+    fun go(input: String) {
+        val url = addressBarUrl(input)
+        if (url == null) extra.update { it.copy(error = "Enter an http(s) address") } else {
+            extra.update { it.copy(error = null) }
+            session.load(url)
+        }
+    }
+
+    fun back() = session.goBack()
+    fun forward() = session.goForward()
+    fun reload() = if (session.state.value.loading) session.stopLoading() else session.reload()
+    fun setMuted(m: Boolean) = session.setMuted(m)
+    fun openBlocked() = session.state.value.blocked?.let(session::load)
+    fun dismissBlocked() = session.dismissBlocked()
+    fun clearCaptured() { explicit.value = null; session.clearCaptured() }
+    fun attach(c: android.content.Context) = session.attach(c)
+    fun detach() = session.detach()
+    fun onResume() = session.onResume()
+    fun onLeave() = session.onPause(pauseMedia = cast)
+
+    fun toggle(url: String) {
+        val now = ui.value.selected
+        explicit.value = if (url in now) now - url else now + url
+    }
+
+    fun dismissPicker() = extra.update { it.copy(devicePicker = null, deviceError = null) }
+
+    /** Casts the selected streams, or the current page when none was caught. */
+    fun cast(asPage: Boolean) {
+        val s = castor.store.settings.value
+        val client = castor.client()
+        val target = s.target
+        if (client == null) { extra.update { it.copy(error = "Set the server URL in Settings first") }; return }
+        if (target == null) { pickDevice(client); return }
+        val u = ui.value
+        val request = try {
+            if (asPage) {
+                val page = u.page.url
+                if (!dev.castor.android.domain.isHttpUrl(page)) throw IllegalArgumentException("No page loaded")
+                buildCastRequest(page, true, target, s.maxHeight, s.delivery)
+            } else {
+                val chosen = u.candidates.filter { it.url in u.selected }
+                buildStreamsCastRequest(chosen, target, s.maxHeight, s.delivery)
+            }
+        } catch (e: IllegalArgumentException) {
+            extra.update { it.copy(error = e.message) }
+            return
+        }
+        extra.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            runCatching { client.cast(request) }.fold(
+                { id ->
+                    cast = true
+                    extra.update { it.copy(busy = false) }
+                    _started.send(id)
+                },
+                { e -> extra.update { it.copy(busy = false, error = e.userMessage()) } },
+            )
+        }
+    }
+
+    private fun pickDevice(client: CastorClient) {
+        extra.update { it.copy(devicePicker = emptyList(), deviceError = null) }
+        viewModelScope.launch {
+            runCatching { client.listDevices() }.fold(
+                { d -> extra.update { it.copy(devicePicker = d) } },
+                { e -> extra.update { it.copy(deviceError = e.userMessage()) } },
+            )
+        }
+    }
+
+    /** Makes [device] the default target (as in Devices); the user taps Cast again. */
+    fun chooseDevice(device: Device) {
+        castor.store.update {
+            it.copy(targetKind = TargetKind.DEVICE, deviceId = device.id, deviceName = device.name)
+        }
+        dismissPicker()
+    }
+
+    override fun onCleared() {
+        session.destroy()
     }
 }

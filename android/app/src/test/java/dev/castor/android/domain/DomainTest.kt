@@ -127,6 +127,10 @@ class DomainTest {
         assertTrue(casting.detail!!.contains("2 of 4 streams castable"))
         assertTrue(casting.detail!!.contains("TV rejected the first stream"))
         assertFalse(casting.ended)
+
+        val playing = describe(status { setCasting(CastingStatus.newBuilder().setStreams(1).setCastable(1).setAttempt(1).setPlaying(true)) })
+        assertEquals("Playing on the TV", playing.title)
+        assertFalse(playing.ended)
     }
 
     @Test

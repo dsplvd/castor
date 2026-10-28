@@ -61,7 +61,12 @@ import dev.castor.android.domain.pinnableTypes
 // ---------------------------------------------------------------- cast
 
 @Composable
-fun CastScreen(vm: CastViewModel, onOpenCast: (String) -> Unit, onNeedSettings: () -> Unit) {
+fun CastScreen(
+    vm: CastViewModel,
+    onOpenCast: (String) -> Unit,
+    onNeedSettings: () -> Unit,
+    onOpenBrowser: (String) -> Unit = {},
+) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { vm.started.collect { onOpenCast(it) } }
@@ -102,6 +107,10 @@ fun CastScreen(vm: CastViewModel, onOpenCast: (String) -> Unit, onNeedSettings: 
         Button(onClick = vm::cast, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
             if (ui.busy) CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp) else Text("Cast")
         }
+        OutlinedButton(
+            onClick = { onOpenBrowser(ui.url.trim()) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Open in browser") }
 
         if (ui.running.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
