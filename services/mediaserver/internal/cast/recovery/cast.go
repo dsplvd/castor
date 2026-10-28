@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 
 	"github.com/stupside/castor/internal/telemetry"
 	"github.com/stupside/castor/services/mediaserver/internal/source"
@@ -27,12 +29,12 @@ func Cast(ctx context.Context, in Intent, run Runner, resolver SourceResolver) e
 	if err := validate(in); err != nil {
 		return err
 	}
-	a, ok := nextReadable(ctx, in, resolver, Attempt{Try: 1, candidate: -1, Delivery: in.Delivery})
+	a, ok, unresolved := nextReadable(ctx, in, resolver, Attempt{Try: 1, candidate: -1, Delivery: in.Delivery})
 	if !ok {
 		if cause := context.Cause(ctx); cause != nil {
 			return cause
 		}
-		return fmt.Errorf("none of the %d links could be resolved", len(in.Candidates))
+		return fmt.Errorf("none of the %d links could be resolved: %s", len(in.Candidates), reasons(unresolved))
 	}
 
 	led := &ledger{}
@@ -79,6 +81,17 @@ func Cast(ctx context.Context, in Intent, run Runner, resolver SourceResolver) e
 		tried = append(tried, string(rev.strategy.action))
 		a = rev.attempt
 	}
+}
+
+// reasons says why links could not be resolved, each distinct reason once: a page's links mostly fail alike.
+func reasons(errs []error) string {
+	var said []string
+	for _, err := range errs {
+		if msg := err.Error(); !slices.Contains(said, msg) {
+			said = append(said, msg)
+		}
+	}
+	return strings.Join(said, "; ")
 }
 
 func validate(in Intent) error {

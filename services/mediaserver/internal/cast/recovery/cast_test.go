@@ -222,6 +222,26 @@ func TestACastWithNoReadableLinkRunsNothing(t *testing.T) {
 	}
 }
 
+func TestTheRefusalOfUnresolvableLinksSaysWhyEachDistinctReasonOnce(t *testing.T) {
+	in := Intent{Turns: unheard{}, Candidates: candidates(t,
+		"https://cdn.example/one.m3u8",
+		"https://cdn.example/two.m3u8",
+		"https://other.example/three.m3u8",
+	), Deadline: 30 * time.Second}
+	drm := errors.New("the source is protected by DRM, which castor cannot decrypt")
+	prog := &fakeProgram{answers: map[string]published{
+		"https://cdn.example/one.m3u8":     {err: drm},
+		"https://cdn.example/two.m3u8":     {err: drm},
+		"https://other.example/three.m3u8": {err: errors.New("HTTP 410")},
+	}}
+
+	err := Cast(t.Context(), in, &scriptedRunner{}, prog)
+	want := "none of the 3 links could be resolved: the source is protected by DRM, which castor cannot decrypt; HTTP 410"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Cast error = %v, want %q", err, want)
+	}
+}
+
 func TestCastSwitchesToTheNextLinkOnItsOwnLadder(t *testing.T) {
 	sole := source.Origin{Renditions: []source.Rendition{rung(t, "https://cdn.example/2160.m3u8", 6941000, 2160)}, Segmented: true}
 	other := ladder(rung(t, "https://other.example/1080.m3u8", 3000000, 1080), rung(t, "https://other.example/720.m3u8", 1200000, 720))

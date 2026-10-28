@@ -38,7 +38,7 @@ type strategy struct {
 var switchCandidate = strategy{
 	action: SwitchCandidate,
 	apply: func(ctx context.Context, c change) (Attempt, bool) {
-		a, ok := nextReadable(ctx, c.intent, c.resolver, c.attempt)
+		a, ok, _ := nextReadable(ctx, c.intent, c.resolver, c.attempt)
 		if !ok {
 			return c.attempt, false
 		}
@@ -48,23 +48,26 @@ var switchCandidate = strategy{
 	},
 }
 
-// nextReadable resolves the links after a's in rank order, moving past any that cannot be resolved.
-func nextReadable(ctx context.Context, in Intent, resolver SourceResolver, a Attempt) (Attempt, bool) {
+// nextReadable resolves the links after a's in rank order, moving past any that cannot be resolved,
+// and says why each one moved past could not be.
+func nextReadable(ctx context.Context, in Intent, resolver SourceResolver, a Attempt) (Attempt, bool, []error) {
+	var unresolved []error
 	for next := a.candidate + 1; next < len(in.Candidates); next++ {
 		if ctx.Err() != nil {
-			return a, false
+			return a, false, unresolved
 		}
 		link := in.Candidates[next]
 		resolved, err := resolver.Resolve(ctx, link, source.Rendition{})
 		if err != nil {
 			slog.WarnContext(ctx, "a link could not be resolved; moving past it",
 				"host", link.URL.Host, "error", err)
+			unresolved = append(unresolved, err)
 			continue
 		}
 		a.candidate = next
-		return a.reading(resolved, in.Deadline), true
+		return a.reading(resolved, in.Deadline), true, unresolved
 	}
-	return a, false
+	return a, false, unresolved
 }
 
 // decodeAxis decodes the packets the reader died copying.
